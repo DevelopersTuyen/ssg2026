@@ -1,0 +1,7 @@
+{
+  "name": "SSG2026",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular"
+}
