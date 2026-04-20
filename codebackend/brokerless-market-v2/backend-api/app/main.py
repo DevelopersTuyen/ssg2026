@@ -12,6 +12,7 @@ from app.routers import (
     live,
     watchlist,
     ai_agent,
+    ai_local,
     auth,
     market_alerts,
     settings,
@@ -60,6 +61,7 @@ app.include_router(market.router)
 app.include_router(live.router)
 app.include_router(watchlist.router)
 app.include_router(ai_agent.router)
+app.include_router(ai_local.router)
 app.include_router(market_alerts.router)
 app.include_router(settings.router)
 app.include_router(role_permissions.router)

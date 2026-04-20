@@ -43,6 +43,10 @@ const routes: Routes = [
         loadChildren: () => import('../pages/ai-agent/ai-agent.module').then(m => m.AiAgentPageModule)
       },
       {
+        path: 'ai-local',
+        loadChildren: () => import('../pages/ai-local/ai-local.module').then(m => m.AiLocalPageModule)
+      },
+      {
         path: 'role-permissions',
         loadChildren: () => import('../pages/role-permissions/role-permissions.module').then( m => m.RolePermissionsPageModule)
       },

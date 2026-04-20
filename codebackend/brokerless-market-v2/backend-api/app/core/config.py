@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     )
     gemini_timeout_seconds: int = Field(default=20, alias="GEMINI_TIMEOUT_SECONDS")
     ai_agent_overview_ttl_seconds: int = Field(default=60, alias="AI_AGENT_OVERVIEW_TTL_SECONDS")
+    ollama_base_url: str = Field(default="http://127.0.0.1:11434", alias="OLLAMA_BASE_URL")
+    ollama_model: str = Field(default="qwen3:8b", alias="OLLAMA_MODEL")
+    ollama_timeout_seconds: int = Field(default=90, alias="OLLAMA_TIMEOUT_SECONDS")
+    ai_local_overview_ttl_seconds: int = Field(default=45, alias="AI_LOCAL_OVERVIEW_TTL_SECONDS")
     cafef_news_url: str = Field(
         default="https://cafef.vn/thi-truong-chung-khoan.chn",
         alias="CAFEF_NEWS_URL",

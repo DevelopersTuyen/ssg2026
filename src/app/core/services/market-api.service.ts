@@ -264,6 +264,51 @@ export interface AiAgentChatResponse {
   message: AiAgentChatMessage;
 }
 
+export interface AiLocalDataStat {
+  label: string;
+  value: string;
+  helper: string;
+}
+
+export interface AiLocalNewsItem {
+  title: string;
+  summary: string;
+  source: string;
+  published_at: string | null;
+  url?: string | null;
+}
+
+export interface AiLocalOverviewResponse {
+  exchange: string;
+  provider: string;
+  model: string;
+  connected: boolean;
+  model_available: boolean;
+  used_fallback: boolean;
+  generated_at: string;
+  summary_items: AiStatusItem[];
+  quick_prompts: string[];
+  forecast_cards: AiForecastCard[];
+  recent_activities: AiActivityItem[];
+  dataset_stats: AiLocalDataStat[];
+  focus_symbols: string[];
+  news_items: AiLocalNewsItem[];
+  assistant_greeting: string;
+}
+
+export interface AiLocalChatResponse {
+  exchange: string;
+  provider: string;
+  model: string;
+  connected: boolean;
+  model_available: boolean;
+  used_fallback: boolean;
+  generated_at: string;
+  focus_symbols: string[];
+  context_summary: AiLocalDataStat[];
+  message: AiAgentChatMessage;
+}
+
 export interface MarketAlertSummaryCard {
   label: string;
   value: string;
@@ -636,6 +681,32 @@ export class MarketApiService {
   chatWithAiAgent(body: AiAgentChatRequest): Observable<ApiEnvelope<AiAgentChatResponse | null>> {
     return this.http
       .post<ApiEnvelope<AiAgentChatResponse>>(`${this.baseUrl}/api/ai-agent/chat`, body)
+      .pipe(
+        catchError(() =>
+          of({
+            data: null,
+          })
+        )
+      );
+  }
+
+  getAiLocalOverview(exchange: ExchangeTab = 'HSX'): Observable<ApiEnvelope<AiLocalOverviewResponse | null>> {
+    return this.http
+      .get<ApiEnvelope<AiLocalOverviewResponse>>(`${this.baseUrl}/api/ai-local/overview`, {
+        params: { exchange },
+      })
+      .pipe(
+        catchError(() =>
+          of({
+            data: null,
+          })
+        )
+      );
+  }
+
+  chatWithAiLocal(body: AiAgentChatRequest): Observable<ApiEnvelope<AiLocalChatResponse | null>> {
+    return this.http
+      .post<ApiEnvelope<AiLocalChatResponse>>(`${this.baseUrl}/api/ai-local/chat`, body)
       .pipe(
         catchError(() =>
           of({

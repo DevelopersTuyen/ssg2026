@@ -1,0 +1,315 @@
+<ion-content [fullscreen]="true" class="ai-local-content">
+  <div class="ai-local-shell">
+    <section class="hero-panel">
+      <div class="hero-copy">
+        <span class="eyebrow">AI LOCAL / OLLAMA</span>
+        <h1>Phan tich chung khoan bang model local tren may</h1>
+        <p>
+          Su dung Ollama voi <strong>{{ model }}</strong> de doc du lieu thi truong, watchlist va tin
+          CafeF ngay tai local backend.
+        </p>
+      </div>
+
+      <div class="hero-side">
+        <div class="status-pill" [class.ready]="connected && modelAvailable">
+          <span class="dot"></span>
+          <span>{{ connected && modelAvailable ? 'Ollama san sang' : 'Dang fallback local' }}</span>
+        </div>
+
+        <div class="control-row">
+          <label for="local-exchange">San giao dich</label>
+          <ion-select
+            id="local-exchange"
+            interface="popover"
+            [(ngModel)]="selectedExchange"
+            (ionChange)="onExchangeChange()"
+          >
+            <ion-select-option value="HSX">HSX</ion-select-option>
+            <ion-select-option value="HNX">HNX</ion-select-option>
+            <ion-select-option value="UPCOM">UPCOM</ion-select-option>
+          </ion-select>
+        </div>
+
+        <div class="auto-panel">
+          <div class="auto-header">
+            <div>
+              <span class="meta-label">Auto analysis</span>
+              <strong>{{ autoAnalyzeEnabled ? 'Dang bat' : 'Dang tat' }}</strong>
+              <p class="auto-note">
+                Khi bat, AI Local tu phan tich toan bo market, watchlist va tin tuc moi khi doi san hoac lam moi.
+              </p>
+            </div>
+            <ion-toggle [(ngModel)]="autoAnalyzeEnabled" (ionChange)="onAutoAnalyzeChange()"></ion-toggle>
+          </div>
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta-card">
+            <span class="meta-label">Provider</span>
+            <strong>{{ provider }}</strong>
+          </div>
+          <div class="meta-card">
+            <span class="meta-label">Model</span>
+            <strong>{{ model }}</strong>
+          </div>
+          <div class="meta-card">
+            <span class="meta-label">Exchange</span>
+            <strong>{{ selectedExchange }}</strong>
+          </div>
+          <div class="meta-card">
+            <span class="meta-label">Mode</span>
+            <strong>{{ connected && modelAvailable ? 'Local live' : 'Fallback' }}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="segment-panel">
+      <button type="button" [class.active]="selectedTab === 'overview'" (click)="selectTab('overview')">Tong quan</button>
+      <button type="button" [class.active]="selectedTab === 'chat'" (click)="selectTab('chat')">Chat local</button>
+      <button type="button" [class.active]="selectedTab === 'data'" (click)="selectTab('data')">Du lieu local</button>
+      <button type="button" class="refresh-button" (click)="refreshOverview()">Lam moi</button>
+    </section>
+
+    <p *ngIf="overviewError" class="error-banner">{{ overviewError }}</p>
+
+    <ng-container *ngIf="selectedTab === 'overview'">
+      <section class="summary-grid">
+        <article
+          class="summary-card"
+          *ngFor="let item of summaryItems; trackBy: trackByLabel"
+          [class.positive]="statusToneClass(item) === 'positive'"
+          [class.warning]="statusToneClass(item) === 'warning'"
+        >
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel forecast-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">AI LOCAL INSIGHTS</span>
+              <h2>Phan tich nhanh tu qwen3:8b</h2>
+            </div>
+            <span class="panel-badge">{{ forecastCards.length }} the</span>
+          </div>
+
+          <div class="forecast-grid">
+            <article class="forecast-card" *ngFor="let card of forecastCards; trackBy: trackByForecast">
+              <span class="direction-badge" [class]="directionClass(card)">{{ card.direction }}</span>
+              <h3>{{ card.title }}</h3>
+              <p>{{ card.summary }}</p>
+              <div class="confidence-row">
+                <span>Confidence</span>
+                <strong>{{ card.confidence }}%</strong>
+              </div>
+            </article>
+          </div>
+
+          <div class="prompt-row">
+            <button type="button" *ngFor="let prompt of quickPrompts; trackBy: trackByPrompt" (click)="usePrompt(prompt)">
+              {{ prompt }}
+            </button>
+          </div>
+        </article>
+
+        <article class="panel stats-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">LOCAL DATASET</span>
+              <h2>Thong tin dang dua vao model</h2>
+            </div>
+          </div>
+
+          <div class="dataset-grid">
+            <article class="dataset-card" *ngFor="let item of datasetStats; trackBy: trackByLabel">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.helper }}</small>
+            </article>
+          </div>
+        </article>
+      </section>
+
+      <section class="content-grid lower-grid">
+        <article class="panel activity-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">ACTIVITY</span>
+              <h2>Tin hieu va su kien gan nhat</h2>
+            </div>
+          </div>
+
+          <div class="activity-list">
+            <article class="activity-item" *ngFor="let item of recentActivities; trackBy: trackByText">
+              <span class="time">{{ item.time }}</span>
+              <p>{{ item.text }}</p>
+            </article>
+          </div>
+        </article>
+
+        <article class="panel news-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">CAFEF LOCAL FEED</span>
+              <h2>Tin tuc dua vao local context</h2>
+            </div>
+          </div>
+
+          <a
+            class="news-item"
+            *ngFor="let item of newsItems; trackBy: trackByNews"
+            [href]="item.url || null"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span class="source">{{ item.source }}</span>
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.summary }}</p>
+            <small>{{ item.published_at || 'Moi cap nhat' }}</small>
+          </a>
+        </article>
+      </section>
+    </ng-container>
+
+    <ng-container *ngIf="selectedTab === 'chat'">
+      <section class="chat-layout">
+        <article class="panel chat-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">CHAT LOCAL</span>
+              <h2>Hoi qwen3:8b ve thi truong</h2>
+            </div>
+          </div>
+
+          <div class="chat-stream">
+            <article class="chat-bubble" *ngFor="let message of chatMessages; trackBy: trackByChat" [class.user]="message.role === 'user'">
+              <span class="bubble-role">{{ message.role === 'user' ? 'Ban' : 'AI Local' }}</span>
+              <p>{{ message.content }}</p>
+              <small>{{ message.time }}</small>
+            </article>
+          </div>
+
+          <div class="composer">
+            <div class="template-board">
+              <div class="template-header">
+                <div>
+                  <span class="panel-kicker">CHAT TEMPLATES</span>
+                  <h3>Mau phan tich chon nhanh</h3>
+                </div>
+              </div>
+
+              <div class="template-grid">
+                <article class="template-card" *ngFor="let template of promptTemplates; trackBy: trackByTemplate">
+                  <div class="template-copy">
+                    <strong>{{ template.title }}</strong>
+                    <p>{{ template.description }}</p>
+                  </div>
+
+                  <div class="template-actions">
+                    <button type="button" class="ghost-button" (click)="useTemplate(template)">Nap mau</button>
+                    <button type="button" class="solid-button" (click)="sendTemplate(template)">Chay ngay</button>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <ion-textarea
+              [(ngModel)]="currentPrompt"
+              autoGrow="true"
+              fill="outline"
+              placeholder="Vi du: Phan tich watchlist va tom tat tin CafeF lien quan ngan hang..."
+            ></ion-textarea>
+            <button type="button" (click)="sendPrompt()" [disabled]="sendingPrompt">
+              {{ sendingPrompt ? 'Dang gui...' : 'Gui AI Local' }}
+            </button>
+          </div>
+        </article>
+
+        <article class="panel context-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">CONTEXT SNAPSHOT</span>
+              <h2>Du lieu dang dua vao phien chat</h2>
+            </div>
+          </div>
+
+          <div class="dataset-grid compact">
+            <article class="dataset-card" *ngFor="let item of contextSummary; trackBy: trackByLabel">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.helper }}</small>
+            </article>
+          </div>
+
+          <div class="focus-box">
+            <span class="focus-title">Focus symbols</span>
+            <div class="focus-tags">
+              <span *ngFor="let symbol of focusSymbols; trackBy: trackByPrompt">{{ symbol }}</span>
+            </div>
+          </div>
+        </article>
+      </section>
+    </ng-container>
+
+    <ng-container *ngIf="selectedTab === 'data'">
+      <section class="content-grid lower-grid">
+        <article class="panel focus-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">FOCUS SYMBOLS</span>
+              <h2>Danh sach ma local AI uu tien</h2>
+            </div>
+          </div>
+
+          <div class="focus-tags large">
+            <span *ngFor="let symbol of focusSymbols; trackBy: trackByPrompt">{{ symbol }}</span>
+          </div>
+        </article>
+
+        <article class="panel dataset-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">DATA COVERAGE</span>
+              <h2>Bo du lieu dang mo cho model</h2>
+            </div>
+          </div>
+
+          <div class="dataset-grid">
+            <article class="dataset-card" *ngFor="let item of datasetStats; trackBy: trackByLabel">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.helper }}</small>
+            </article>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel full-width-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-kicker">NEWS CONTEXT</span>
+            <h2>Toan bo tin dang duoc AI Local doc</h2>
+          </div>
+        </div>
+
+        <div class="news-grid">
+          <a
+            class="news-item"
+            *ngFor="let item of newsItems; trackBy: trackByNews"
+            [href]="item.url || null"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span class="source">{{ item.source }}</span>
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.summary }}</p>
+            <small>{{ item.published_at || 'Moi cap nhat' }}</small>
+          </a>
+        </div>
+      </section>
+    </ng-container>
+  </div>
+</ion-content>
