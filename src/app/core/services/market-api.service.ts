@@ -278,6 +278,19 @@ export interface AiLocalNewsItem {
   url?: string | null;
 }
 
+export interface AiLocalAnalysisSection {
+  title: string;
+  summary: string;
+  bullets: string[];
+}
+
+export interface AiLocalStorageStatus {
+  stored_in_db: boolean;
+  source: string;
+  detail: string;
+  checked_at: string;
+}
+
 export interface AiLocalOverviewResponse {
   exchange: string;
   provider: string;
@@ -293,6 +306,8 @@ export interface AiLocalOverviewResponse {
   dataset_stats: AiLocalDataStat[];
   focus_symbols: string[];
   news_items: AiLocalNewsItem[];
+  analysis_sections: AiLocalAnalysisSection[];
+  cafef_storage: AiLocalStorageStatus;
   assistant_greeting: string;
 }
 

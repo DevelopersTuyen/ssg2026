@@ -203,7 +203,7 @@ async def get_news(
     search: str | None = Query(default=None),
     repo: MarketReadRepository = Depends(get_repo),
 ):
-    cafef_items = await cafef_news_service.fetch_latest_news(limit=limit, search=search)
+    cafef_items = await cafef_news_service.fetch_latest_news(limit=limit, search=search, repo=repo)
     if cafef_items:
         return [cafef_news_service.to_news_payload(item, index) for index, item in enumerate(cafef_items, start=1)]
 

@@ -19,6 +19,7 @@ async def init_db() -> None:
         MarketIntradayPoint,
         MarketIndexDailyPoint,
         MarketIndexIntradayPoint,
+        MarketNewsArticle,
         MarketSyncLog,
         MarketWatchlistItem,
     )

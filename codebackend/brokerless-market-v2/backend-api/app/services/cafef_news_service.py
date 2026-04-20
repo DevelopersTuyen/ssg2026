@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.repositories.market_read_repo import MarketReadRepository
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,12 @@ class CafeFNewsService:
         self._cache_expires_at: datetime | None = None
         self._cache_items: list[CafeFNewsArticle] = []
 
-    async def fetch_latest_news(self, limit: int = 10, search: str | None = None) -> list[CafeFNewsArticle]:
+    async def fetch_latest_news(
+        self,
+        limit: int = 10,
+        search: str | None = None,
+        repo: MarketReadRepository | None = None,
+    ) -> list[CafeFNewsArticle]:
         normalized_limit = max(1, min(limit, 20))
         normalized_search = (search or "").strip().lower()
 
@@ -48,6 +54,17 @@ class CafeFNewsService:
             cached_items = await asyncio.to_thread(self._fetch_and_cache_items)
 
         filtered_items = self._filter_items(cached_items, normalized_search)
+        if repo is not None:
+            if filtered_items:
+                await self._persist_items(repo, filtered_items)
+            db_items = await repo.get_latest_news_articles(
+                source="CafeF",
+                limit=normalized_limit,
+                search=normalized_search or None,
+            )
+            if db_items:
+                return [self._from_db_item(item) for item in db_items]
+
         return filtered_items[:normalized_limit]
 
     def _get_cached_items(self) -> list[CafeFNewsArticle] | None:
@@ -123,6 +140,74 @@ class CafeFNewsService:
             if search in haystack:
                 filtered.append(item)
         return filtered
+
+    async def _persist_items(self, repo: MarketReadRepository, items: list[CafeFNewsArticle]) -> None:
+        payload = [
+            {
+                "source": item.source,
+                "title": item.title,
+                "summary": item.summary,
+                "url": item.url,
+                "published_at": self._parse_published_at(item.published_at),
+                "published_text": item.published_at,
+                "raw_json": {
+                    "title": item.title,
+                    "summary": item.summary,
+                    "url": item.url,
+                    "published_at": item.published_at,
+                    "source": item.source,
+                },
+            }
+            for item in items
+        ]
+        await repo.upsert_news_articles(payload)
+        await repo.session.commit()
+
+    def _from_db_item(self, item: Any) -> CafeFNewsArticle:
+        published_text = getattr(item, "published_text", None)
+        published_at = getattr(item, "published_at", None)
+        return CafeFNewsArticle(
+            title=getattr(item, "title", ""),
+            summary=getattr(item, "summary", "") or "",
+            url=getattr(item, "url", ""),
+            published_at=published_text or self._to_display_time(published_at),
+            source=getattr(item, "source", "CafeF"),
+        )
+
+    def _parse_published_at(self, value: str | None) -> datetime | None:
+        text = (value or "").strip()
+        if not text:
+            return None
+
+        normalized = text.replace("h", ":").replace("H", ":")
+        patterns = [
+            "%d/%m/%Y %H:%M",
+            "%d-%m-%Y %H:%M",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+        ]
+
+        matched = re.search(r"(\d{1,2}[/-]\d{1,2}[/-]\d{4})(?:\s+(\d{1,2}:\d{2}))?", normalized)
+        if matched:
+            date_part = matched.group(1).replace("-", "/")
+            time_part = matched.group(2) or "00:00"
+            candidate = f"{date_part} {time_part}"
+            try:
+                return datetime.strptime(candidate, "%d/%m/%Y %H:%M")
+            except ValueError:
+                pass
+
+        for pattern in patterns:
+            try:
+                return datetime.strptime(normalized, pattern)
+            except ValueError:
+                continue
+        return None
+
+    def _to_display_time(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        return value.strftime("%d/%m/%Y %H:%M")
 
     def _clean_text(self, value: str) -> str:
         text = self.TAG_PATTERN.sub(" ", value)

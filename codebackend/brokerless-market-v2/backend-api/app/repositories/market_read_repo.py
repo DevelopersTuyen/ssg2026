@@ -12,6 +12,7 @@ from app.models.market import (
     MarketIndexDailyPoint,
     MarketIndexIntradayPoint,
     MarketIntradayPoint,
+    MarketNewsArticle,
     MarketQuoteSnapshot,
     MarketSymbol,
     MarketSyncLog,
@@ -908,6 +909,93 @@ class MarketReadRepository:
             select(MarketSyncLog).order_by(desc(MarketSyncLog.started_at)).limit(limit)
         )
         return result.scalars().all()
+
+    async def get_latest_news_articles(
+        self,
+        *,
+        source: str | None = None,
+        limit: int = 10,
+        search: str | None = None,
+    ) -> list[MarketNewsArticle]:
+        stmt = select(MarketNewsArticle)
+
+        if source:
+            stmt = stmt.where(MarketNewsArticle.source == source)
+
+        if search:
+            pattern = f"%{search.lower()}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(func.coalesce(MarketNewsArticle.title, "")).like(pattern),
+                    func.lower(func.coalesce(MarketNewsArticle.summary, "")).like(pattern),
+                )
+            )
+
+        stmt = stmt.order_by(
+            desc(func.coalesce(MarketNewsArticle.published_at, MarketNewsArticle.captured_at)),
+            desc(MarketNewsArticle.updated_at),
+        ).limit(limit)
+
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def upsert_news_articles(self, articles: list[dict[str, Any]]) -> list[MarketNewsArticle]:
+        if not articles:
+            return []
+
+        urls = [str(item.get("url") or "").strip() for item in articles if str(item.get("url") or "").strip()]
+        existing_map: dict[tuple[str, str], MarketNewsArticle] = {}
+
+        if urls:
+            existing_result = await self.session.execute(
+                select(MarketNewsArticle).where(MarketNewsArticle.url.in_(urls))
+            )
+            existing_rows = existing_result.scalars().all()
+            existing_map = {(row.source, row.url): row for row in existing_rows}
+
+        stored_rows: list[MarketNewsArticle] = []
+        now = datetime.now()
+
+        for payload in articles:
+            source = str(payload.get("source") or "CafeF").strip() or "CafeF"
+            url = str(payload.get("url") or "").strip()
+            title = str(payload.get("title") or "").strip()
+            if not url or not title:
+                continue
+
+            key = (source, url)
+            row = existing_map.get(key)
+            published_at = payload.get("published_at")
+            published_text = payload.get("published_text")
+            summary = payload.get("summary")
+            raw_json = payload.get("raw_json")
+
+            if row is None:
+                row = MarketNewsArticle(
+                    source=source,
+                    title=title,
+                    summary=summary,
+                    url=url,
+                    published_at=published_at,
+                    published_text=published_text,
+                    raw_json=raw_json,
+                    captured_at=now,
+                    updated_at=now,
+                )
+                self.session.add(row)
+                existing_map[key] = row
+            else:
+                row.title = title
+                row.summary = summary
+                row.published_at = published_at
+                row.published_text = published_text
+                row.raw_json = raw_json
+                row.updated_at = now
+
+            stored_rows.append(row)
+
+        await self.session.flush()
+        return stored_rows
 
     async def get_active_watchlist_items(self) -> list[MarketWatchlistItem]:
         result = await self.session.execute(

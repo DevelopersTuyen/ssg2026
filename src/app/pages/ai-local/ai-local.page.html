@@ -172,6 +172,25 @@
           </a>
         </article>
       </section>
+
+      <section class="panel full-width-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-kicker">DETAILED AI ANALYSIS</span>
+            <h2>Phan tich chi tiet tu toan bo du lieu local hien co</h2>
+          </div>
+        </div>
+
+        <div class="analysis-grid">
+          <article class="analysis-card" *ngFor="let section of analysisSections; trackBy: trackBySection">
+            <h3>{{ section.title }}</h3>
+            <p>{{ section.summary }}</p>
+            <ul *ngIf="section.bullets?.length" class="analysis-list">
+              <li *ngFor="let bullet of section.bullets; trackBy: trackByPrompt">{{ bullet }}</li>
+            </ul>
+          </article>
+        </div>
+      </section>
     </ng-container>
 
     <ng-container *ngIf="selectedTab === 'chat'">
@@ -285,6 +304,29 @@
             </article>
           </div>
         </article>
+      </section>
+
+      <section class="panel full-width-panel" *ngIf="cafefStorage">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-kicker">CAFEF STORAGE STATUS</span>
+            <h2>Kiem tra trang thai luu tru tin CafeF</h2>
+          </div>
+        </div>
+
+        <div class="storage-grid">
+          <article class="dataset-card">
+            <span>Stored in DB</span>
+            <strong>{{ cafefStorage.stored_in_db ? 'Co' : 'Chua' }}</strong>
+            <small>{{ cafefStorage.detail }}</small>
+          </article>
+
+          <article class="dataset-card">
+            <span>Nguon hien tai</span>
+            <strong>{{ cafefStorage.source }}</strong>
+            <small>Thoi diem kiem tra: {{ cafefStorage.checked_at }}</small>
+          </article>
+        </div>
       </section>
 
       <section class="panel full-width-panel">

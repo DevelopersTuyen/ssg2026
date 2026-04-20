@@ -89,7 +89,7 @@ class MarketAlertsService:
         gainers = await self._get_stock_board(exchange, "gainers", limit=8)
         losers = await self._get_stock_board(exchange, "losers", limit=8)
         watchlist = await self._build_watchlist_snapshot(limit=12)
-        news = await self.news_service.fetch_latest_news(limit=12)
+        news = await self.news_service.fetch_latest_news(limit=12, repo=self.repo)
 
         tracked_symbols = self._collect_tracked_symbols(watchlist, actives, gainers, losers)
         news_items = self._build_news_items(news, tracked_symbols, {item["symbol"] for item in watchlist})

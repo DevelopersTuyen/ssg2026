@@ -149,7 +149,9 @@
 .dataset-grid,
 .forecast-grid,
 .news-grid,
-.chat-layout {
+.chat-layout,
+.analysis-grid,
+.storage-grid {
   display: grid;
   gap: 16px;
 }
@@ -571,6 +573,43 @@
   gap: 16px;
 }
 
+.analysis-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.analysis-card {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(129, 151, 173, 0.15);
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f9fc 100%);
+}
+
+.analysis-card h3 {
+  margin: 0 0 10px;
+  color: #10253d;
+}
+
+.analysis-card p {
+  margin: 0;
+  color: #5b6e84;
+  line-height: 1.65;
+}
+
+.analysis-list {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  color: #4d647d;
+  line-height: 1.7;
+}
+
+.analysis-list li + li {
+  margin-top: 6px;
+}
+
+.storage-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .full-width-panel {
   width: 100%;
 }
@@ -597,7 +636,9 @@
   .forecast-grid,
   .news-grid,
   .meta-grid,
-  .template-card {
+  .template-card,
+  .analysis-grid,
+  .storage-grid {
     grid-template-columns: 1fr;
   }
 

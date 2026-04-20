@@ -3,9 +3,11 @@ import {
   AiActivityItem,
   AiAgentChatHistoryItem,
   AiForecastCard,
+  AiLocalAnalysisSection,
   AiLocalDataStat,
   AiLocalNewsItem,
   AiLocalOverviewResponse,
+  AiLocalStorageStatus,
   AiStatusItem,
   ExchangeTab,
   MarketApiService,
@@ -51,6 +53,8 @@ export class AiLocalPage implements OnInit {
   datasetStats: AiLocalDataStat[] = [];
   focusSymbols: string[] = [];
   newsItems: AiLocalNewsItem[] = [];
+  analysisSections: AiLocalAnalysisSection[] = [];
+  cafefStorage: AiLocalStorageStatus | null = null;
 
   connected = false;
   modelAvailable = false;
@@ -231,6 +235,10 @@ export class AiLocalPage implements OnInit {
     return `${item.title}-${item.direction}`;
   }
 
+  trackBySection(_: number, item: AiLocalAnalysisSection): string {
+    return item.title;
+  }
+
   trackByNews(_: number, item: AiLocalNewsItem): string {
     return `${item.source}-${item.title}`;
   }
@@ -281,6 +289,8 @@ export class AiLocalPage implements OnInit {
     this.datasetStats = data.dataset_stats || [];
     this.focusSymbols = data.focus_symbols || [];
     this.newsItems = data.news_items || [];
+    this.analysisSections = data.analysis_sections || [];
+    this.cafefStorage = data.cafef_storage || null;
     this.connected = data.connected;
     this.modelAvailable = data.model_available;
     this.provider = data.provider;

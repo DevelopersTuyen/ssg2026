@@ -21,6 +21,19 @@ class AiLocalNewsItem(BaseModel):
     url: str | None = None
 
 
+class AiLocalAnalysisSection(BaseModel):
+    title: str
+    summary: str
+    bullets: list[str] = Field(default_factory=list)
+
+
+class AiLocalStorageStatus(BaseModel):
+    stored_in_db: bool = False
+    source: str
+    detail: str
+    checked_at: datetime
+
+
 class AiLocalOverviewResponse(BaseModel):
     exchange: str
     provider: str
@@ -36,6 +49,8 @@ class AiLocalOverviewResponse(BaseModel):
     dataset_stats: list[AiLocalDataStat]
     focus_symbols: list[str]
     news_items: list[AiLocalNewsItem]
+    analysis_sections: list[AiLocalAnalysisSection]
+    cafef_storage: AiLocalStorageStatus
     assistant_greeting: str
 
 

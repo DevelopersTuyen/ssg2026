@@ -9,7 +9,14 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.repositories.market_read_repo import MarketReadRepository
 from app.schemas.ai_agent import AiChatMessage, AiChatRequest, AiForecastCard, AiStatusItem
-from app.schemas.ai_local import AiLocalChatResponse, AiLocalDataStat, AiLocalNewsItem, AiLocalOverviewResponse
+from app.schemas.ai_local import (
+    AiLocalAnalysisSection,
+    AiLocalChatResponse,
+    AiLocalDataStat,
+    AiLocalNewsItem,
+    AiLocalOverviewResponse,
+    AiLocalStorageStatus,
+)
 from app.services.ai_agent_service import AiAgentService
 from app.services.cafef_news_service import CafeFNewsService
 from app.services.ollama_service import OllamaService, OllamaServiceError
@@ -51,7 +58,7 @@ class AiLocalService(AiAgentService):
 
         context = await self._build_local_context(exchange=exchange, prompt="", focus_symbols=[])
         connected, model_available, installed_models = await self._get_provider_status()
-        forecast_cards, used_fallback = await self._generate_overview_cards(
+        forecast_cards, analysis_sections, used_fallback = await self._generate_overview_cards(
             context=context,
             connected=connected,
             model_available=model_available,
@@ -79,6 +86,8 @@ class AiLocalService(AiAgentService):
             dataset_stats=self._build_dataset_stats(context),
             focus_symbols=self._build_focus_symbol_list(context),
             news_items=context.get("cafef_news") or [],
+            analysis_sections=analysis_sections,
+            cafef_storage=AiLocalStorageStatus.model_validate(context.get("cafef_storage") or {}),
             assistant_greeting=self.ASSISTANT_GREETING,
         )
         data = response.model_dump(mode="json")
@@ -128,8 +137,11 @@ class AiLocalService(AiAgentService):
         focus_symbols: list[str],
     ) -> dict[str, Any]:
         context = await self._build_market_context(exchange=exchange, prompt=prompt, focus_symbols=focus_symbols)
+        context["actives"] = await self._get_stock_board(exchange, "actives", limit=10)
+        context["gainers"] = await self._get_stock_board(exchange, "gainers", limit=10)
+        context["losers"] = await self._get_stock_board(exchange, "losers", limit=10)
         symbols = await self.repo.get_symbols_by_exchange(exchange)
-        news_items = await self.cafef_news_service.fetch_latest_news(limit=6)
+        news_items = await self.cafef_news_service.fetch_latest_news(limit=10, repo=self.repo)
         context["cafef_news"] = [
             AiLocalNewsItem(
                 title=item.title,
@@ -141,6 +153,12 @@ class AiLocalService(AiAgentService):
             for item in news_items
         ]
         context["symbol_count"] = len(symbols or [])
+        context["symbol_preview"] = [
+            item.symbol if hasattr(item, "symbol") else item.get("symbol")
+            for item in (symbols or [])[:20]
+        ]
+        storage_status = await self._build_cafef_storage_status()
+        context["cafef_storage"] = storage_status.model_dump(mode="json")
         return context
 
     async def _get_provider_status(self) -> tuple[bool, bool, list[str]]:
@@ -163,20 +181,23 @@ class AiLocalService(AiAgentService):
         context: dict[str, Any],
         connected: bool,
         model_available: bool,
-    ) -> tuple[list[AiForecastCard], bool]:
+    ) -> tuple[list[AiForecastCard], list[AiLocalAnalysisSection], bool]:
         if not connected or not model_available:
-            return self._build_fallback_forecast_cards(context), True
+            return self._build_fallback_forecast_cards(context), self._build_fallback_analysis_sections(context), True
 
         prompt_context = self._build_prompt_context_local(context)
         prompt = (
-            "Hay tao dung 4 the insight cho dashboard AI Local.\n"
+            "Hay tao bo phan tich AI Local chi tiet cho dashboard chung khoan.\n"
             "Yeu cau:\n"
             "- Viet tieng Viet khong dau.\n"
-            "- Moi summary toi da 2 cau ngan.\n"
+            "- forecast_cards gom dung 4 the. Moi summary toi da 2 cau ngan.\n"
+            "- analysis_sections gom dung 5 muc, moi muc phai co title, summary va 3-5 bullets cu the.\n"
+            "- Can phan tich sau hon ve: index/chi so, dong tien, top movers, watchlist, tin CafeF, rui ro ngan han, va tinh trang du lieu.\n"
+            "- Phai neu ro tinh trang luu tru CafeF trong detail neu context co thong tin nay.\n"
             "- direction chi duoc la up, down, neutral.\n"
             "- confidence la so nguyen 55-95.\n"
             "- Chi duoc dung du lieu trong CONTEXT_JSON.\n"
-            "- Tra ve JSON thuan theo dang {\"forecast_cards\":[...]}.\n\n"
+            "- Tra ve JSON thuan theo dang {\"forecast_cards\":[...],\"analysis_sections\":[...]}.\n\n"
             f"CONTEXT_JSON:\n{json.dumps(prompt_context, ensure_ascii=False, indent=2, default=str)}"
         )
 
@@ -190,17 +211,19 @@ class AiLocalService(AiAgentService):
                 prompt=prompt,
                 system_prompt=system_prompt,
                 temperature=0.15,
-                max_output_tokens=900,
+                max_output_tokens=1800,
             )
             payload = self._load_json(raw)
             cards = payload.get("forecast_cards") if isinstance(payload, dict) else payload
+            sections = payload.get("analysis_sections") if isinstance(payload, dict) else []
             parsed = self._normalize_forecast_cards(cards)
+            parsed_sections = self._normalize_analysis_sections(sections)
             if parsed:
-                return parsed[:4], False
+                return parsed[:4], parsed_sections or self._build_fallback_analysis_sections(context), False
         except Exception as exc:  # pragma: no cover
             logger.warning("ollama overview fallback: %s", exc)
 
-        return self._build_fallback_forecast_cards(context), True
+        return self._build_fallback_forecast_cards(context), self._build_fallback_analysis_sections(context), True
 
     async def _generate_chat_answer_local(
         self,
@@ -255,6 +278,9 @@ class AiLocalService(AiAgentService):
             "cafef_news": context.get("cafef_news") or [],
             "sync_logs": context.get("news") or [],
             "symbol_count": context.get("symbol_count") or 0,
+            "symbol_preview": context.get("symbol_preview") or [],
+            "all_index_cards": context.get("index_cards") or [],
+            "cafef_storage": context.get("cafef_storage") or {},
         }
 
     def _build_summary_items_local(
@@ -312,12 +338,18 @@ class AiLocalService(AiAgentService):
             AiLocalDataStat(
                 label="Tin CafeF",
                 value=f"{len(news_items)} tin",
-                helper="Tin tuc moi nhat duoc keo ve va dua vao local context",
+                helper="Tin tuc CafeF duoc dong bo vao bang market_news_articles va nap lai cho AI Local",
             ),
             AiLocalDataStat(
                 label="Focus symbols",
                 value=f"{len(context.get('focus_symbols') or [])} ma",
                 helper="Ma duoc trich tu prompt va watchlist hien tai",
+            ),
+            AiLocalDataStat(
+                label="CafeF DB",
+                value="Da luu DB" if (context.get("cafef_storage") or {}).get("stored_in_db") else "Dang cho du lieu",
+                helper=(context.get("cafef_storage") or {}).get("detail")
+                or "Trang thai luu tru CafeF trong database",
             ),
         ]
 
@@ -351,4 +383,121 @@ class AiLocalService(AiAgentService):
             f"{reason}\n\n"
             f"Hay dam bao da chay `ollama serve` va da pull model `{settings.ollama_model}`.\n\n"
             f"{fallback}"
+        )
+
+    def _normalize_analysis_sections(self, sections: Any) -> list[AiLocalAnalysisSection]:
+        if not isinstance(sections, list):
+            return []
+
+        results: list[AiLocalAnalysisSection] = []
+        for item in sections[:5]:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or "").strip()
+            summary = str(item.get("summary") or "").strip()
+            bullets_raw = item.get("bullets") or []
+            bullets = [str(bullet).strip() for bullet in bullets_raw if str(bullet).strip()]
+            if not title or not summary:
+                continue
+            results.append(
+                AiLocalAnalysisSection(
+                    title=title,
+                    summary=summary,
+                    bullets=bullets[:5],
+                )
+            )
+        return results
+
+    def _build_fallback_analysis_sections(self, context: dict[str, Any]) -> list[AiLocalAnalysisSection]:
+        selected_index = context.get("selected_index") or {}
+        actives = context.get("actives") or []
+        gainers = context.get("gainers") or []
+        losers = context.get("losers") or []
+        watchlist = context.get("watchlist") or []
+        news_items = context.get("cafef_news") or []
+        storage = context.get("cafef_storage") or {}
+
+        sections: list[AiLocalAnalysisSection] = [
+            AiLocalAnalysisSection(
+                title="Buc tranh thi truong",
+                summary=(
+                    f"San {context.get('exchange')} dang duoc theo doi qua {selected_index.get('symbol') or 'index chinh'} "
+                    f"voi bien dong {self._format_pct(selected_index.get('change_percent'))}."
+                ),
+                bullets=[
+                    f"Muc diem hien tai: {self._format_price(selected_index.get('close'))}",
+                    f"Dong du lieu index dang co {len(context.get('index_cards') or [])} the tong hop.",
+                    f"Du lieu intraday exchange tail: {len(context.get('hourly_trading') or [])} moc thoi gian.",
+                ],
+            ),
+            AiLocalAnalysisSection(
+                title="Dong tien va movers",
+                summary="Nhip dong tien duoc suy ra tu nhom actives, gainers va losers trong san dang xem.",
+                bullets=[
+                    f"Ma hut dong tien: {(actives[0].get('symbol') if actives else '--')}",
+                    f"Ma tang noi bat: {(gainers[0].get('symbol') if gainers else '--')}",
+                    f"Ma giam can chu y: {(losers[0].get('symbol') if losers else '--')}",
+                ],
+            ),
+            AiLocalAnalysisSection(
+                title="Watchlist chi tiet",
+                summary=f"He thong dang co {len(watchlist)} ma watchlist trong local context.",
+                bullets=[
+                    *[
+                        f"{item.get('symbol')}: {self._format_pct(item.get('change_percent'))}, volume {self._format_compact(item.get('volume'))}"
+                        for item in watchlist[:4]
+                    ],
+                ],
+            ),
+            AiLocalAnalysisSection(
+                title="Tin CafeF va tac dong",
+                summary=f"Co {len(news_items)} tin CafeF dang duoc nap vao AI Local de doi chieu voi thi truong.",
+                bullets=[
+                    *[
+                        f"{item.get('title')}"
+                        for item in news_items[:4]
+                    ],
+                ],
+            ),
+            AiLocalAnalysisSection(
+                title="Tinh trang luu tru du lieu",
+                summary="Nguon tin CafeF duoc uu tien doc tu database sau khi dong bo tu luong fetch.",
+                bullets=[
+                    f"Stored in DB: {'Co' if storage.get('stored_in_db') else 'Khong'}",
+                    f"Nguon hien tai: {storage.get('source') or '--'}",
+                    f"Chi tiet: {storage.get('detail') or '--'}",
+                ],
+            ),
+        ]
+        return sections
+
+    async def _build_cafef_storage_status(self) -> AiLocalStorageStatus:
+        latest_rows = await self.repo.get_latest_news_articles(source="CafeF", limit=5)
+        if latest_rows:
+            latest = latest_rows[0]
+            published_text = getattr(latest, "published_text", None)
+            captured_at = getattr(latest, "captured_at", None)
+            updated_at = getattr(latest, "updated_at", None)
+            time_marker = published_text
+            if not time_marker and isinstance(captured_at, datetime):
+                time_marker = captured_at.strftime("%d/%m/%Y %H:%M")
+
+            detail_parts = [f"Da luu {len(latest_rows)} ban ghi CafeF moi nhat trong market_news_articles"]
+            if time_marker:
+                detail_parts.append(f"ban tin moi nhat: {time_marker}")
+            if isinstance(updated_at, datetime):
+                detail_parts.append(f"dong bo luc {updated_at.strftime('%H:%M:%S %d/%m/%Y')}")
+
+            return AiLocalStorageStatus(
+                stored_in_db=True,
+                source="postgres.market_news_articles",
+                detail=". ".join(detail_parts),
+                checked_at=datetime.now(),
+            )
+
+        return AiLocalStorageStatus(
+            stored_in_db=False,
+            source="postgres.market_news_articles",
+            detail="Chua co ban ghi CafeF trong database. Can goi /api/live/news hoac cac service lien quan de nap du lieu dau tien.",
+            checked_at=datetime.now(),
         )

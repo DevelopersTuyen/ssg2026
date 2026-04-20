@@ -1,0 +1,35 @@
+curl http://localhost:8001/health
+curl http://localhost:8000/health
+curl "http://localhost:8000/api/dashboard/index-cards"
+curl "http://localhost:8000/api/dashboard/top-stocks?exchange=HSX&sort=actives"
+
+backend collector
+uvicorn app.main:app --reload --port 8001
+
+backend api
+uvicorn app.main:app --reload --port 8000
+
+
+
+$env:DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/brokerless_market"
+$env:REDIS_URL="redis://localhost:6379/0"
+$env:LOG_LEVEL="INFO"
+$env:VNSTOCK_SOURCE="VCI"
+
+uvicorn app.main:app --reload --port 8001
+
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent" \
+  -H 'Content-Type: application/json' \
+  -H 'X-goog-api-key: AIzaSyBXfxgdY-iRACyFI7TtSLzmZGgfi2GcQkg' \
+  -X POST \
+  -d '{
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "Explain how AI works in a few words"
+          }
+        ]
+      }
+    ]
+  }'
