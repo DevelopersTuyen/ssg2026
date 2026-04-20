@@ -1,0 +1,328 @@
+<ion-content [fullscreen]="true" class="perm-content">
+  <div class="perm-page container-fluid py-3">
+    <div class="perm-breadcrumb mb-3">
+      <ion-icon name="shield-checkmark-outline"></ion-icon>
+      <span>He thong</span>
+      <span class="sep">›</span>
+      <span>Role Permissions</span>
+    </div>
+
+    <div class="perm-shell">
+      <div class="perm-header">
+        <div>
+          <div class="page-kicker">RBAC Console</div>
+          <h1>Quan tri user, role va permission matrix</h1>
+          <p>Du lieu doc va ghi truc tiep tu backend auth. Man hinh nay phuc vu van hanh va demo cho cap quan ly.</p>
+        </div>
+
+        <div class="perm-status">
+          <span class="state-chip" [class.readonly]="!canManage">
+            {{ canManage ? 'can-manage' : 'read-only' }}
+          </span>
+          <button type="button" class="btn btn-outline-secondary" (click)="loadOverview(selectedMatrixRole)" [disabled]="loading || saving">
+            Tai lai
+          </button>
+        </div>
+      </div>
+
+      <div class="status-row" *ngIf="loading || notice || error">
+        <div class="status-pill loading" *ngIf="loading">Dang tai du lieu...</div>
+        <div class="status-pill success" *ngIf="notice">{{ notice }}</div>
+        <div class="status-pill error" *ngIf="error">{{ error }}</div>
+      </div>
+
+      <div class="perm-tabs">
+        <button
+          type="button"
+          class="perm-tab"
+          *ngFor="let tab of tabs"
+          [class.active]="selectedTab === tab.key"
+          (click)="selectTab(tab.key)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <div class="perm-card" [ngSwitch]="selectedTab">
+        <div *ngSwitchCase="'users'">
+          <div class="perm-toolbar">
+            <div class="toolbar-left">
+              <div class="search-box">
+                <ion-icon name="search-outline"></ion-icon>
+                <input
+                  type="text"
+                  class="form-control"
+                  placeholder="Tim user, email, phong ban..."
+                  [(ngModel)]="searchKeyword"
+                />
+              </div>
+
+              <select class="form-select role-filter" [(ngModel)]="selectedRoleFilter">
+                <option value="all">Tat ca role</option>
+                <option *ngFor="let role of roles" [value]="role.key">{{ role.name }}</option>
+              </select>
+            </div>
+
+            <button type="button" class="btn-main" (click)="openAddUserForm()" [disabled]="!canManage || saving">
+              <ion-icon name="add-outline"></ion-icon>
+              Them user
+            </button>
+          </div>
+
+          <div class="create-panel" *ngIf="showAddUserForm">
+            <div class="create-head">
+              <div>
+                <div class="create-title">Tao user moi</div>
+                <div class="create-helper">Khoi tao tai khoan van hanh, phan tich hoac giam sat.</div>
+              </div>
+              <button type="button" class="link-btn" (click)="cancelAddUser()">Dong</button>
+            </div>
+
+            <div class="create-grid">
+              <label class="create-field">
+                <span>Username</span>
+                <input class="table-input" [(ngModel)]="newUser.username" placeholder="vd: supervisor.demo" />
+              </label>
+
+              <label class="create-field">
+                <span>Ho ten</span>
+                <input class="table-input" [(ngModel)]="newUser.full_name" placeholder="Nguyen Van A" />
+              </label>
+
+              <label class="create-field">
+                <span>Email</span>
+                <input class="table-input" [(ngModel)]="newUser.email" placeholder="name@company.vn" />
+              </label>
+
+              <label class="create-field">
+                <span>Phong ban</span>
+                <input class="table-input" [(ngModel)]="newUser.department" placeholder="Research / Trading / Ops" />
+              </label>
+
+              <label class="create-field">
+                <span>Role</span>
+                <select class="table-select" [(ngModel)]="newUser.role_key">
+                  <option *ngFor="let role of roles" [value]="role.key">{{ role.name }}</option>
+                </select>
+              </label>
+
+              <label class="create-field">
+                <span>Mat khau khoi tao</span>
+                <input class="table-input" [(ngModel)]="newUser.password" />
+              </label>
+            </div>
+
+            <div class="create-actions">
+              <button type="button" class="link-btn" (click)="cancelAddUser()">Huy</button>
+              <button type="button" class="btn-main" (click)="submitNewUser()" [disabled]="saving">Tao user</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table perm-table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>USERNAME</th>
+                  <th>HO TEN</th>
+                  <th>PHONG BAN</th>
+                  <th>ROLE</th>
+                  <th>EMAIL</th>
+                  <th>TRANG THAI</th>
+                  <th>THAO TAC</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of users; trackBy: trackUser">
+                  <td class="code">{{ row.username }}</td>
+                  <td><input class="table-input" [(ngModel)]="row.full_name" [disabled]="!canManage" /></td>
+                  <td><input class="table-input" [(ngModel)]="row.department" [disabled]="!canManage" /></td>
+                  <td>
+                    <select class="table-select" [(ngModel)]="row.role_key" [disabled]="!canManage">
+                      <option *ngFor="let role of roles" [value]="role.key">{{ role.name }}</option>
+                    </select>
+                  </td>
+                  <td><input class="table-input" [(ngModel)]="row.email" [disabled]="!canManage" /></td>
+                  <td>
+                    <label class="toggle-line">
+                      <ion-toggle
+                        [ngModel]="row.status === 'active'"
+                        (ngModelChange)="row.status = $event ? 'active' : 'inactive'"
+                        [disabled]="!canManage"
+                      ></ion-toggle>
+                      <span class="status-chip" [class.inactive]="row.status === 'inactive'">
+                        {{ row.status }}
+                      </span>
+                    </label>
+                  </td>
+                  <td>
+                    <div class="action-links">
+                      <button type="button" class="link-btn" (click)="saveUser(row)" [disabled]="!canManage || saving">Luu</button>
+                      <button type="button" class="link-btn" (click)="toggleUserStatus(row)" [disabled]="!canManage">Dao trang thai</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'roles'">
+          <div class="perm-toolbar">
+            <div class="hint-text">Role tac dong truc tiep den permission matrix va cac user dang gan role do.</div>
+            <button type="button" class="btn-main" (click)="openAddRoleForm()" [disabled]="!canManage || saving">
+              <ion-icon name="add-outline"></ion-icon>
+              Them role
+            </button>
+          </div>
+
+          <div class="create-panel" *ngIf="showAddRoleForm">
+            <div class="create-head">
+              <div>
+                <div class="create-title">Tao role moi</div>
+                <div class="create-helper">Dung cho to nghiep vu moi, cap supervisor hoac role theo khach hang.</div>
+              </div>
+              <button type="button" class="link-btn" (click)="cancelAddRole()">Dong</button>
+            </div>
+
+            <div class="create-grid create-grid-role">
+              <label class="create-field">
+                <span>Role key</span>
+                <input class="table-input" [(ngModel)]="newRole.key" placeholder="vd: supervisor" />
+              </label>
+
+              <label class="create-field">
+                <span>Ten hien thi</span>
+                <input class="table-input" [(ngModel)]="newRole.name" placeholder="Supervisor" />
+              </label>
+
+              <label class="create-field create-field-full">
+                <span>Mo ta</span>
+                <input class="table-input" [(ngModel)]="newRole.description" placeholder="Phe duyet canh bao va giam sat van hanh" />
+              </label>
+            </div>
+
+            <div class="create-actions">
+              <button type="button" class="link-btn" (click)="cancelAddRole()">Huy</button>
+              <button type="button" class="btn-main" (click)="submitNewRole()" [disabled]="saving">Tao role</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table perm-table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>ROLE KEY</th>
+                  <th>TEN HIEN THI</th>
+                  <th>MO TA</th>
+                  <th>SO USER</th>
+                  <th>TRANG THAI</th>
+                  <th>PERMISSIONS</th>
+                  <th>THAO TAC</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of roles; trackBy: trackRole">
+                  <td class="code">{{ row.key }}</td>
+                  <td><input class="table-input" [(ngModel)]="row.name" [disabled]="!canManage" /></td>
+                  <td><input class="table-input" [(ngModel)]="row.description" [disabled]="!canManage" /></td>
+                  <td>{{ row.user_count }}</td>
+                  <td>
+                    <label class="toggle-line">
+                      <ion-toggle
+                        [ngModel]="row.status === 'active'"
+                        (ngModelChange)="row.status = $event ? 'active' : 'inactive'"
+                        [disabled]="!canManage"
+                      ></ion-toggle>
+                      <span class="status-chip" [class.inactive]="row.status === 'inactive'">
+                        {{ row.status }}
+                      </span>
+                    </label>
+                  </td>
+                  <td>{{ row.permissions_count }}</td>
+                  <td>
+                    <div class="action-links">
+                      <button type="button" class="link-btn" (click)="saveRole(row)" [disabled]="!canManage || saving">Luu</button>
+                      <button type="button" class="link-btn" (click)="toggleRoleStatus(row)" [disabled]="!canManage">Dao trang thai</button>
+                      <button type="button" class="link-btn" (click)="setMatrixRole(row.key); selectTab('matrix')">Matrix</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'matrix'">
+          <div class="perm-toolbar">
+            <div class="toolbar-left">
+              <select class="form-select matrix-role-select" [(ngModel)]="selectedMatrixRole" (ngModelChange)="setMatrixRole($event)">
+                <option *ngFor="let role of roles" [value]="role.key">{{ role.name }}</option>
+              </select>
+              <div class="hint-text">Role dang sua: {{ roleLabel(selectedMatrixRole) }}</div>
+            </div>
+
+            <button type="button" class="btn-main" (click)="saveMatrix()" [disabled]="!canManage || saving || !selectedMatrixRole">
+              <ion-icon name="save-outline"></ion-icon>
+              Luu ma tran quyen
+            </button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table perm-table perm-matrix-table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>MODULE</th>
+                  <th>XEM</th>
+                  <th>THEM</th>
+                  <th>SUA</th>
+                  <th>XOA</th>
+                  <th>DUYET</th>
+                  <th>EXPORT</th>
+                  <th>AI</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of matrix; trackBy: trackMatrix">
+                  <td class="code">{{ row.module }}</td>
+                  <td><ion-checkbox [(ngModel)]="row.view" [disabled]="!canManage"></ion-checkbox></td>
+                  <td><ion-checkbox [(ngModel)]="row.create" [disabled]="!canManage"></ion-checkbox></td>
+                  <td><ion-checkbox [(ngModel)]="row.update" [disabled]="!canManage"></ion-checkbox></td>
+                  <td><ion-checkbox [(ngModel)]="row.delete" [disabled]="!canManage"></ion-checkbox></td>
+                  <td><ion-checkbox [(ngModel)]="row.approve" [disabled]="!canManage"></ion-checkbox></td>
+                  <td><ion-checkbox [(ngModel)]="row.export" [disabled]="!canManage"></ion-checkbox></td>
+                  <td><ion-checkbox [(ngModel)]="row.ai" [disabled]="!canManage"></ion-checkbox></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'logs'">
+          <div class="hint-text log-intro">Moi thay doi role, user va matrix deu duoc ghi lai trong backend.</div>
+          <div class="table-responsive">
+            <table class="table perm-table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>THOI GIAN</th>
+                  <th>ACTOR</th>
+                  <th>HANH DONG</th>
+                  <th>DOI TUONG</th>
+                  <th>CHI TIET</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of logs; trackBy: trackLog">
+                  <td>{{ formatLogTime(row.time) }}</td>
+                  <td class="code">{{ row.user }}</td>
+                  <td>{{ row.action }}</td>
+                  <td>{{ row.target }}</td>
+                  <td>{{ row.detail }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</ion-content>

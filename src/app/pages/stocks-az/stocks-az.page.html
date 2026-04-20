@@ -1,0 +1,225 @@
+<ion-content [fullscreen]="true" class="az-content">
+  <div class="az-page container-fluid py-2">
+    <div class="az-breadcrumb mb-3">
+      <ion-icon name="home-outline"></ion-icon>
+      <span>Cổ phiếu</span>
+      <span class="sep">›</span>
+      <span>A-Z</span>
+    </div>
+
+    <div class="az-search-wrap mb-3">
+      <div class="az-search-box">
+        <ion-icon name="search-outline"></ion-icon>
+        <input
+          type="text"
+          class="form-control"
+          placeholder="Tìm kiếm..."
+          [(ngModel)]="keyword"
+        />
+      </div>
+    </div>
+
+    <div class="az-tabs mb-2">
+      <button
+        type="button"
+        class="az-tab"
+        *ngFor="let tab of tabs"
+        [class.active]="selectedTab === tab.key"
+        (click)="selectTab(tab.key)"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <div class="az-card" [ngSwitch]="selectedTab">
+      <!-- TONG QUAN -->
+      <div *ngSwitchCase="'overview'">
+        <div class="table-responsive">
+          <table class="table az-table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>MÃ CK</th>
+                <th>SÀN</th>
+                <th>TÊN</th>
+                <th>1d&nbsp;&nbsp;10d&nbsp;&nbsp;1m</th>
+                <th>GIÁ</th>
+                <th>THAY ĐỔI</th>
+                <th>%</th>
+                <th>KHỐI LƯỢNG</th>
+                <th>GIÁ TRỊ (TRIỆU)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of overviewRows; trackBy: trackOverview">
+                <td class="code">{{ row.code }}</td>
+                <td>{{ row.exchange }}</td>
+                <td>{{ row.name }}</td>
+                <td>
+                  <div class="spark-wrap">
+                    <div [id]="row.sparkId"></div>
+                  </div>
+                </td>
+                <td
+                  [class.stock-up]="row.up && !row.neutral"
+                  [class.stock-down]="!row.up && !row.neutral"
+                  [class.stock-neutral]="row.neutral"
+                >
+                  {{ row.price }}
+                </td>
+                <td
+                  [class.stock-up]="row.up && !row.neutral"
+                  [class.stock-down]="!row.up && !row.neutral"
+                  [class.stock-neutral]="row.neutral"
+                >
+                  <ng-container *ngIf="!row.neutral">
+                    {{ row.up ? '▲' : '▼' }}
+                  </ng-container>
+                  {{ row.change }}
+                </td>
+                <td
+                  [class.stock-up]="row.up && !row.neutral"
+                  [class.stock-down]="!row.up && !row.neutral"
+                  [class.stock-neutral]="row.neutral"
+                >
+                  {{ row.percent }}
+                </td>
+                <td>{{ row.volume }}</td>
+                <td>{{ row.value }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- THONG KE -->
+      <div *ngSwitchCase="'stats'">
+        <div class="table-responsive">
+          <table class="table az-table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>MÃ CK</th>
+                <th>SÀN</th>
+                <th>KLTB 10 NGÀY</th>
+                <th>CAO NHẤT 52W</th>
+                <th>THẤP NHẤT 52W</th>
+                <th>THAY ĐỔI 1 NĂM</th>
+                <th>SỐ CP FREE</th>
+                <th>ROOM NN</th>
+                <th>GTGD/SÀN</th>
+                <th>KLGD/CP FREE</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of statsRows; trackBy: trackStats">
+                <td class="code">{{ row.code }}</td>
+                <td>{{ row.exchange }}</td>
+                <td>{{ row.avg10d }}</td>
+                <td>{{ row.high52w }}</td>
+                <td>{{ row.low52w }}</td>
+                <td [class.stock-up]="row.change1yUp" [class.stock-down]="!row.change1yUp">
+                  {{ row.change1y }}
+                </td>
+                <td>{{ row.freeFloat }}</td>
+                <td>{{ row.foreignRoom }}</td>
+                <td>{{ row.turnoverPerExchange }}</td>
+                <td>{{ row.volumePerFreeFloat }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TIN TUC -->
+      <div *ngSwitchCase="'news'">
+        <div class="table-responsive">
+          <table class="table az-table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>MÃ CK</th>
+                <th>SÀN</th>
+                <th>TÊN</th>
+                <th>GIÁ</th>
+                <th>THAY ĐỔI</th>
+                <th>%</th>
+                <th>TIN TỨC</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of newsRows; trackBy: trackNews">
+                <td class="code">{{ row.code }}</td>
+                <td>{{ row.exchange }}</td>
+                <td>{{ row.name }}</td>
+                <td
+                  [class.stock-up]="row.up && !row.neutral"
+                  [class.stock-down]="!row.up && !row.neutral"
+                  [class.stock-neutral]="row.neutral"
+                >
+                  {{ row.price }}
+                </td>
+                <td
+                  [class.stock-up]="row.up && !row.neutral"
+                  [class.stock-down]="!row.up && !row.neutral"
+                  [class.stock-neutral]="row.neutral"
+                >
+                  <ng-container *ngIf="!row.neutral">
+                    {{ row.up ? '▲' : '▼' }}
+                  </ng-container>
+                  {{ row.change }}
+                </td>
+                <td
+                  [class.stock-up]="row.up && !row.neutral"
+                  [class.stock-down]="!row.up && !row.neutral"
+                  [class.stock-neutral]="row.neutral"
+                >
+                  {{ row.percent }}
+                </td>
+                <td class="news-cell">
+                  <a href="javascript:void(0)" class="news-link">{{ row.headline }}</a>
+                  <span class="news-more">
+                    <ion-icon name="chevron-down-outline"></ion-icon>
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAI CHINH -->
+      <div *ngSwitchCase="'finance'">
+        <div class="table-responsive">
+          <table class="table az-table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>MÃ CK</th>
+                <th>SÀN</th>
+                <th>EPS</th>
+                <th>P/E</th>
+                <th>P/B</th>
+                <th>ROE</th>
+                <th>ROA</th>
+                <th>TB CỔ TỨC BẰNG TIỀN 3 NĂM</th>
+                <th>TB CỔ TỨC BẰNG CP 3 NĂM</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of financeRows; trackBy: trackFinance">
+                <td class="code">{{ row.code }}</td>
+                <td>{{ row.exchange }}</td>
+                <td>{{ row.eps }}</td>
+                <td>{{ row.pe }}</td>
+                <td>{{ row.pb }}</td>
+                <td>{{ row.roe }}</td>
+                <td>{{ row.roa }}</td>
+                <td>{{ row.avgCashDividend3Y }}</td>
+                <td>{{ row.avgStockDividend3Y }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div *ngSwitchDefault></div>
+    </div>
+  </div>
+</ion-content>

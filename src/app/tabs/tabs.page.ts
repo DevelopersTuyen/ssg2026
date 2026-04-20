@@ -1,5 +1,7 @@
 import { Component } from '@angular/core';
 
+import { AuthService } from '../core/services/auth.service';
+
 @Component({
   selector: 'app-tabs',
   templateUrl: 'tabs.page.html',
@@ -7,7 +9,10 @@ import { Component } from '@angular/core';
   standalone: false,
 })
 export class TabsPage {
+  constructor(private auth: AuthService) {}
 
-  constructor() {}
-
+  get canViewPermissions(): boolean {
+    const permissions = this.auth.profile?.permissions || [];
+    return permissions.some((item) => item.startsWith('role-permissions.'));
+  }
 }

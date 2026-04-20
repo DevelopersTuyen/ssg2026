@@ -31,6 +31,7 @@ log.txt
 
 # Node
 /node_modules
+**/node_modules/
 npm-debug.log
 yarn-error.log
 
@@ -64,6 +65,25 @@ yarn-error.log
 /libpeerconnection.log
 testem.log
 /typings
+
+# Python / backend
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+
+# Env files
+.env
+**/.env
+ENV
+**/ENV
+
+# Nested build output
+**/dist/
 
 # System files
 .DS_Store

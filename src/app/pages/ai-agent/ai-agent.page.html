@@ -1,0 +1,193 @@
+<ion-content [fullscreen]="true" class="ai-content">
+  <div class="ai-page container-fluid py-3">
+    <div class="ai-breadcrumb mb-3">
+      <ion-icon name="sparkles-outline"></ion-icon>
+      <span>Market Watch</span>
+      <span class="sep">›</span>
+      <span>AI Agent</span>
+    </div>
+
+    <div class="ai-shell">
+      <div class="ai-tabs">
+        <button
+          type="button"
+          class="ai-tab"
+          *ngFor="let tab of tabs"
+          [class.active]="selectedTab === tab.key"
+          (click)="selectTab(tab.key)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <div class="ai-card" [ngSwitch]="selectedTab">
+        <div *ngSwitchCase="'dashboard'">
+          <div class="row g-3">
+            <div class="col-12 col-xl-8">
+              <div class="panel">
+                <div class="panel-title d-flex justify-content-between align-items-center">
+                  <span>TRANG THAI AI</span>
+                  <button type="button" class="btn-refresh" (click)="refreshOverview()" [disabled]="loadingOverview">
+                    {{ loadingOverview ? 'Dang tai...' : 'Lam moi' }}
+                  </button>
+                </div>
+
+                <div class="empty-state mb-3" *ngIf="overviewError">
+                  {{ overviewError }}
+                </div>
+
+                <div class="summary-grid">
+                  <div class="summary-item" *ngFor="let item of summaryItems; trackBy: trackStatus">
+                    <div class="label">{{ item.label }}</div>
+                    <div class="value" [ngClass]="statusValueClass(item)">{{ item.value }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel mt-3">
+                <div class="panel-title">GOI Y NHANH</div>
+
+                <div class="prompt-list">
+                  <button
+                    type="button"
+                    class="prompt-chip"
+                    *ngFor="let prompt of quickPrompts; trackBy: trackPrompt"
+                    (click)="usePrompt(prompt)"
+                  >
+                    {{ prompt }}
+                  </button>
+                </div>
+
+                <div class="prompt-box mt-3">
+                  <textarea
+                    rows="4"
+                    class="form-control"
+                    placeholder="Nhap cau hoi cho AI..."
+                    [(ngModel)]="currentPrompt"
+                  ></textarea>
+                  <div class="prompt-actions">
+                    <button type="button" class="btn-send" (click)="sendPrompt()" [disabled]="sendingPrompt">
+                      {{ sendingPrompt ? 'Dang gui...' : 'Gui cho AI' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-xl-4">
+              <div class="panel">
+                <div class="panel-title">KET QUA AI GAN NHAT</div>
+
+                <div class="forecast-list" *ngIf="forecastCards.length; else activityList">
+                  <div class="forecast-item" *ngFor="let item of forecastCards; trackBy: trackForecast">
+                    <div class="forecast-top">
+                      <div class="forecast-title">{{ item.title }}</div>
+                      <div class="forecast-badge" [ngClass]="forecastBadgeClass(item)">
+                        {{ item.confidence }}%
+                      </div>
+                    </div>
+                    <div class="forecast-summary">{{ item.summary }}</div>
+                  </div>
+                </div>
+
+                <ng-template #activityList>
+                  <div class="activity-list">
+                    <div class="activity-item" *ngFor="let item of recentActivities; trackBy: trackActivity">
+                      <div class="time">{{ item.time }}</div>
+                      <div class="text">{{ item.text }}</div>
+                    </div>
+                  </div>
+                </ng-template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'chat'">
+          <div class="chat-layout">
+            <div class="chat-messages">
+              <div
+                class="chat-item"
+                *ngFor="let msg of chatMessages; trackBy: trackChat"
+                [class.user]="msg.role === 'user'"
+                [class.assistant]="msg.role === 'assistant'"
+              >
+                <div class="meta">
+                  <span class="role">{{ msg.role === 'user' ? 'Ban' : 'AI Agent' }}</span>
+                  <span class="time">{{ msg.time }}</span>
+                </div>
+                <div class="bubble">{{ msg.content }}</div>
+              </div>
+            </div>
+
+            <div class="chat-input-box">
+              <textarea
+                rows="4"
+                class="form-control"
+                placeholder="Vi du: Vi sao ma dan dau tang hom nay?"
+                [(ngModel)]="currentPrompt"
+              ></textarea>
+              <div class="chat-input-actions">
+                <button type="button" class="btn-send" (click)="sendPrompt()" [disabled]="sendingPrompt">
+                  {{ sendingPrompt ? 'Dang gui...' : 'Gui' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'tasks'">
+          <div class="panel-title mb-2">TAC VU AI TU DONG</div>
+
+          <div class="table-responsive">
+            <table class="table ai-table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>TAC VU</th>
+                  <th>LICH CHAY</th>
+                  <th>TRANG THAI</th>
+                  <th>PHAM VI</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let task of tasks; trackBy: trackTask">
+                  <td>{{ task.name }}</td>
+                  <td>{{ task.schedule }}</td>
+                  <td><span class="status-chip">{{ task.status }}</span></td>
+                  <td>{{ task.target }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'skills'">
+          <div class="row g-3">
+            <div class="col-12 col-md-6 col-xl-4" *ngFor="let skill of skills; trackBy: trackSkill">
+              <div class="skill-card">
+                <div class="skill-icon">
+                  <ion-icon [name]="skill.icon"></ion-icon>
+                </div>
+                <div class="skill-title">{{ skill.title }}</div>
+                <div class="skill-desc">{{ skill.description }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'history'">
+          <div class="panel-title mb-2">NHAT KY AI</div>
+
+          <div class="history-list">
+            <div class="history-item" *ngFor="let item of historyItems; trackBy: trackActivity">
+              <div class="time">{{ item.time }}</div>
+              <div class="text">{{ item.text }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchDefault></div>
+      </div>
+    </div>
+  </div>
+</ion-content>

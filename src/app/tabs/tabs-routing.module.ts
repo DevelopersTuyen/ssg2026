@@ -1,34 +1,61 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { TabsPage } from './tabs.page';
+import { authGuard } from '../core/guards/auth.guard';
 
 const routes: Routes = [
   {
     path: 'tabs',
     component: TabsPage,
+    canActivate: [authGuard],
     children: [
+      
       {
-        path: 'tab1',
-        loadChildren: () => import('../tab1/tab1.module').then(m => m.Tab1PageModule)
+        path: 'dashboard',
+        loadChildren: () => import('../pages/dashboard/dashboard.module').then(m => m.DashboardPageModule)
       },
       {
-        path: 'tab2',
-        loadChildren: () => import('../tab2/tab2.module').then(m => m.Tab2PageModule)
+        path: 'market-watch',
+        loadChildren: () => import('../pages/market-watch/market-watch.module').then(m => m.MarketWatchPageModule)
+      },
+      // {
+      //   path: 'market-analysis',
+      //   loadChildren: () => import('../pages/market-analysis/market-analysis.module').then(m => m.MarketAnalysisPageModule)
+      // },
+      // {
+      //   path: 'watchlist',
+      //   loadChildren: () => import('../pages/watchlist/watchlist.module').then(m => m.WatchlistPageModule)
+      // },
+      {
+        path: 'market-alerts',
+        loadChildren: () => import('../pages/market-alerts/market-alerts.module').then(m => m.MarketAlertsPageModule)
+      },
+      // {
+      //   path: 'stocks-az',
+      //   loadChildren: () => import('../pages/stocks-az/stocks-az.module').then(m => m.StocksAzPageModule)
+      // },
+      {
+        path: 'market-settings',
+        loadChildren: () => import('../pages/market-settings/market-settings.module').then(m => m.MarketSettingsPageModule)
       },
       {
-        path: 'tab3',
-        loadChildren: () => import('../tab3/tab3.module').then(m => m.Tab3PageModule)
+        path: 'ai-agent',
+        loadChildren: () => import('../pages/ai-agent/ai-agent.module').then(m => m.AiAgentPageModule)
+      },
+      {
+        path: 'role-permissions',
+        loadChildren: () => import('../pages/role-permissions/role-permissions.module').then( m => m.RolePermissionsPageModule)
       },
       {
         path: '',
-        redirectTo: '/tabs/tab1',
+        redirectTo: '/tabs/dashboard',
         pathMatch: 'full'
       }
     ]
   },
   {
     path: '',
-    redirectTo: '/tabs/tab1',
+    redirectTo: '/login',
     pathMatch: 'full'
   }
 ];
@@ -36,4 +63,4 @@ const routes: Routes = [
 @NgModule({
   imports: [RouterModule.forChild(routes)],
 })
-export class TabsPageRoutingModule {}
+export class TabsPageRoutingModule { }

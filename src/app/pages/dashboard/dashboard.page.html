@@ -1,0 +1,450 @@
+<ion-content [fullscreen]="true" class="dashboard-page">
+  <div class="dashboard-shell">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Market Dashboard</div>
+        <div class="page-subtitle">
+          Trung tam theo doi thi truong: chi so, watchlist, tin CafeF, canh bao AI va ma dang duoc uu tien.
+        </div>
+      </div>
+
+      <div class="last-updated">
+        Cap nhat: <strong>{{ lastUpdated }}</strong>
+      </div>
+    </div>
+
+    <div class="dashboard-top-grid">
+      <section class="panel hero-panel">
+        <div class="hero-badge">AI COMMAND CENTER</div>
+
+        <div class="hero-topline">
+          <div>
+            <h2 class="hero-title">Theo doi thi truong va hanh dong tu cung mot man hinh.</h2>
+            <p class="hero-desc">
+              Dashboard nay gom bang gia, watchlist, tin CafeF va lop phan tich AI de nguoi dung nhin nhanh duoc buc tranh thi truong trong vai giay.
+            </p>
+          </div>
+
+          <div class="hero-switcher">
+            <div class="hero-switcher-label">San dang theo doi</div>
+            <div class="hero-segmented">
+              <button type="button" [class.active]="selectedExchange === 'HSX'" (click)="changeExchange('HSX')">HSX</button>
+              <button type="button" [class.active]="selectedExchange === 'HNX'" (click)="changeExchange('HNX')">HNX</button>
+              <button type="button" [class.active]="selectedExchange === 'UPCOM'" (click)="changeExchange('UPCOM')">UPCOM</button>
+            </div>
+            <div class="hero-switcher-note">Doi san ngay tai day de cap nhat toan bo summary, chart va canh bao.</div>
+          </div>
+        </div>
+
+        <div class="hero-stats">
+          <div class="hero-stat hero-stat-primary">
+            <span class="hero-stat-label">Dang xem</span>
+            <strong>{{ selectedExchange }}</strong>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label">Watchlist</span>
+            <strong>{{ totalWatchlist }}</strong>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label">Ma tren san</span>
+            <strong>{{ stocks.length }}</strong>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label">Ma dang theo doi</span>
+            <strong>{{ selectedSymbolDisplay }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <div class="top-side-stack">
+        <section class="panel forecast-panel">
+          <div class="panel-head simple">
+            <div>
+              <div class="panel-title">Nhan dinh AI</div>
+              <div class="panel-subtitle">Tom tat nhanh theo du lieu thi truong hien tai</div>
+            </div>
+          </div>
+
+          <div class="forecast-list">
+            <div class="forecast-item" *ngFor="let item of aiForecast">
+              <div class="forecast-top">
+                <strong>{{ item.title }}</strong>
+                <span class="forecast-badge" [class.up]="item.direction === 'up'" [class.down]="item.direction === 'down'">
+                  {{ item.confidence }}%
+                </span>
+              </div>
+              <div class="forecast-text">{{ item.summary }}</div>
+            </div>
+
+            <div class="empty-note" *ngIf="!aiForecast.length">Chua co du lieu nhan dinh AI.</div>
+          </div>
+        </section>
+
+        <section class="panel donut-panel">
+          <div class="panel-head simple">
+            <div>
+              <div class="panel-title">Ty trong watchlist</div>
+              <div class="panel-subtitle">Tang / giam / khong doi</div>
+            </div>
+          </div>
+
+          <div class="donut-box">
+            <div id="dashboard-watch-donut"></div>
+          </div>
+
+          <div class="donut-legend-inline">
+            <span class="legend-chip up">Tang: {{ totalUp }}</span>
+            <span class="legend-chip down">Giam: {{ totalDown }}</span>
+            <span class="legend-chip neutral">Khong doi: {{ totalNeutral }}</span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="dashboard-workspace">
+      <div class="workspace-main">
+        <section class="panel command-panel">
+          <div class="command-head">
+            <div>
+              <div class="command-kicker">EXECUTIVE SUMMARY</div>
+              <div class="panel-title command-title">Tong hop nhanh cho quyet dinh trong phien</div>
+              <div class="panel-subtitle command-subtitle">
+                AI, canh bao va tin thi truong duoc nen lai thanh mot lop summary de nhin nhanh va hanh dong.
+              </div>
+            </div>
+
+            <div class="command-badges">
+              <span class="command-chip">{{ aiProviderText }}</span>
+              <span class="command-chip" *ngIf="alertsOverview?.headline">{{ alertsOverview?.headline }}</span>
+            </div>
+          </div>
+
+          <div class="command-signal-row">
+            <article
+              class="command-signal-card"
+              *ngFor="let item of commandSignals"
+              [class.up]="item.tone === 'up'"
+              [class.down]="item.tone === 'down'"
+              [class.warning]="item.tone === 'warning'"
+            >
+              <div class="command-signal-label">{{ item.label }}</div>
+              <div class="command-signal-value">{{ item.value }}</div>
+              <div class="command-signal-helper">{{ item.helper }}</div>
+            </article>
+          </div>
+
+          <div class="command-grid">
+            <article
+              class="command-card"
+              *ngFor="let item of commandMetrics"
+              [class.up]="item.tone === 'up'"
+              [class.down]="item.tone === 'down'"
+              [class.warning]="item.tone === 'warning'"
+            >
+              <div class="command-label">{{ item.label }}</div>
+              <div class="command-value">{{ item.value }}</div>
+              <div class="command-helper">{{ item.helper }}</div>
+            </article>
+          </div>
+
+          <div class="command-detail-grid">
+            <div class="command-story-stack">
+              <article
+                class="command-story-card"
+                *ngFor="let item of commandInsights"
+                [class.up]="item.tone === 'up'"
+                [class.warning]="item.tone === 'warning'"
+              >
+                <div class="command-story-title">{{ item.title }}</div>
+                <div class="command-story-text">{{ item.text }}</div>
+              </article>
+            </div>
+
+            <div class="command-side-stack">
+              <section class="command-mini-panel">
+                <div class="command-mini-title">Focus symbols</div>
+                <div class="command-tag-list" *ngIf="commandFocusSymbols.length; else emptyFocusSymbols">
+                  <span class="command-tag" *ngFor="let symbol of commandFocusSymbols">{{ symbol }}</span>
+                </div>
+                <ng-template #emptyFocusSymbols>
+                  <div class="command-empty-note">Chua co ma can uu tien.</div>
+                </ng-template>
+              </section>
+
+              <section class="command-mini-panel">
+                <div class="command-mini-title">AI quick prompts</div>
+                <div class="command-prompt-list" *ngIf="quickPromptPreview.length; else emptyPromptList">
+                  <span class="command-prompt-chip" *ngFor="let prompt of quickPromptPreview">{{ prompt }}</span>
+                </div>
+                <ng-template #emptyPromptList>
+                  <div class="command-empty-note">Chua co goi y prompt tu backend AI.</div>
+                </ng-template>
+              </section>
+            </div>
+          </div>
+
+          <div class="quick-actions">
+            <a class="quick-action" routerLink="/tabs/market-alerts">
+              <span>Alert center</span>
+              <strong>Xem canh bao uu tien</strong>
+            </a>
+            <a class="quick-action" routerLink="/tabs/ai-agent">
+              <span>AI Agent</span>
+              <strong>Mo chat va tac vu AI</strong>
+            </a>
+            <a class="quick-action" routerLink="/tabs/market-watch">
+              <span>Market watch</span>
+              <strong>Dao sau bang gia va bieu do</strong>
+            </a>
+          </div>
+        </section>
+
+        <section class="panel market-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Thi truong theo san</div>
+              <div class="panel-subtitle">Bieu do theo gio va bang chi so nhanh</div>
+            </div>
+
+            <div class="toolbar-wrap">
+              <div class="segmented">
+                <button type="button" [class.active]="selectedExchange === 'HSX'" (click)="changeExchange('HSX')">HSX</button>
+                <button type="button" [class.active]="selectedExchange === 'HNX'" (click)="changeExchange('HNX')">HNX</button>
+                <button type="button" [class.active]="selectedExchange === 'UPCOM'" (click)="changeExchange('UPCOM')">UPCOM</button>
+              </div>
+
+              <div class="segmented compact">
+                <button type="button" [class.active]="selectedMetric === 'volume'" (click)="changeMetric('volume')">Khoi luong</button>
+                <button type="button" [class.active]="selectedMetric === 'tradingValue'" (click)="changeMetric('tradingValue')">Gia tri</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="market-chart-box">
+            <div id="dashboard-market-chart"></div>
+            <div class="empty-state" *ngIf="!hourlyTrading.length && !loading">
+              Chua co du lieu giao dich theo gio.
+            </div>
+          </div>
+
+          <div class="market-index-table">
+            <div class="market-index-row header">
+              <span>Index</span>
+              <span>Gia tri</span>
+              <span>Bien dong</span>
+            </div>
+            <div class="market-index-row" *ngFor="let item of marketRows">
+              <span>{{ item.displayName }}</span>
+              <span>{{ item.valueText }}</span>
+              <span [class.up]="item.up" [class.down]="!item.up">
+                {{ item.changeText }} / {{ item.percentText }}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel symbol-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Ma dang theo doi chi tiet</div>
+              <div class="panel-subtitle">Dang xem: <strong>{{ selectedSymbolDisplay }}</strong></div>
+            </div>
+          </div>
+
+          <div class="symbol-grid">
+            <div class="symbol-summary">
+              <div class="summary-box">
+                <div class="summary-label">Gia hien tai</div>
+                <div class="summary-value">{{ selectedPriceText }}</div>
+              </div>
+              <div class="summary-box">
+                <div class="summary-label">Thay doi</div>
+                <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedChangeText }}</div>
+              </div>
+              <div class="summary-box">
+                <div class="summary-label">%</div>
+                <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedPercentText }}</div>
+              </div>
+              <div class="summary-box">
+                <div class="summary-label">Khoi luong</div>
+                <div class="summary-value">{{ selectedVolumeText }}</div>
+              </div>
+              <div class="summary-box">
+                <div class="summary-label">Gia tri giao dich</div>
+                <div class="summary-value">{{ selectedTradingValueText }}</div>
+              </div>
+            </div>
+
+            <div class="symbol-chart-box">
+              <div id="dashboard-symbol-chart"></div>
+              <div class="empty-state" *ngIf="!selectedHourly.length && !symbolLoading">
+                Chua co du lieu chi tiet theo ma.
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="workspace-rail">
+        <section class="panel alert-panel">
+          <div class="panel-head simple">
+            <div>
+              <div class="panel-title">Canh bao uu tien</div>
+              <div class="panel-subtitle">Tin hieu can chu y ngay trong phien</div>
+            </div>
+          </div>
+
+          <div class="alert-list">
+            <div class="alert-row" *ngFor="let item of alerts; trackBy: trackByAlert">
+              <div class="alert-code">{{ item.code }}</div>
+              <div class="alert-text" [class.success]="item.type === 'success'" [class.warning]="item.type === 'warning'" [class.danger]="item.type === 'danger'" [class.info]="item.type === 'info'">
+                {{ item.text }}
+              </div>
+            </div>
+
+            <div class="empty-note" *ngIf="!alerts.length && !loading">Chua co canh bao.</div>
+          </div>
+        </section>
+
+        <section class="panel watchlist-panel">
+          <div class="panel-head simple">
+            <div>
+              <div class="panel-title">Watchlist</div>
+              <div class="panel-subtitle">Theo doi nhanh cac ma uu tien</div>
+            </div>
+          </div>
+
+          <div class="watchlist-add">
+            <input
+              type="text"
+              [(ngModel)]="searchKeyword"
+              (ngModelChange)="onSearchKeywordChange($event)"
+              placeholder="Tim ma them vao watchlist..."
+            />
+            <button type="button" (click)="addWatchlist()">Them</button>
+          </div>
+
+          <input
+            type="text"
+            class="watchlist-note"
+            [(ngModel)]="watchlistNote"
+            placeholder="Ghi chu watchlist..."
+          />
+
+          <div class="search-result" *ngIf="searchResults.length">
+            <button
+              type="button"
+              class="search-item"
+              *ngFor="let item of searchResults"
+              (click)="chooseSearchResult(item)"
+            >
+              <strong>{{ item.symbol }}</strong>
+              <span>{{ item.exchange }} {{ item.name ? '- ' + item.name : '' }}</span>
+            </button>
+          </div>
+
+          <div class="watchlist-rows">
+            <button
+              type="button"
+              class="watch-row"
+              *ngFor="let item of watchlistPreview; trackBy: trackByWatch"
+              (click)="selectSymbol(item.symbol)"
+            >
+              <div class="watch-left">
+                <div class="watch-code">{{ item.symbol }}</div>
+                <div class="watch-note-text">{{ item.note || item.exchange }}</div>
+              </div>
+
+              <div class="watch-spark">
+                <div [id]="item.sparkId"></div>
+              </div>
+
+              <div class="watch-right">
+                <div class="watch-price">{{ item.priceText }}</div>
+                <div class="watch-change" [class.down]="!item.up">
+                  {{ item.changeText }} / {{ item.percentText }}
+                </div>
+                <span class="remove-btn" (click)="removeWatchlist(item.symbol); $event.stopPropagation()">Bo</span>
+              </div>
+            </button>
+
+            <div class="empty-note" *ngIf="!watchlistRows.length && !loading">Chua co watchlist.</div>
+          </div>
+        </section>
+
+        <section class="panel movers-panel">
+          <div class="panel-head simple">
+            <div>
+              <div class="panel-title">Ma noi bat cua san</div>
+              <div class="panel-subtitle">Danh sach nhanh de chon xem chi tiet</div>
+            </div>
+          </div>
+
+          <div class="movers-list">
+            <button
+              type="button"
+              class="mover-row"
+              *ngFor="let item of moversPreview; trackBy: trackByMover"
+              [class.active]="selectedSymbol === item.symbol"
+              (click)="selectSymbol(item.symbol)"
+            >
+              <div class="mover-rank">#{{ item.rank }}</div>
+              <div class="mover-main">
+                <div class="mover-code">{{ item.symbol }}</div>
+                <div class="mover-name">{{ item.name || item.exchange }}</div>
+              </div>
+              <div class="mover-meta">
+                <div class="mover-price">{{ item.priceText }}</div>
+                <div class="mover-change" [class.down]="!item.up">
+                  {{ item.changeText }} / {{ item.percentText }}
+                </div>
+              </div>
+            </button>
+
+            <div class="empty-note" *ngIf="!stocks.length && !loading">Chua co du lieu co phieu.</div>
+          </div>
+        </section>
+
+        <section class="panel news-panel">
+          <div class="panel-head simple">
+            <div>
+              <div class="panel-title">CafeF / dong bo du lieu</div>
+              <div class="panel-subtitle">Tin tuc moi nhat va nguon dong bo gan day</div>
+            </div>
+          </div>
+
+          <div class="news-list">
+            <div class="news-item" *ngFor="let item of pagedNews; trackBy: trackByNews">
+              <a
+                *ngIf="item.url; else plainNewsTitle"
+                class="news-title news-link"
+                [href]="item.url"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                {{ item.title }}
+              </a>
+              <ng-template #plainNewsTitle>
+                <div class="news-title">{{ item.title }}</div>
+              </ng-template>
+              <div class="news-summary">{{ item.summary }}</div>
+              <div class="news-date">{{ item.source || 'sync-log' }} • {{ item.date }}</div>
+            </div>
+
+            <div class="news-pagination" *ngIf="news.length > newsPageSize">
+              <button type="button" class="news-page-btn" (click)="goToNewsPage(currentNewsPage - 1)" [disabled]="currentNewsPage === 1">
+                Truoc
+              </button>
+              <div class="news-page-status">Trang {{ currentNewsPage }} / {{ totalNewsPages }}</div>
+              <button type="button" class="news-page-btn" (click)="goToNewsPage(currentNewsPage + 1)" [disabled]="currentNewsPage === totalNewsPages">
+                Sau
+              </button>
+            </div>
+
+            <div class="empty-note" *ngIf="!news.length && !loading">Chua co du lieu tin tuc.</div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+</ion-content>

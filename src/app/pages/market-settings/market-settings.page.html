@@ -1,0 +1,304 @@
+<ion-content [fullscreen]="true" class="settings-content">
+  <div class="settings-page container-fluid py-3">
+    <div class="settings-breadcrumb mb-3">
+      <ion-icon name="settings-outline"></ion-icon>
+      <span>He thong</span>
+      <span class="sep">›</span>
+      <span>Market Settings</span>
+    </div>
+
+    <div class="settings-shell">
+      <div class="settings-header">
+        <div>
+          <div class="page-kicker">Personal Config</div>
+          <h1>Market settings cho tai khoan dang dang nhap</h1>
+          <p>Cau hinh nay duoc luu tren backend va tai lai lai khi ban dang nhap.</p>
+        </div>
+
+        <div class="header-actions">
+          <button type="button" class="btn btn-outline-secondary" (click)="loadSettings()" [disabled]="loading || saving">
+            Tai lai
+          </button>
+          <button type="button" class="btn btn-light btn-reset" (click)="resetSettings()" [disabled]="saving">
+            Mac dinh
+          </button>
+          <button type="button" class="btn btn-save" (click)="saveSettings()" [disabled]="loading || saving">
+            {{ saving ? 'Dang luu...' : 'Luu cau hinh' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="status-row" *ngIf="message || error || loading">
+        <div class="status-pill loading" *ngIf="loading">Dang tai cau hinh...</div>
+        <div class="status-pill success" *ngIf="message">{{ message }}</div>
+        <div class="status-pill error" *ngIf="error">{{ error }}</div>
+      </div>
+
+      <div class="settings-tabs">
+        <button
+          type="button"
+          class="settings-tab"
+          *ngFor="let tab of tabs"
+          [class.active]="selectedTab === tab.key"
+          (click)="selectTab(tab.key)"
+        >
+          <span>{{ tab.label }}</span>
+          <small>{{ tab.helper }}</small>
+        </button>
+      </div>
+
+      <div class="settings-card" [ngSwitch]="selectedTab">
+        <div *ngSwitchCase="'general'" class="settings-section">
+          <div class="section-title">Cai dat chung</div>
+          <div class="form-grid">
+            <div class="form-item">
+              <label>Ngon ngu</label>
+              <select class="form-select" [(ngModel)]="settings.language">
+                <option value="vi">Tieng Viet</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+
+            <div class="form-item">
+              <label>San mac dinh</label>
+              <select class="form-select" [(ngModel)]="settings.defaultExchange">
+                <option value="HSX">HSX</option>
+                <option value="HNX">HNX</option>
+                <option value="UPCOM">UPCOM</option>
+              </select>
+            </div>
+
+            <div class="form-item">
+              <label>Landing page</label>
+              <select class="form-select" [(ngModel)]="settings.defaultLandingPage">
+                <option value="dashboard">Dashboard</option>
+                <option value="market-watch">Market Watch</option>
+                <option value="market-alerts">Market Alerts</option>
+                <option value="ai-agent">AI Agent</option>
+              </select>
+            </div>
+
+            <div class="form-item">
+              <label>Startup page</label>
+              <select class="form-select" [(ngModel)]="settings.startupPage">
+                <option value="dashboard">Dashboard</option>
+                <option value="market-watch">Market Watch</option>
+                <option value="market-alerts">Market Alerts</option>
+                <option value="ai-agent">AI Agent</option>
+              </select>
+            </div>
+
+            <div class="form-item">
+              <label>Khung thoi gian mac dinh</label>
+              <select class="form-select" [(ngModel)]="settings.defaultTimeRange">
+                <option value="1d">1 ngay</option>
+                <option value="1w">1 tuan</option>
+                <option value="1m">1 thang</option>
+                <option value="1y">1 nam</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'display'" class="settings-section">
+          <div class="section-title">Hien thi va bang gia</div>
+          <div class="form-grid">
+            <div class="form-item">
+              <label>Theme</label>
+              <select class="form-select" [(ngModel)]="settings.theme">
+                <option value="light">Sang</option>
+                <option value="dark">Toi</option>
+                <option value="auto">Tu dong</option>
+              </select>
+            </div>
+
+            <div class="form-item">
+              <label>Ty le chu</label>
+              <select class="form-select" [(ngModel)]="settings.fontScale">
+                <option value="90">90%</option>
+                <option value="100">100%</option>
+                <option value="110">110%</option>
+                <option value="120">120%</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="toggle-list">
+            <div class="toggle-row">
+              <span>Compact table</span>
+              <ion-toggle [(ngModel)]="settings.compactTable"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Show sparkline</span>
+              <ion-toggle [(ngModel)]="settings.showSparkline"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Flash khi gia thay doi</span>
+              <ion-toggle [(ngModel)]="settings.flashPriceChange"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Sticky header</span>
+              <ion-toggle [(ngModel)]="settings.stickyHeader"></ion-toggle>
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'alerts'" class="settings-section">
+          <div class="section-title">Canh bao</div>
+          <div class="toggle-list">
+            <div class="toggle-row">
+              <span>Push notification</span>
+              <ion-toggle [(ngModel)]="settings.pushAlerts"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Email notification</span>
+              <ion-toggle [(ngModel)]="settings.emailAlerts"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Sound notification</span>
+              <ion-toggle [(ngModel)]="settings.soundAlerts"></ion-toggle>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-item">
+              <label>Muc do canh bao</label>
+              <select class="form-select" [(ngModel)]="settings.alertStrength">
+                <option value="light">Nhe</option>
+                <option value="normal">Binh thuong</option>
+                <option value="strict">Chat</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label>Nguong volume dot bien (%)</label>
+              <input class="form-control" [(ngModel)]="settings.volumeSpikeThreshold" />
+            </div>
+            <div class="form-item">
+              <label>Nguong bien dong gia (%)</label>
+              <input class="form-control" [(ngModel)]="settings.priceMoveThreshold" />
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'data'" class="settings-section">
+          <div class="section-title">Du lieu</div>
+          <div class="form-grid">
+            <div class="form-item">
+              <label>Auto refresh (giay)</label>
+              <select class="form-select" [(ngModel)]="settings.autoRefreshSeconds">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="15">15</option>
+                <option value="30">30</option>
+                <option value="60">60</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label>Cache days</label>
+              <select class="form-select" [(ngModel)]="settings.cacheDays">
+                <option value="7">7</option>
+                <option value="15">15</option>
+                <option value="30">30</option>
+                <option value="90">90</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="toggle-list">
+            <div class="toggle-row">
+              <span>Preload chart</span>
+              <ion-toggle [(ngModel)]="settings.preloadCharts"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Sync cloud</span>
+              <ion-toggle [(ngModel)]="settings.syncCloud"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Chi tai khi co Wi-Fi</span>
+              <ion-toggle [(ngModel)]="settings.downloadOnWifiOnly"></ion-toggle>
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'ai'" class="settings-section">
+          <div class="section-title">AI va tu dong hoa</div>
+          <div class="toggle-list">
+            <div class="toggle-row">
+              <span>Bat AI Agent</span>
+              <ion-toggle [(ngModel)]="settings.aiEnabled"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Auto market summary</span>
+              <ion-toggle [(ngModel)]="settings.aiSummaryAuto"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Monitor watchlist</span>
+              <ion-toggle [(ngModel)]="settings.aiWatchlistMonitor"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Explain price moves</span>
+              <ion-toggle [(ngModel)]="settings.aiExplainMove"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>News digest</span>
+              <ion-toggle [(ngModel)]="settings.aiNewsDigest"></ion-toggle>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-item">
+              <label>Model</label>
+              <select class="form-select" [(ngModel)]="settings.aiModel">
+                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                <option value="fallback">fallback</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label>AI tone</label>
+              <select class="form-select" [(ngModel)]="settings.aiTone">
+                <option value="ngan gon">Ngan gon</option>
+                <option value="chi tiet">Chi tiet</option>
+                <option value="chuyen gia">Chuyen gia</option>
+              </select>
+            </div>
+            <div class="form-item full">
+              <label>Lich chay AI</label>
+              <input class="form-control" [(ngModel)]="settings.aiTaskSchedule" />
+            </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'security'" class="settings-section">
+          <div class="section-title">Bao mat va session</div>
+          <div class="toggle-list">
+            <div class="toggle-row">
+              <span>Safe mode</span>
+              <ion-toggle [(ngModel)]="settings.safeMode"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Biometric login</span>
+              <ion-toggle [(ngModel)]="settings.biometricLogin"></ion-toggle>
+            </div>
+            <div class="toggle-row">
+              <span>Device binding</span>
+              <ion-toggle [(ngModel)]="settings.deviceBinding"></ion-toggle>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-item">
+              <label>Session timeout (phut)</label>
+              <select class="form-select" [(ngModel)]="settings.sessionTimeout">
+                <option value="15">15</option>
+                <option value="30">30</option>
+                <option value="60">60</option>
+                <option value="120">120</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</ion-content>
