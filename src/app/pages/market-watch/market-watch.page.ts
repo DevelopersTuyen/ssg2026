@@ -2,6 +2,7 @@ import { AfterViewInit, Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription, forkJoin, interval, of, startWith, switchMap } from 'rxjs';
 import {
   ExchangeTab,
+  FinancialOverviewResponse,
   LiveHourlyTradingItem,
   LiveIndexCardItem,
   LiveIndexOptionItem,
@@ -60,6 +61,8 @@ interface WatchSummaryVm {
   helper: string;
 }
 
+type FlowRange = 'day' | 'week' | 'tenDays';
+
 @Component({
   selector: 'app-market-watch',
   templateUrl: './market-watch.page.html',
@@ -70,23 +73,29 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   readonly exchangeOptions: ExchangeTab[] = ['HSX', 'HNX', 'UPCOM'];
   readonly stockPageSize = 12;
   selectedExchange: ExchangeTab = 'HSX';
-  selectedSort: SortTab = 'actives';
+  selectedSort: SortTab = 'all';
   selectedMetric: 'volume' | 'tradingValue' = 'volume';
+  selectedFlowRange: FlowRange = 'day';
   selectedIndexView = 'ALL';
   selectedSymbol = '';
   symbolModalOpen = false;
+  financialModalOpen = false;
   stockSearchKeyword = '';
   currentStockPage = 1;
 
   availableIndices: LiveIndexOptionItem[] = [];
   indexCards: IndexCardVm[] = [];
   topStocks: StockVm[] = [];
+  totalStockCount = 0;
   hourlyTrading: LiveHourlyTradingItem[] = [];
+  dailyIndexSeriesMap = new Map<string, LiveIndexSeriesItem[]>();
   selectedQuote: LiveSymbolQuote | null = null;
   selectedHourly: LiveSymbolHourlyItem[] = [];
+  financialOverview: FinancialOverviewResponse | null = null;
 
   boardLoading = false;
   symbolLoading = false;
+  financialLoading = false;
   lastUpdatedText = '--';
 
   private boardSub?: Subscription;
@@ -95,6 +104,7 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   private renderTimer: any;
 
   private hourlyChart: any;
+  private flowCharts: any[] = [];
   private symbolChart: any;
   private miniIndexCharts: any[] = [];
 
@@ -127,12 +137,15 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   changeExchange(exchange: ExchangeTab): void {
     if (this.selectedExchange === exchange) return;
     this.selectedExchange = exchange;
+    this.selectedIndexView = 'ALL';
+    this.currentStockPage = 1;
     this.refreshBoard(true);
   }
 
   changeSort(sort: SortTab): void {
     if (this.selectedSort === sort) return;
     this.selectedSort = sort;
+    this.currentStockPage = 1;
     this.refreshBoard(true);
   }
 
@@ -154,6 +167,10 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     const symbolChanged = this.selectedSymbol !== symbol;
     this.selectedSymbol = symbol;
     this.symbolModalOpen = true;
+    if (symbolChanged) {
+      this.financialModalOpen = false;
+      this.financialOverview = null;
+    }
 
     if (symbolChanged || !this.selectedQuote) {
       this.loadSelectedSymbol();
@@ -167,8 +184,17 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     this.symbolModalOpen = false;
   }
 
-  onSymbolModalDidPresent(): void {
-    this.scheduleRender(120);
+  openFinancialModal(): void {
+    if (!this.selectedSymbol) return;
+    this.financialModalOpen = true;
+    if (this.financialOverview?.symbol === this.selectedSymbol) {
+      return;
+    }
+    this.loadFinancialOverview();
+  }
+
+  closeFinancialModal(): void {
+    this.financialModalOpen = false;
   }
 
   trackByIndex(_: number, item: IndexCardVm): string {
@@ -180,15 +206,36 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get filteredIndexCards(): IndexCardVm[] {
+    const exchangeCards = this.indexCards.filter((item) => item.exchange === this.selectedExchange);
     if (this.selectedIndexView === 'ALL') {
-      return this.indexCards;
+      return exchangeCards;
     }
 
-    return this.indexCards.filter((item) => item.symbol === this.selectedIndexView);
+    return exchangeCards.filter((item) => item.symbol === this.selectedIndexView);
   }
 
   get focusIndexCard(): IndexCardVm | null {
-    return this.filteredIndexCards[0] || this.indexCards[0] || null;
+    return this.filteredIndexCards[0] || this.indexCards.find((item) => item.exchange === this.selectedExchange) || null;
+  }
+
+  get exchangeIndexOptions(): LiveIndexOptionItem[] {
+    return this.availableIndices.filter((item) => item.exchange === this.selectedExchange);
+  }
+
+  get flowFocusSymbol(): string {
+    return this.focusIndexCard?.symbol || '';
+  }
+
+  hasFlowChartData(range: FlowRange): boolean {
+    if (range === 'day') {
+      return this.hourlyTrading.some((item) =>
+        this.selectedMetric === 'volume'
+          ? this.num(item.volume) > 0
+          : this.num(item.tradingValue) > 0
+      );
+    }
+
+    return this.buildFlowDailyPoints(range).length > 0;
   }
 
   get totalHourlyValueText(): string {
@@ -202,7 +249,9 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get watchSummary(): WatchSummaryVm[] {
-    const leader = this.filteredStocks[0] || this.topStocks[0];
+    const leader = this.topStocks[0];
+    const start = this.totalStockCount === 0 ? 0 : ((this.currentStockPage - 1) * this.stockPageSize) + 1;
+    const end = Math.min(this.currentStockPage * this.stockPageSize, this.totalStockCount);
     return [
       {
         label: 'Chi so hien thi',
@@ -211,8 +260,10 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
       },
       {
         label: 'Co phieu tren san',
-        value: `${this.filteredStocks.length}/${this.topStocks.length}`,
-        helper: `Bo loc ${this.selectedSort.toUpperCase()} va tim kiem ${this.stockSearchKeyword ? 'dang bat' : 'tat'}`,
+        value: `${start}-${end}/${this.totalStockCount}`,
+        helper: this.selectedSort === 'all'
+          ? `Dang xem full universe cua ${this.selectedExchange}${this.stockSearchKeyword ? ' va tim kiem dang bat' : ''}`
+          : `Bo loc ${this.stockSortLabel} va tim kiem ${this.stockSearchKeyword ? 'dang bat' : 'tat'}`,
       },
       {
         label: 'Dong tien theo gio',
@@ -228,33 +279,45 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get filteredStocks(): StockVm[] {
-    const keyword = this.stockSearchKeyword.trim().toUpperCase();
-    if (!keyword) {
-      return this.topStocks;
-    }
-
-    return this.topStocks.filter((item) => {
-      const name = String(item.name || '').toUpperCase();
-      return item.symbol.includes(keyword) || name.includes(keyword);
-    });
+    return this.topStocks;
   }
 
   get pagedStocks(): StockVm[] {
-    const start = (this.currentStockPage - 1) * this.stockPageSize;
-    return this.filteredStocks.slice(start, start + this.stockPageSize);
+    return this.topStocks;
   }
 
   get totalStockPages(): number {
-    return Math.max(1, Math.ceil(this.filteredStocks.length / this.stockPageSize));
+    return Math.max(1, Math.ceil(this.totalStockCount / this.stockPageSize));
+  }
+
+  get stockSortLabel(): string {
+    if (this.selectedSort === 'all') return 'Tat ca ma';
+    if (this.selectedSort === 'gainers') return 'Top tang';
+    if (this.selectedSort === 'losers') return 'Top giam';
+    return 'Thanh khoan cao';
+  }
+
+  get stockBoardChipLabel(): string {
+    return this.selectedSort === 'all' ? 'FULL UNIVERSE' : this.stockSortLabel.toUpperCase();
+  }
+
+  get stockBoardSubtitle(): string {
+    if (this.selectedSort === 'all') {
+      return `Dang xem toan bo ${this.totalStockCount} ma tren san ${this.selectedExchange}. Chon mot ma de mo chi tiet ngay trong modal.`;
+    }
+
+    return `Dang xem ${this.stockSortLabel.toLowerCase()} cua san ${this.selectedExchange}. Chon mot ma de xem chi tiet ngay ben duoi.`;
   }
 
   onStockKeywordChange(value: string): void {
     this.stockSearchKeyword = value || '';
     this.currentStockPage = 1;
+    this.refreshBoard(false);
   }
 
   goToStockPage(page: number): void {
     this.currentStockPage = Math.min(this.totalStockPages, Math.max(1, page));
+    this.refreshBoard(false);
   }
 
   private startPolling(): void {
@@ -267,6 +330,11 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   private refreshBoard(forceResetSymbol: boolean): void {
     this.boardLoading = true;
     this.boardSub?.unsubscribe();
+    const normalizedKeyword = this.stockSearchKeyword.trim().toUpperCase();
+    const usingKeywordSearch = !!normalizedKeyword;
+    const usingFullUniverse = this.selectedSort === 'all';
+    const requestedPage = (usingKeywordSearch || usingFullUniverse) ? 1 : this.currentStockPage;
+    const requestedPageSize = (usingKeywordSearch || usingFullUniverse) ? 5000 : this.stockPageSize;
 
     this.boardSub = this.api.getLiveIndexCards()
       .pipe(
@@ -279,26 +347,47 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
           const seriesRequests = uniqueIndexItems.length
             ? forkJoin(uniqueIndexItems.map((item) => this.api.getLiveIndexSeries(item.symbol)))
             : of([]);
+          const dailySeriesRequests = uniqueIndexItems.length
+            ? forkJoin(
+                uniqueIndexItems.map((item) =>
+                  this.api.getLiveIndexSeries(item.symbol, { days: 30, preferDaily: true })
+                )
+              )
+            : of([]);
 
           return forkJoin({
             indexCards: of(indexCards),
             hourlyTrading: this.api.getHourlyTrading(this.selectedExchange),
-            stocks: this.api.getAllStocks(this.selectedExchange, this.selectedSort, 1, 5000),
+            stocks: this.api.getAllStocks(
+              this.selectedExchange,
+              this.selectedSort,
+              requestedPage,
+              requestedPageSize,
+              this.stockSearchKeyword
+            ),
             indexSeriesResponses: seriesRequests,
+            dailyIndexSeriesResponses: dailySeriesRequests,
           });
         })
       )
       .subscribe({
-      next: ({ indexCards, hourlyTrading, stocks, indexSeriesResponses }) => {
+      next: ({ indexCards, hourlyTrading, stocks, indexSeriesResponses, dailyIndexSeriesResponses }) => {
         const uniqueIndexItems = (indexCards.items || []).filter(
           (item, index, arr) =>
             arr.findIndex((candidate) => candidate.symbol === item.symbol) === index
         );
         const seriesMap = new Map<string, LiveIndexSeriesItem[]>();
+        const dailySeriesMap = new Map<string, LiveIndexSeriesItem[]>();
         indexSeriesResponses.forEach((response, index) => {
           const symbol = uniqueIndexItems[index]?.symbol;
           if (symbol) {
             seriesMap.set(symbol, response.items || []);
+          }
+        });
+        dailyIndexSeriesResponses.forEach((response, index) => {
+          const symbol = uniqueIndexItems[index]?.symbol;
+          if (symbol) {
+            dailySeriesMap.set(symbol, response.items || []);
           }
         });
 
@@ -318,24 +407,40 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
         this.indexCards = uniqueIndexItems.map((item) =>
           this.toIndexCardVm(item, seriesMap.get(item.symbol) || [])
         );
+        this.dailyIndexSeriesMap = dailySeriesMap;
 
-        this.hourlyTrading = (hourlyTrading.items || []).sort(
-          (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
-        );
+        this.hourlyTrading = this.resolveMarketHourlySeries(hourlyTrading.items || []);
 
         const nextStocks = (stocks.items || []).map((x) => this.toStockVm(x));
-        this.topStocks = nextStocks;
-        this.currentStockPage = 1;
+        const universeStocks = usingFullUniverse
+          ? [...nextStocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
+          : nextStocks;
+        const refinedStocks = usingKeywordSearch
+          ? this.refineStocksByKeyword(universeStocks, normalizedKeyword)
+          : universeStocks;
+        const pagedStocks = (usingKeywordSearch || usingFullUniverse)
+          ? refinedStocks.slice(
+              (this.currentStockPage - 1) * this.stockPageSize,
+              this.currentStockPage * this.stockPageSize
+            )
+          : refinedStocks;
 
-        const availableSymbols = new Set(this.filteredStocks.map((x) => x.symbol));
-        const strongestByVolume = this.pickStrongestSymbolByVolume(this.filteredStocks.length ? this.filteredStocks : nextStocks);
+        this.topStocks = pagedStocks;
+        this.totalStockCount = (usingKeywordSearch || usingFullUniverse) ? refinedStocks.length : (stocks.total || 0);
+
+        if (this.currentStockPage > this.totalStockPages && this.totalStockCount > 0) {
+          this.currentStockPage = this.totalStockPages;
+          this.refreshBoard(forceResetSymbol);
+          return;
+        }
+
+        const strongestByVolume = this.pickStrongestSymbolByVolume(nextStocks);
 
         if (
           forceResetSymbol ||
-          !this.selectedSymbol ||
-          !availableSymbols.has(this.selectedSymbol)
+          !this.selectedSymbol
         ) {
-          this.selectedSymbol = strongestByVolume || nextStocks[0]?.symbol || '';
+          this.selectedSymbol = this.resolvePreferredSelectedSymbol(strongestByVolume || nextStocks[0]?.symbol || '');
         }
 
         if (this.selectedSymbol) {
@@ -366,7 +471,7 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
       hourly: this.api.getSymbolHourly(this.selectedSymbol),
     }).subscribe({
       next: ({ quote, hourly }) => {
-        this.selectedQuote = quote.quote ?? null;
+        this.selectedQuote = quote.quote ?? this.buildFallbackQuote(this.selectedSymbol);
         this.selectedHourly = (hourly.items || []).sort(
           (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
         );
@@ -375,6 +480,22 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
       },
       error: () => {
         this.symbolLoading = false;
+      },
+    });
+  }
+
+  private loadFinancialOverview(): void {
+    if (!this.selectedSymbol) return;
+
+    this.financialLoading = true;
+    this.api.getSymbolFinancials(this.selectedSymbol, 18).subscribe({
+      next: (data) => {
+        this.financialOverview = data;
+        this.financialLoading = false;
+      },
+      error: () => {
+        this.financialOverview = null;
+        this.financialLoading = false;
       },
     });
   }
@@ -431,6 +552,65 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
       baseLinePoints,
       baseValue,
       mode: this.detectSeriesMode(seriesItems),
+    };
+  }
+
+  private resolveMarketHourlySeries(hourlyItems: LiveHourlyTradingItem[]): LiveHourlyTradingItem[] {
+    const sortedHourly = [...hourlyItems].sort(
+      (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
+    );
+    if (sortedHourly.length) {
+      return sortedHourly;
+    }
+
+    const focusSeries = this.focusIndexCard?.seriesPoints || [];
+    return focusSeries.map((point) => ({
+      time: new Date(point.x).toISOString(),
+      volume: null,
+      tradingValue: point.y,
+      pointCount: null,
+      symbolCount: 1,
+    }));
+  }
+
+  private hasStockData(item?: StockVm | null): boolean {
+    if (!item) return false;
+    return (
+      item.raw.price !== null ||
+      item.raw.volume !== null ||
+      item.raw.tradingValue !== null ||
+      item.raw.changePercent !== null
+    );
+  }
+
+  private resolvePreferredSelectedSymbol(preferredSymbol?: string): string {
+    const preferred = preferredSymbol?.toUpperCase();
+    if (preferred) {
+      const preferredItem = this.topStocks.find((item) => item.symbol === preferred);
+      if (this.hasStockData(preferredItem)) {
+        return preferred;
+      }
+    }
+
+    const firstWithData = this.topStocks.find((item) => this.hasStockData(item));
+    return firstWithData?.symbol || preferred || '';
+  }
+
+  private buildFallbackQuote(symbol: string): LiveSymbolQuote | null {
+    const stock = this.topStocks.find((item) => item.symbol === symbol);
+    if (!stock || !this.hasStockData(stock)) {
+      return null;
+    }
+
+    return {
+      price: stock.raw.price ?? null,
+      referencePrice: null,
+      changeValue: stock.raw.changeValue ?? null,
+      changePercent: stock.raw.changePercent ?? null,
+      volume: stock.raw.volume ?? null,
+      tradingValue: stock.raw.tradingValue ?? null,
+      quoteTime: stock.raw.pointTime ?? stock.raw.capturedAt ?? null,
+      capturedAt: stock.raw.capturedAt ?? null,
     };
   }
 
@@ -500,8 +680,32 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     if (typeof ApexCharts === 'undefined') return;
     this.destroyCharts();
     this.renderIndexMiniCharts();
-    this.renderHourlyTradingChart();
+    this.renderFlowCharts();
     this.renderSymbolDetailChart();
+  }
+
+  private refineStocksByKeyword(items: StockVm[], normalizedKeyword: string): StockVm[] {
+    if (!normalizedKeyword) {
+      return items;
+    }
+
+    const symbolExact = items.filter((item) => item.symbol.toUpperCase() === normalizedKeyword);
+    if (symbolExact.length) {
+      return symbolExact;
+    }
+
+    const symbolPrefix = items.filter((item) => item.symbol.toUpperCase().startsWith(normalizedKeyword));
+    if (symbolPrefix.length) {
+      return symbolPrefix;
+    }
+
+    return items.filter((item) => {
+      const name = (item.name || '').trim().toUpperCase();
+      if (!name || name === item.symbol.toUpperCase()) {
+        return false;
+      }
+      return name.includes(normalizedKeyword);
+    });
   }
 
   private destroyCharts(): void {
@@ -512,14 +716,16 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     });
     this.miniIndexCharts = [];
 
-    try {
-      this.hourlyChart?.destroy();
-    } catch {}
+    this.flowCharts.forEach((chart) => {
+      try {
+        chart.destroy();
+      } catch {}
+    });
+    this.flowCharts = [];
     try {
       this.symbolChart?.destroy();
     } catch {}
 
-    this.hourlyChart = null;
     this.symbolChart = null;
   }
 
@@ -646,7 +852,262 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  private renderHourlyTradingChart(): void {
+  private renderFlowCharts(): void {
+    this.renderSingleFlowChart('chart-hourly-trading-day', 'day');
+    this.renderSingleFlowChart('chart-hourly-trading-week', 'week');
+    this.renderSingleFlowChart('chart-hourly-trading-ten-days', 'tenDays');
+  }
+
+  private renderSingleFlowChart(elementId: string, range: FlowRange): void {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const points =
+      range === 'day'
+        ? this.hourlyTrading
+            .filter((item) => item.time)
+            .map((item) => ({
+              x: new Date(item.time).getTime(),
+              y:
+                this.selectedMetric === 'volume'
+                  ? this.num(item.volume)
+                  : this.num(item.tradingValue),
+            }))
+            .sort((a, b) => a.x - b.x)
+        : this.buildFlowDailyPoints(range);
+
+    const chartTitle =
+      this.selectedMetric === 'volume'
+        ? `Khoi luong giao dich ${this.getFlowRangeLabel(range).toLowerCase()}`
+        : `Gia tri giao dich ${this.getFlowRangeLabel(range).toLowerCase()}`;
+
+    const sessionAnnotations = range === 'day' ? this.buildTradingSessionAnnotations(this.hourlyTrading) : [];
+    const useTimeLabels = range === 'day';
+
+    const chart = new ApexCharts(element, {
+      chart: {
+        type: 'line',
+        height: 300,
+        toolbar: { show: false },
+        zoom: { enabled: false },
+        animations: { enabled: false },
+        fontFamily: 'inherit',
+      },
+      series: [
+        {
+          name: chartTitle,
+          data: points,
+        },
+      ],
+      annotations: {
+        xaxis: sessionAnnotations,
+      },
+      stroke: {
+        curve: 'straight',
+        width: 2.5,
+      },
+      markers: {
+        size: 3,
+        hover: {
+          size: 5,
+        },
+      },
+      colors: ['#2d6cdf'],
+      dataLabels: {
+        enabled: false,
+      },
+      grid: {
+        borderColor: '#e8edf5',
+        strokeDashArray: 4,
+      },
+      xaxis: {
+        type: 'datetime',
+        labels: {
+          datetimeUTC: false,
+          formatter: (_: string, timestamp?: number) =>
+            useTimeLabels ? this.formatTimeLabel(timestamp ?? 0) : this.formatDateLabel(timestamp ?? 0),
+          style: {
+            colors: '#7a8699',
+            fontSize: '11px',
+          },
+          hideOverlappingLabels: true,
+        },
+      },
+      yaxis: {
+        labels: {
+          formatter: (value: number) =>
+            this.selectedMetric === 'volume'
+              ? this.formatAxisNumber(value)
+              : this.formatAxisMoney(value),
+          style: {
+            colors: '#7a8699',
+            fontSize: '11px',
+          },
+        },
+      },
+      tooltip: {
+        shared: false,
+        intersect: false,
+        x: {
+          formatter: (value: number) =>
+            useTimeLabels ? this.formatTimeLabelHms(value) : this.formatDateTimeFull(value, false),
+        },
+        y: {
+          formatter: (value: number) =>
+            this.selectedMetric === 'volume'
+              ? this.formatAxisNumber(value)
+              : this.formatAxisMoney(value),
+        },
+      },
+      legend: {
+        show: false,
+      },
+    });
+
+    chart.render();
+    this.flowCharts.push(chart);
+  }
+
+  private getFlowRangeLabel(range: FlowRange): string {
+    if (range === 'week') return 'Tuan';
+    if (range === 'tenDays') return '10 ngay';
+    return 'Ngay';
+  }
+
+  get flowRangeLabel(): string {
+    return this.getFlowRangeLabel(this.selectedFlowRange);
+  }
+
+  private renderFlowChart(): void {
+    const element = document.getElementById('chart-hourly-trading');
+    if (!element) return;
+
+    const points =
+      this.selectedFlowRange === 'day'
+        ? this.hourlyTrading
+            .filter((item) => item.time)
+            .map((item) => ({
+              x: new Date(item.time).getTime(),
+              y:
+                this.selectedMetric === 'volume'
+                  ? this.num(item.volume)
+                  : this.num(item.tradingValue),
+            }))
+            .sort((a, b) => a.x - b.x)
+        : this.buildFlowDailyPoints(this.selectedFlowRange);
+
+    const chartTitle =
+      this.selectedMetric === 'volume'
+        ? `Khoi luong giao dich ${this.flowRangeLabel.toLowerCase()}`
+        : `Gia tri giao dich ${this.flowRangeLabel.toLowerCase()}`;
+
+    const sessionAnnotations =
+      this.selectedFlowRange === 'day' ? this.buildTradingSessionAnnotations(this.hourlyTrading) : [];
+    const useTimeLabels = this.selectedFlowRange === 'day';
+
+    this.hourlyChart = new ApexCharts(element, {
+      chart: {
+        type: 'line',
+        height: 360,
+        toolbar: { show: false },
+        zoom: { enabled: false },
+        animations: { enabled: false },
+        fontFamily: 'inherit',
+      },
+      series: [
+        {
+          name: chartTitle,
+          data: points,
+        },
+      ],
+      annotations: {
+        xaxis: sessionAnnotations,
+      },
+      stroke: {
+        curve: 'straight',
+        width: 2.5,
+      },
+      markers: {
+        size: 3,
+        hover: {
+          size: 5,
+        },
+      },
+      colors: ['#2d6cdf'],
+      dataLabels: {
+        enabled: false,
+      },
+      grid: {
+        borderColor: '#e8edf5',
+        strokeDashArray: 4,
+      },
+      xaxis: {
+        type: 'datetime',
+        labels: {
+          datetimeUTC: false,
+          formatter: (_: string, timestamp?: number) =>
+            useTimeLabels ? this.formatTimeLabel(timestamp ?? 0) : this.formatDateLabel(timestamp ?? 0),
+          style: {
+            colors: '#7a8699',
+            fontSize: '11px',
+          },
+          hideOverlappingLabels: true,
+        },
+      },
+      yaxis: {
+        labels: {
+          formatter: (value: number) =>
+            this.selectedMetric === 'volume'
+              ? this.formatAxisNumber(value)
+              : this.formatAxisMoney(value),
+          style: {
+            colors: '#7a8699',
+            fontSize: '11px',
+          },
+        },
+      },
+      tooltip: {
+        shared: false,
+        intersect: false,
+        x: {
+          formatter: (value: number) =>
+            useTimeLabels ? this.formatTimeLabelHms(value) : this.formatDateTimeFull(value, false),
+        },
+        y: {
+          formatter: (value: number) =>
+            this.selectedMetric === 'volume'
+              ? this.formatAxisNumber(value)
+              : this.formatAxisMoney(value),
+        },
+      },
+      legend: {
+        show: false,
+      },
+    });
+
+    this.hourlyChart.render();
+  }
+
+  private buildFlowDailyPoints(range: FlowRange): IndexSeriesVm[] {
+    const symbol = this.flowFocusSymbol;
+    const source = this.dailyIndexSeriesMap.get(symbol) || [];
+    const length = range === 'week' ? 7 : 10;
+
+    return source
+      .map((item) => {
+        const ts = this.safeTimeToMs(item.time);
+        const value =
+          this.selectedMetric === 'volume'
+            ? this.numOrNull(item.volume)
+            : this.numOrNull(item.value);
+        return ts !== null && value !== null ? { x: ts, y: value } : null;
+      })
+      .filter((item): item is IndexSeriesVm => !!item)
+      .sort((a, b) => a.x - b.x)
+      .slice(-length);
+  }
+
+  private renderFlowChartLegacy(): void {
     const element = document.getElementById('chart-hourly-trading');
     if (!element) return;
 
@@ -758,44 +1219,44 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
       y: this.num(item.close),
     }));
 
-    const volumeSeries = this.selectedHourly.map((item) => ({
-      x: new Date(item.time).getTime(),
-      y: this.num(item.volume),
-    }));
-
     const sessionAnnotations = this.buildTradingSessionAnnotations(this.selectedHourly);
 
     this.symbolChart = new ApexCharts(element, {
       chart: {
         height: 360,
-        type: 'line',
-        stacked: false,
+        type: 'area',
         toolbar: { show: false },
         animations: { enabled: false },
         fontFamily: 'inherit',
       },
       series: [
         {
-          name: 'Giá đóng cửa',
-          type: 'line',
+          name: 'Gia',
           data: closeSeries,
-        },
-        {
-          name: 'Khối lượng',
-          type: 'column',
-          data: volumeSeries,
         },
       ],
       annotations: {
         xaxis: sessionAnnotations,
       },
       stroke: {
-        width: [3, 0],
+        width: 3,
         curve: 'smooth',
       },
-      colors: ['#0f9d58', '#93c5fd'],
+      colors: ['#16a34a'],
       fill: {
-        opacity: [1, 0.65],
+        type: 'gradient',
+        gradient: {
+          shadeIntensity: 1,
+          opacityFrom: 0.28,
+          opacityTo: 0.03,
+          stops: [0, 95, 100],
+        },
+      },
+      markers: {
+        size: 0,
+        hover: {
+          size: 5,
+        },
       },
       dataLabels: {
         enabled: false,
@@ -815,31 +1276,23 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
           },
         },
       },
-      yaxis: [
-        {
-          seriesName: 'Giá đóng cửa',
-          labels: {
-            formatter: (value: number) => this.formatPrice(value),
-          },
+      yaxis: {
+        labels: {
+          formatter: (value: number) => this.formatPrice(value),
         },
-        {
-          opposite: true,
-          seriesName: 'Khối lượng',
-          labels: {
-            formatter: (value: number) => this.formatAxisNumber(value),
-          },
-        },
-      ],
+      },
       tooltip: {
-        shared: true,
-        intersect: false,
+        shared: false,
+        intersect: true,
         x: {
           formatter: (value: number) => this.formatTimeLabelHms(value),
         },
+        y: {
+          formatter: (value: number) => this.formatPrice(value),
+        },
       },
       legend: {
-        position: 'top',
-        horizontalAlign: 'left',
+        show: false,
       },
     });
 
@@ -917,6 +1370,14 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
 
   get selectedQuoteUp(): boolean {
     return (this.selectedQuote?.changeValue ?? 0) >= 0;
+  }
+
+  get financialHighlights() {
+    return this.financialOverview?.highlights || [];
+  }
+
+  get financialSections() {
+    return this.financialOverview?.sections || [];
   }
 
   private indexDisplayName(exchange: string, symbol: string): string {

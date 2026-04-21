@@ -106,11 +106,16 @@ async def get_index_options(repo: MarketReadRepository = Depends(get_repo)):
 
 
 @router.get("/index-series")
-async def get_index_series(exchange: str, repo: MarketReadRepository = Depends(get_repo)):
+async def get_index_series(
+    exchange: str,
+    days: int = Query(default=30, ge=1, le=365),
+    prefer_daily: bool = Query(default=False),
+    repo: MarketReadRepository = Depends(get_repo),
+):
     exchange = exchange.upper()
     index_symbol = INDEX_EXCHANGE_TO_SYMBOL.get(exchange, exchange)
 
-    intraday_rows = await repo.get_index_intraday_series(exchange=exchange, limit=500)
+    intraday_rows = [] if prefer_daily else await repo.get_index_intraday_series(exchange=exchange, limit=500)
     if intraday_rows:
         return {
             "exchange": exchange,
@@ -128,7 +133,7 @@ async def get_index_series(exchange: str, repo: MarketReadRepository = Depends(g
             ],
         }
 
-    daily_rows = await repo.get_index_history(index_symbol=index_symbol, days=30)
+    daily_rows = await repo.get_index_history(index_symbol=index_symbol, days=days)
     items = []
     for row in daily_rows:
         fake_time = datetime.combine(row.point_date, time(9, 0, 0))
@@ -195,6 +200,15 @@ async def get_symbol_hourly(
             for item in rows
         ],
     }
+
+
+@router.get("/symbols/{symbol}/financials")
+async def get_symbol_financials(
+    symbol: str,
+    limit_per_section: int = Query(default=24, ge=6, le=100),
+    repo: MarketReadRepository = Depends(get_repo),
+):
+    return await repo.get_symbol_financial_bundle(symbol=symbol, limit_per_section=limit_per_section)
 
 
 @router.get("/news")

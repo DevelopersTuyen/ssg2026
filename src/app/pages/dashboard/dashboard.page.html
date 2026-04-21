@@ -101,6 +101,53 @@
       </div>
     </div>
 
+    <section class="panel pulse-panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Market pulse toan canh</div>
+          <div class="panel-subtitle">
+            Lop thong tin tong hop nhanh theo san dang chon: chi so, breadth, dong tien, movers, watchlist va tin CafeF.
+          </div>
+        </div>
+      </div>
+
+      <div class="pulse-grid">
+        <article
+          class="pulse-card"
+          *ngFor="let item of marketSnapshotCards"
+          [class.up]="item.tone === 'up'"
+          [class.down]="item.tone === 'down'"
+          [class.warning]="item.tone === 'warning'"
+        >
+          <div class="pulse-label">{{ item.label }}</div>
+          <div class="pulse-value">{{ item.value }}</div>
+          <div class="pulse-helper">{{ item.helper }}</div>
+        </article>
+      </div>
+
+      <div class="breadth-strip">
+        <div class="breadth-head">
+          <div>
+            <div class="breadth-title">Breadth snapshot</div>
+            <div class="breadth-subtitle">Mau dashboard hien dang quet {{ breadthSource.length }} ma cua {{ selectedExchange }}</div>
+          </div>
+          <div class="breadth-stat">{{ breadthUpPercent }}% tang / {{ breadthDownPercent }}% giam</div>
+        </div>
+
+        <div class="breadth-bar">
+          <span class="breadth-fill up" [style.width.%]="breadthUpPercent"></span>
+          <span class="breadth-fill neutral" [style.width.%]="breadthNeutralPercent"></span>
+          <span class="breadth-fill down" [style.width.%]="breadthDownPercent"></span>
+        </div>
+
+        <div class="breadth-legend">
+          <span class="legend-chip up">Tang: {{ breadthUpCount }}</span>
+          <span class="legend-chip neutral">Trung tinh: {{ breadthNeutralCount }}</span>
+          <span class="legend-chip down">Giam: {{ breadthDownCount }}</span>
+        </div>
+      </div>
+    </section>
+
     <div class="dashboard-workspace">
       <div class="workspace-main">
         <section class="panel command-panel">
@@ -110,13 +157,25 @@
               <div class="panel-title command-title">Tong hop nhanh cho quyet dinh trong phien</div>
               <div class="panel-subtitle command-subtitle">
                 AI, canh bao va tin thi truong duoc nen lai thanh mot lop summary de nhin nhanh va hanh dong.
+                Pham vi hien tai: <strong>{{ commandScopeLabel }}</strong>.
               </div>
             </div>
 
             <div class="command-badges">
               <span class="command-chip">{{ aiProviderText }}</span>
-              <span class="command-chip" *ngIf="alertsOverview?.headline">{{ alertsOverview?.headline }}</span>
+              <span class="command-chip">{{ commandScopeLabel }}</span>
             </div>
+          </div>
+
+          <div class="command-scope-switcher">
+            <button
+              type="button"
+              *ngFor="let scope of commandScopes"
+              [class.active]="selectedCommandScope === scope"
+              (click)="changeCommandScope(scope)"
+            >
+              {{ scope === 'ALL' ? 'Tong quan' : scope }}
+            </button>
           </div>
 
           <div class="command-signal-row">
@@ -199,6 +258,101 @@
           </div>
         </section>
 
+        <div class="overview-grid">
+          <section class="panel exchange-focus-panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Focus theo san {{ selectedExchange }}</div>
+                <div class="panel-subtitle">Chi so trung tam, bien do trong ngay va muc gia tri hien tai</div>
+              </div>
+            </div>
+
+            <div class="focus-hero" *ngIf="selectedExchangeCard as focusCard; else emptyFocusCard">
+              <div class="focus-main">
+                <div class="focus-symbol">{{ focusCard.symbol }}</div>
+                <div class="focus-value">{{ focusCard.valueText }}</div>
+                <div class="focus-change" [class.down]="!focusCard.up">
+                  {{ focusCard.changeText }} / {{ focusCard.percentText }}
+                </div>
+              </div>
+
+              <div class="focus-stats">
+                <div class="focus-stat">
+                  <span>High</span>
+                  <strong>{{ focusCard.highText }}</strong>
+                </div>
+                <div class="focus-stat">
+                  <span>Low</span>
+                  <strong>{{ focusCard.lowText }}</strong>
+                </div>
+                <div class="focus-stat">
+                  <span>Volume</span>
+                  <strong>{{ focusCard.volumeText }}</strong>
+                </div>
+                <div class="focus-stat">
+                  <span>Gia tri</span>
+                  <strong>{{ focusCard.valueTradeText }}</strong>
+                </div>
+              </div>
+            </div>
+            <ng-template #emptyFocusCard>
+              <div class="empty-note focus-empty">Chua co index focus cho san nay.</div>
+            </ng-template>
+
+            <div class="focus-mini-grid">
+              <article class="focus-mini-card" *ngFor="let item of commandInsights">
+                <div class="focus-mini-title">{{ item.title }}</div>
+                <div class="focus-mini-text">{{ item.text }}</div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel leaderboard-panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Radar movers</div>
+                <div class="panel-subtitle">Top tang, top giam va danh sach active de xoay sang phan chi tiet</div>
+              </div>
+            </div>
+
+            <div class="leaderboard-grid">
+              <div class="leaderboard-column">
+                <div class="leaderboard-title up">Top gainers</div>
+                <button
+                  type="button"
+                  class="leader-row"
+                  *ngFor="let item of topGainersPreview; trackBy: trackByMover"
+                  (click)="selectSymbol(item.symbol)"
+                >
+                  <div>
+                    <div class="leader-code">{{ item.symbol }}</div>
+                    <div class="leader-name">{{ item.name || item.exchange }}</div>
+                  </div>
+                  <div class="leader-change up">{{ item.percentText }}</div>
+                </button>
+                <div class="empty-note compact" *ngIf="!topGainersPreview.length && !loading">Chua co du lieu.</div>
+              </div>
+
+              <div class="leaderboard-column">
+                <div class="leaderboard-title down">Top losers</div>
+                <button
+                  type="button"
+                  class="leader-row"
+                  *ngFor="let item of topLosersPreview; trackBy: trackByMover"
+                  (click)="selectSymbol(item.symbol)"
+                >
+                  <div>
+                    <div class="leader-code">{{ item.symbol }}</div>
+                    <div class="leader-name">{{ item.name || item.exchange }}</div>
+                  </div>
+                  <div class="leader-change down">{{ item.percentText }}</div>
+                </button>
+                <div class="empty-note compact" *ngIf="!topLosersPreview.length && !loading">Chua co du lieu.</div>
+              </div>
+            </div>
+          </section>
+        </div>
+
         <section class="panel market-panel">
           <div class="panel-head">
             <div>
@@ -243,46 +397,6 @@
           </div>
         </section>
 
-        <section class="panel symbol-panel">
-          <div class="panel-head">
-            <div>
-              <div class="panel-title">Ma dang theo doi chi tiet</div>
-              <div class="panel-subtitle">Dang xem: <strong>{{ selectedSymbolDisplay }}</strong></div>
-            </div>
-          </div>
-
-          <div class="symbol-grid">
-            <div class="symbol-summary">
-              <div class="summary-box">
-                <div class="summary-label">Gia hien tai</div>
-                <div class="summary-value">{{ selectedPriceText }}</div>
-              </div>
-              <div class="summary-box">
-                <div class="summary-label">Thay doi</div>
-                <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedChangeText }}</div>
-              </div>
-              <div class="summary-box">
-                <div class="summary-label">%</div>
-                <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedPercentText }}</div>
-              </div>
-              <div class="summary-box">
-                <div class="summary-label">Khoi luong</div>
-                <div class="summary-value">{{ selectedVolumeText }}</div>
-              </div>
-              <div class="summary-box">
-                <div class="summary-label">Gia tri giao dich</div>
-                <div class="summary-value">{{ selectedTradingValueText }}</div>
-              </div>
-            </div>
-
-            <div class="symbol-chart-box">
-              <div id="dashboard-symbol-chart"></div>
-              <div class="empty-state" *ngIf="!selectedHourly.length && !symbolLoading">
-                Chua co du lieu chi tiet theo ma.
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
 
       <aside class="workspace-rail">
@@ -375,34 +489,57 @@
         <section class="panel movers-panel">
           <div class="panel-head simple">
             <div>
-              <div class="panel-title">Ma noi bat cua san</div>
-              <div class="panel-subtitle">Danh sach nhanh de chon xem chi tiet</div>
+              <div class="panel-title">Radar co phieu</div>
+              <div class="panel-subtitle">Active, tang manh va giam manh trong cung mot khung</div>
             </div>
           </div>
 
-          <div class="movers-list">
-            <button
-              type="button"
-              class="mover-row"
-              *ngFor="let item of moversPreview; trackBy: trackByMover"
-              [class.active]="selectedSymbol === item.symbol"
-              (click)="selectSymbol(item.symbol)"
-            >
-              <div class="mover-rank">#{{ item.rank }}</div>
-              <div class="mover-main">
-                <div class="mover-code">{{ item.symbol }}</div>
-                <div class="mover-name">{{ item.name || item.exchange }}</div>
+          <div class="movers-stack-grid">
+            <div class="movers-section">
+              <div class="movers-section-title">Actives</div>
+              <div class="movers-list">
+                <button
+                  type="button"
+                  class="mover-row"
+                  *ngFor="let item of moversPreview; trackBy: trackByMover"
+                  [class.active]="selectedSymbol === item.symbol"
+                  (click)="selectSymbol(item.symbol)"
+                >
+                  <div class="mover-rank">#{{ item.rank }}</div>
+                  <div class="mover-main">
+                    <div class="mover-code">{{ item.symbol }}</div>
+                    <div class="mover-name">{{ item.name || item.exchange }}</div>
+                  </div>
+                  <div class="mover-meta">
+                    <div class="mover-price">{{ item.priceText }}</div>
+                    <div class="mover-change" [class.down]="!item.up">
+                      {{ item.changeText }} / {{ item.percentText }}
+                    </div>
+                  </div>
+                </button>
               </div>
-              <div class="mover-meta">
-                <div class="mover-price">{{ item.priceText }}</div>
-                <div class="mover-change" [class.down]="!item.up">
-                  {{ item.changeText }} / {{ item.percentText }}
-                </div>
-              </div>
-            </button>
+            </div>
 
-            <div class="empty-note" *ngIf="!stocks.length && !loading">Chua co du lieu co phieu.</div>
+            <div class="movers-section compact-side">
+              <div class="movers-section-title up">Tang manh</div>
+              <div class="mover-compact-list">
+                <button type="button" class="mover-compact-row" *ngFor="let item of topGainersPreview; trackBy: trackByMover" (click)="selectSymbol(item.symbol)">
+                  <strong>{{ item.symbol }}</strong>
+                  <span class="up">{{ item.percentText }}</span>
+                </button>
+              </div>
+
+              <div class="movers-section-title down">Giam manh</div>
+              <div class="mover-compact-list">
+                <button type="button" class="mover-compact-row" *ngFor="let item of topLosersPreview; trackBy: trackByMover" (click)="selectSymbol(item.symbol)">
+                  <strong>{{ item.symbol }}</strong>
+                  <span class="down">{{ item.percentText }}</span>
+                </button>
+              </div>
+            </div>
           </div>
+
+          <div class="empty-note" *ngIf="!stocks.length && !topGainersPreview.length && !topLosersPreview.length && !loading">Chua co du lieu co phieu.</div>
         </section>
 
         <section class="panel news-panel">
@@ -446,5 +583,103 @@
         </section>
       </aside>
     </div>
+
+    <div class="symbol-modal-backdrop" *ngIf="symbolModalOpen" (click)="closeSymbolModal()"></div>
+    <section class="symbol-modal" *ngIf="symbolModalOpen">
+      <div class="symbol-modal-head">
+        <div>
+          <div class="panel-title">Chi tiet ma {{ selectedSymbolDisplay }}</div>
+          <div class="panel-subtitle">Quote, bien dong va bieu do chi tiet cho ma dang duoc chon tu dashboard.</div>
+        </div>
+        <div class="symbol-modal-actions">
+          <button type="button" class="symbol-financial-btn" (click)="openFinancialModal()">Xem bao cao tai chinh</button>
+          <button type="button" class="symbol-modal-close" (click)="closeSymbolModal()">Dong</button>
+        </div>
+      </div>
+
+      <div class="symbol-grid">
+        <div class="symbol-summary">
+          <div class="summary-box">
+            <div class="summary-label">Gia hien tai</div>
+            <div class="summary-value">{{ selectedPriceText }}</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-label">Thay doi</div>
+            <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedChangeText }}</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-label">%</div>
+            <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedPercentText }}</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-label">Khoi luong</div>
+            <div class="summary-value">{{ selectedVolumeText }}</div>
+          </div>
+          <div class="summary-box">
+            <div class="summary-label">Gia tri giao dich</div>
+            <div class="summary-value">{{ selectedTradingValueText }}</div>
+          </div>
+        </div>
+
+        <div class="symbol-chart-box">
+          <div id="dashboard-symbol-chart"></div>
+          <div class="empty-state" *ngIf="!selectedHourly.length && !symbolLoading">
+            Chua co du lieu chi tiet theo ma.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="symbol-modal-backdrop" *ngIf="financialModalOpen" (click)="closeFinancialModal()"></div>
+    <section class="symbol-modal financial-modal" *ngIf="financialModalOpen">
+      <div class="symbol-modal-head">
+        <div>
+          <div class="panel-title">Bao cao tai chinh {{ selectedSymbolDisplay }}</div>
+          <div class="panel-subtitle">Du lieu bao cao tai chinh duoc collector vnstock luu trong database local.</div>
+        </div>
+        <button type="button" class="symbol-modal-close" (click)="closeFinancialModal()">Dong</button>
+      </div>
+
+      <div class="empty-state" *ngIf="financialLoading">Dang tai bao cao tai chinh...</div>
+      <div class="empty-state" *ngIf="!financialLoading && !financialOverview">Chua co du lieu bao cao tai chinh cho ma nay.</div>
+
+      <div class="symbol-summary" *ngIf="!financialLoading && financialOverview">
+        <div class="summary-box" *ngFor="let item of financialHighlights">
+          <div class="summary-label">{{ item.label }}</div>
+          <div class="summary-value">{{ item.value }}</div>
+          <div class="summary-caption">{{ item.helper }}</div>
+        </div>
+      </div>
+
+      <div class="financial-sections" *ngIf="!financialLoading && financialOverview">
+        <article class="financial-section-card" *ngFor="let section of financialSections">
+          <div class="financial-section-head">
+            <div>
+              <div class="financial-section-title">{{ section.title }}</div>
+              <div class="financial-section-meta">
+                {{ section.latestPeriod || '--' }} / {{ section.periodType || '--' }} / {{ section.rowCount }} dong
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-table" *ngIf="section.rows.length; else emptyFinancialRows">
+            <div class="financial-row header">
+              <span>Chi tieu</span>
+              <span>Gia tri</span>
+              <span>Ky</span>
+            </div>
+            <div class="financial-row" *ngFor="let row of section.rows | slice:0:10">
+              <span>{{ row.metricLabel }}</span>
+              <span>{{ row.valueNumber !== null && row.valueNumber !== undefined ? row.valueNumber : (row.valueText || '--') }}</span>
+              <span>{{ row.reportPeriod || '--' }}</span>
+            </div>
+          </div>
+
+          <ng-template #emptyFinancialRows>
+            <div class="empty-state small">Chua co du lieu cho nhom nay.</div>
+          </ng-template>
+        </article>
+      </div>
+    </section>
   </div>
 </ion-content>

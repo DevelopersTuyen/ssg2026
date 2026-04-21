@@ -7,6 +7,7 @@ import {
   MarketApiService,
   MarketSettingsData,
 } from './market-api.service';
+import { AppI18nService } from '../i18n/app-i18n.service';
 
 const AUTH_STORAGE_KEY = 'market_watch_auth_session';
 const SETTINGS_STORAGE_KEY = 'market_watch_settings_cache';
@@ -18,7 +19,14 @@ export class AuthService {
   private session: AuthSession | null = this.readStoredSession();
   private settings: MarketSettingsData | null = this.readStoredSettings();
 
-  constructor(private api: MarketApiService) {}
+  constructor(
+    private api: MarketApiService,
+    private i18n: AppI18nService
+  ) {
+    if (this.settings?.language) {
+      this.i18n.setLanguage(this.settings.language);
+    }
+  }
 
   get token(): string | null {
     return this.session?.access_token || null;
@@ -43,6 +51,7 @@ export class AuthService {
       'market-watch',
       'market-alerts',
       'ai-agent',
+      'strategy-hub',
       'market-settings',
       'role-permissions',
     ]);
@@ -119,6 +128,7 @@ export class AuthService {
 
   cacheSettings(settings: MarketSettingsData | null): void {
     this.settings = settings;
+    this.i18n.setLanguage(settings?.language);
 
     if (!settings) {
       localStorage.removeItem(SETTINGS_STORAGE_KEY);

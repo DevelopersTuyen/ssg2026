@@ -16,6 +16,13 @@ PERMISSION_MODULES = [
     ("market-alerts", "Canh bao"),
     ("watchlist", "Watchlist"),
     ("ai-agent", "AI Agent"),
+    ("ai-local", "AI Local"),
+    ("strategy-hub", "Strategy Hub"),
+    ("strategy-settings", "Strategy Settings"),
+    ("screener", "Screener"),
+    ("scoring", "Scoring"),
+    ("risk", "Risk"),
+    ("journal", "Trade Journal"),
     ("market-settings", "Cai dat"),
     ("role-permissions", "Phan quyen"),
 ]

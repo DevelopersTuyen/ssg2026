@@ -13,6 +13,8 @@ from app.schemas.ai_local import (
     AiLocalAnalysisSection,
     AiLocalChatResponse,
     AiLocalDataStat,
+    AiLocalFinancialMetric,
+    AiLocalFinancialReport,
     AiLocalNewsItem,
     AiLocalOverviewResponse,
     AiLocalStorageStatus,
@@ -86,6 +88,7 @@ class AiLocalService(AiAgentService):
             dataset_stats=self._build_dataset_stats(context),
             focus_symbols=self._build_focus_symbol_list(context),
             news_items=context.get("cafef_news") or [],
+            financial_reports=context.get("financial_reports") or [],
             analysis_sections=analysis_sections,
             cafef_storage=AiLocalStorageStatus.model_validate(context.get("cafef_storage") or {}),
             assistant_greeting=self.ASSISTANT_GREETING,
@@ -141,7 +144,9 @@ class AiLocalService(AiAgentService):
         context["gainers"] = await self._get_stock_board(exchange, "gainers", limit=10)
         context["losers"] = await self._get_stock_board(exchange, "losers", limit=10)
         symbols = await self.repo.get_symbols_by_exchange(exchange)
-        news_items = await self.cafef_news_service.fetch_latest_news(limit=10, repo=self.repo)
+        news_items = await self.cafef_news_service.fetch_latest_news(limit=20, repo=self.repo)
+        focus_report_symbols = self._resolve_financial_focus_symbols(context)
+        financial_reports = await self._build_financial_reports(focus_report_symbols)
         context["cafef_news"] = [
             AiLocalNewsItem(
                 title=item.title,
@@ -157,6 +162,7 @@ class AiLocalService(AiAgentService):
             item.symbol if hasattr(item, "symbol") else item.get("symbol")
             for item in (symbols or [])[:20]
         ]
+        context["financial_reports"] = [item.model_dump(mode="json") for item in financial_reports]
         storage_status = await self._build_cafef_storage_status()
         context["cafef_storage"] = storage_status.model_dump(mode="json")
         return context
@@ -192,7 +198,7 @@ class AiLocalService(AiAgentService):
             "- Viet tieng Viet khong dau.\n"
             "- forecast_cards gom dung 4 the. Moi summary toi da 2 cau ngan.\n"
             "- analysis_sections gom dung 5 muc, moi muc phai co title, summary va 3-5 bullets cu the.\n"
-            "- Can phan tich sau hon ve: index/chi so, dong tien, top movers, watchlist, tin CafeF, rui ro ngan han, va tinh trang du lieu.\n"
+            "- Can phan tich sau hon ve: index/chi so, dong tien, top movers, watchlist, tin CafeF, bao cao tai chinh doanh nghiep, rui ro ngan han, va tinh trang du lieu.\n"
             "- Phai neu ro tinh trang luu tru CafeF trong detail neu context co thong tin nay.\n"
             "- direction chi duoc la up, down, neutral.\n"
             "- confidence la so nguyen 55-95.\n"
@@ -203,7 +209,7 @@ class AiLocalService(AiAgentService):
 
         system_prompt = (
             "Ban la AI Local chay tren Ollama cho he thong chung khoan Viet Nam. "
-            "Khong duoc bo sung thong tin ngoai context. Tap trung vao index, dong tien, watchlist va tin CafeF."
+            "Khong duoc bo sung thong tin ngoai context. Tap trung vao index, dong tien, watchlist, tin CafeF va bao cao tai chinh."
         )
 
         try:
@@ -276,6 +282,7 @@ class AiLocalService(AiAgentService):
             "watchlist": context.get("watchlist") or [],
             "focus_symbols": context.get("focus_symbols") or [],
             "cafef_news": context.get("cafef_news") or [],
+            "financial_reports": context.get("financial_reports") or [],
             "sync_logs": context.get("news") or [],
             "symbol_count": context.get("symbol_count") or 0,
             "symbol_preview": context.get("symbol_preview") or [],
@@ -344,6 +351,11 @@ class AiLocalService(AiAgentService):
                 label="Focus symbols",
                 value=f"{len(context.get('focus_symbols') or [])} ma",
                 helper="Ma duoc trich tu prompt va watchlist hien tai",
+            ),
+            AiLocalDataStat(
+                label="Bao cao tai chinh",
+                value=f"{len(context.get('financial_reports') or [])} doanh nghiep",
+                helper="Lay tu collector vnstock va luu vao cac bang market_financial_*",
             ),
             AiLocalDataStat(
                 label="CafeF DB",
@@ -460,6 +472,24 @@ class AiLocalService(AiAgentService):
                 ],
             ),
             AiLocalAnalysisSection(
+                title="Bao cao tai chinh doanh nghiep",
+                summary=(
+                    f"Co {len(context.get('financial_reports') or [])} bo du lieu bao cao tai chinh "
+                    "dang duoc dua vao local context de doi chieu them ve suc khoe doanh nghiep."
+                ),
+                bullets=[
+                    *[
+                        f"{report.get('symbol')}: "
+                        + ", ".join(
+                            f"{metric.get('label')} {metric.get('value')}"
+                            for metric in (report.get('highlights') or [])[:3]
+                        )
+                        for report in (context.get('financial_reports') or [])[:3]
+                    ],
+                ]
+                or ["Chua co du lieu bao cao tai chinh cho nhom ma dang focus."],
+            ),
+            AiLocalAnalysisSection(
                 title="Tinh trang luu tru du lieu",
                 summary="Nguon tin CafeF duoc uu tien doc tu database sau khi dong bo tu luong fetch.",
                 bullets=[
@@ -470,6 +500,46 @@ class AiLocalService(AiAgentService):
             ),
         ]
         return sections
+
+    def _resolve_financial_focus_symbols(self, context: dict[str, Any]) -> list[str]:
+        symbols: list[str] = []
+        for collection in [
+            context.get("focus_symbols") or [],
+            context.get("watchlist") or [],
+            context.get("actives") or [],
+            context.get("gainers") or [],
+        ]:
+            for item in collection:
+                symbol = (item.get("symbol") if isinstance(item, dict) else None) or ""
+                symbol = str(symbol).strip().upper()
+                if symbol and symbol not in symbols:
+                    symbols.append(symbol)
+        return symbols[:4]
+
+    async def _build_financial_reports(self, symbols: list[str]) -> list[AiLocalFinancialReport]:
+        reports: list[AiLocalFinancialReport] = []
+        for symbol in symbols:
+            bundle = await self.repo.get_symbol_financial_bundle(symbol, limit_per_section=12)
+            highlights = bundle.get("highlights") or []
+            if not highlights:
+                continue
+            reports.append(
+                AiLocalFinancialReport(
+                    symbol=bundle.get("symbol") or symbol,
+                    exchange=bundle.get("exchange"),
+                    updated_at=bundle.get("updatedAt"),
+                    highlights=[
+                        AiLocalFinancialMetric(
+                            label=item.get("label") or "--",
+                            value=item.get("value") or "--",
+                            helper=item.get("helper") or "",
+                        )
+                        for item in highlights[:5]
+                    ],
+                    note=f"{len(bundle.get('sections') or [])} nhom bao cao tai chinh da duoc tai vao local context.",
+                )
+            )
+        return reports
 
     async def _build_cafef_storage_status(self) -> AiLocalStorageStatus:
         latest_rows = await self.repo.get_latest_news_articles(source="CafeF", limit=5)

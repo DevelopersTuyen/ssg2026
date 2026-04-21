@@ -113,6 +113,166 @@ class MarketIndexIntradayPoint(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
 
 
+class MarketFinancialBalanceSheet(Base):
+    __tablename__ = "market_financial_balance_sheets"
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol",
+            "period_type",
+            "report_period",
+            "metric_key",
+            "source",
+            name="uq_market_financial_balance_sheet_metric",
+        ),
+        Index("ix_market_financial_balance_sheet_lookup", "symbol", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    exchange: Mapped[str | None] = mapped_column(String(20), index=True)
+    source: Mapped[str] = mapped_column(String(30), default="vnstock", index=True)
+    period_type: Mapped[str] = mapped_column(String(20), index=True)
+    report_period: Mapped[str] = mapped_column(String(50), index=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, index=True)
+    fiscal_quarter: Mapped[int | None] = mapped_column(Integer, index=True)
+    statement_date: Mapped[date | None] = mapped_column(Date, index=True)
+    metric_key: Mapped[str] = mapped_column(String(120), index=True)
+    metric_label: Mapped[str] = mapped_column(String(255))
+    value_number: Mapped[float | None] = mapped_column(Float)
+    value_text: Mapped[str | None] = mapped_column(Text)
+    raw_json: Mapped[dict | list | None] = mapped_column(JSON)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
+
+class MarketFinancialIncomeStatement(Base):
+    __tablename__ = "market_financial_income_statements"
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol",
+            "period_type",
+            "report_period",
+            "metric_key",
+            "source",
+            name="uq_market_financial_income_statement_metric",
+        ),
+        Index("ix_market_financial_income_statement_lookup", "symbol", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    exchange: Mapped[str | None] = mapped_column(String(20), index=True)
+    source: Mapped[str] = mapped_column(String(30), default="vnstock", index=True)
+    period_type: Mapped[str] = mapped_column(String(20), index=True)
+    report_period: Mapped[str] = mapped_column(String(50), index=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, index=True)
+    fiscal_quarter: Mapped[int | None] = mapped_column(Integer, index=True)
+    statement_date: Mapped[date | None] = mapped_column(Date, index=True)
+    metric_key: Mapped[str] = mapped_column(String(120), index=True)
+    metric_label: Mapped[str] = mapped_column(String(255))
+    value_number: Mapped[float | None] = mapped_column(Float)
+    value_text: Mapped[str | None] = mapped_column(Text)
+    raw_json: Mapped[dict | list | None] = mapped_column(JSON)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
+
+class MarketFinancialCashFlow(Base):
+    __tablename__ = "market_financial_cash_flows"
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol",
+            "period_type",
+            "report_period",
+            "metric_key",
+            "source",
+            name="uq_market_financial_cash_flow_metric",
+        ),
+        Index("ix_market_financial_cash_flow_lookup", "symbol", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    exchange: Mapped[str | None] = mapped_column(String(20), index=True)
+    source: Mapped[str] = mapped_column(String(30), default="vnstock", index=True)
+    period_type: Mapped[str] = mapped_column(String(20), index=True)
+    report_period: Mapped[str] = mapped_column(String(50), index=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, index=True)
+    fiscal_quarter: Mapped[int | None] = mapped_column(Integer, index=True)
+    statement_date: Mapped[date | None] = mapped_column(Date, index=True)
+    metric_key: Mapped[str] = mapped_column(String(120), index=True)
+    metric_label: Mapped[str] = mapped_column(String(255))
+    value_number: Mapped[float | None] = mapped_column(Float)
+    value_text: Mapped[str | None] = mapped_column(Text)
+    raw_json: Mapped[dict | list | None] = mapped_column(JSON)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
+
+class MarketFinancialRatio(Base):
+    __tablename__ = "market_financial_ratios"
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol",
+            "period_type",
+            "report_period",
+            "metric_key",
+            "source",
+            name="uq_market_financial_ratio_metric",
+        ),
+        Index("ix_market_financial_ratio_lookup", "symbol", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    exchange: Mapped[str | None] = mapped_column(String(20), index=True)
+    source: Mapped[str] = mapped_column(String(30), default="vnstock", index=True)
+    period_type: Mapped[str] = mapped_column(String(20), index=True)
+    report_period: Mapped[str] = mapped_column(String(50), index=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, index=True)
+    fiscal_quarter: Mapped[int | None] = mapped_column(Integer, index=True)
+    statement_date: Mapped[date | None] = mapped_column(Date, index=True)
+    metric_key: Mapped[str] = mapped_column(String(120), index=True)
+    metric_label: Mapped[str] = mapped_column(String(255))
+    value_number: Mapped[float | None] = mapped_column(Float)
+    value_text: Mapped[str | None] = mapped_column(Text)
+    raw_json: Mapped[dict | list | None] = mapped_column(JSON)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
+
+class MarketFinancialNote(Base):
+    __tablename__ = "market_financial_notes"
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol",
+            "period_type",
+            "report_period",
+            "metric_key",
+            "source",
+            name="uq_market_financial_note_metric",
+        ),
+        Index("ix_market_financial_note_lookup", "symbol", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    exchange: Mapped[str | None] = mapped_column(String(20), index=True)
+    source: Mapped[str] = mapped_column(String(30), default="vnstock", index=True)
+    period_type: Mapped[str] = mapped_column(String(20), index=True)
+    report_period: Mapped[str] = mapped_column(String(50), index=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, index=True)
+    fiscal_quarter: Mapped[int | None] = mapped_column(Integer, index=True)
+    statement_date: Mapped[date | None] = mapped_column(Date, index=True)
+    metric_key: Mapped[str] = mapped_column(String(120), index=True)
+    metric_label: Mapped[str] = mapped_column(String(255))
+    value_number: Mapped[float | None] = mapped_column(Float)
+    value_text: Mapped[str | None] = mapped_column(Text)
+    raw_json: Mapped[dict | list | None] = mapped_column(JSON)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
+
 class MarketSyncLog(Base):
     __tablename__ = "market_sync_logs"
     __table_args__ = (

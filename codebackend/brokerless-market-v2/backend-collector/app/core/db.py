@@ -10,6 +10,11 @@ SessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False, class_=As
 
 async def init_db() -> None:
     from app.models.market import (  # noqa: F401
+        MarketFinancialBalanceSheet,
+        MarketFinancialCashFlow,
+        MarketFinancialIncomeStatement,
+        MarketFinancialNote,
+        MarketFinancialRatio,
         MarketSymbol,
         MarketQuoteSnapshot,
         MarketIntradayPoint,

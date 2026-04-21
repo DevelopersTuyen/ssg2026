@@ -1,7 +1,7 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { TabsPage } from './tabs.page';
-import { authGuard } from '../core/guards/auth.guard';
+import { authGuard, permissionGuard } from '../core/guards/auth.guard';
 
 const routes: Routes = [
   {
@@ -12,10 +12,14 @@ const routes: Routes = [
       
       {
         path: 'dashboard',
+        canActivate: [permissionGuard],
+        data: { permission: 'dashboard.view' },
         loadChildren: () => import('../pages/dashboard/dashboard.module').then(m => m.DashboardPageModule)
       },
       {
         path: 'market-watch',
+        canActivate: [permissionGuard],
+        data: { permission: 'market-watch.view' },
         loadChildren: () => import('../pages/market-watch/market-watch.module').then(m => m.MarketWatchPageModule)
       },
       // {
@@ -28,6 +32,8 @@ const routes: Routes = [
       // },
       {
         path: 'market-alerts',
+        canActivate: [permissionGuard],
+        data: { permission: 'market-alerts.view' },
         loadChildren: () => import('../pages/market-alerts/market-alerts.module').then(m => m.MarketAlertsPageModule)
       },
       // {
@@ -36,18 +42,32 @@ const routes: Routes = [
       // },
       {
         path: 'market-settings',
+        canActivate: [permissionGuard],
+        data: { permission: 'market-settings.view' },
         loadChildren: () => import('../pages/market-settings/market-settings.module').then(m => m.MarketSettingsPageModule)
       },
       {
         path: 'ai-agent',
+        canActivate: [permissionGuard],
+        data: { permission: 'ai-agent.view' },
         loadChildren: () => import('../pages/ai-agent/ai-agent.module').then(m => m.AiAgentPageModule)
       },
       {
         path: 'ai-local',
+        canActivate: [permissionGuard],
+        data: { permission: 'ai-local.view' },
         loadChildren: () => import('../pages/ai-local/ai-local.module').then(m => m.AiLocalPageModule)
       },
       {
+        path: 'strategy-hub',
+        canActivate: [permissionGuard],
+        data: { permission: 'strategy-hub.view' },
+        loadChildren: () => import('../pages/strategy-hub/strategy-hub.module').then(m => m.StrategyHubPageModule)
+      },
+      {
         path: 'role-permissions',
+        canActivate: [permissionGuard],
+        data: { permission: 'role-permissions.view' },
         loadChildren: () => import('../pages/role-permissions/role-permissions.module').then( m => m.RolePermissionsPageModule)
       },
       {

@@ -28,14 +28,15 @@
       <label class="control-field">
         <span>Chi so tap trung</span>
         <select [ngModel]="selectedIndexView" (ngModelChange)="changeIndexView($event)">
-          <option value="ALL">Tat ca chi so</option>
-          <option *ngFor="let item of availableIndices" [value]="item.symbol">{{ item.symbol }}</option>
+          <option value="ALL">Tat ca chi so cua {{ selectedExchange }}</option>
+          <option *ngFor="let item of exchangeIndexOptions" [value]="item.symbol">{{ item.symbol }}</option>
         </select>
       </label>
 
       <label class="control-field">
         <span>Bo loc co phieu</span>
         <select [ngModel]="selectedSort" (ngModelChange)="changeSort($event)">
+          <option value="all">Tat ca ma</option>
           <option value="actives">Actives</option>
           <option value="gainers">Gainers</option>
           <option value="losers">Losers</option>
@@ -142,12 +143,12 @@
           <div class="panel-kicker">Index Board</div>
           <div class="panel-title">Danh sach chi so</div>
           <div class="panel-subtitle">
-            Hien thi {{ filteredIndexCards.length }} chi so theo bo loc da chon.
+            Hien thi {{ filteredIndexCards.length }} chi so cua san {{ selectedExchange }} theo bo loc da chon.
           </div>
         </div>
 
         <div class="section-chip">
-          {{ selectedIndexView === 'ALL' ? 'Tat ca chi so' : selectedIndexView }}
+          {{ selectedIndexView === 'ALL' ? ('Tat ca ' + selectedExchange) : selectedIndexView }}
         </div>
       </div>
 
@@ -204,34 +205,58 @@
         <div class="section-head">
           <div>
             <div class="panel-kicker">Flow Chart</div>
-            <div class="panel-title">Bieu do giao dich theo gio trong ngay</div>
+            <div class="panel-title">Bieu do dong tien theo giai doan</div>
             <div class="panel-subtitle">
-              Theo doi nhip giao dich toan san theo {{ selectedMetric === 'volume' ? 'khoi luong' : 'gia tri' }}.
+              Theo doi dong thoi 3 khung du lieu: ngay, tuan va 10 ngay theo
+              {{ selectedMetric === 'volume' ? 'khoi luong' : 'gia tri' }}.
             </div>
           </div>
 
           <div class="section-chip">{{ selectedExchange }}</div>
         </div>
 
-        <div class="chart-card">
-          <div id="chart-hourly-trading"></div>
-          <div class="empty-state" *ngIf="!hourlyTrading.length && !boardLoading">
-            Chua co du lieu giao dich theo gio.
-          </div>
+        <div class="flow-chart-grid">
+          <article class="flow-chart-panel">
+            <div class="flow-chart-title">Ngay</div>
+            <div class="chart-card flow-chart-card">
+              <div id="chart-hourly-trading-day"></div>
+              <div class="empty-state" *ngIf="!hasFlowChartData('day') && !boardLoading">
+                Chua co du lieu cho khung ngay.
+              </div>
+            </div>
+          </article>
+
+          <article class="flow-chart-panel">
+            <div class="flow-chart-title">Tuan</div>
+            <div class="chart-card flow-chart-card">
+              <div id="chart-hourly-trading-week"></div>
+              <div class="empty-state" *ngIf="!hasFlowChartData('week') && !boardLoading">
+                Chua co du lieu cho khung tuan.
+              </div>
+            </div>
+          </article>
+
+          <article class="flow-chart-panel">
+            <div class="flow-chart-title">10 ngay</div>
+            <div class="chart-card flow-chart-card">
+              <div id="chart-hourly-trading-ten-days"></div>
+              <div class="empty-state" *ngIf="!hasFlowChartData('tenDays') && !boardLoading">
+                Chua co du lieu cho khung 10 ngay.
+              </div>
+            </div>
+          </article>
         </div>
       </section>
 
       <section class="panel panel-side">
         <div class="section-head">
-          <div>
-            <div class="panel-kicker">Stock Board</div>
-            <div class="panel-title">Danh sach co phieu theo san</div>
-            <div class="panel-subtitle">
-              Hien thi day du ma dang co trong backend cho san nay. Chon mot ma de xem chi tiet ngay ben duoi.
-            </div>
-          </div>
+        <div>
+          <div class="panel-kicker">Stock Board</div>
+          <div class="panel-title">Danh sach co phieu theo san</div>
+          <div class="panel-subtitle">{{ stockBoardSubtitle }}</div>
+        </div>
 
-          <div class="section-chip">{{ selectedSort.toUpperCase() }}</div>
+          <div class="section-chip">{{ stockBoardChipLabel }}</div>
         </div>
 
         <div class="stock-toolbar">
@@ -246,8 +271,8 @@
           </label>
 
           <div class="stock-stats">
-            <div class="stock-stat-pill">Tong: {{ topStocks.length }} ma</div>
-            <div class="stock-stat-pill">Loc: {{ filteredStocks.length }} ma</div>
+            <div class="stock-stat-pill">Tong: {{ totalStockCount }} ma</div>
+            <div class="stock-stat-pill">Trang nay: {{ topStocks.length }} ma</div>
           </div>
         </div>
 
@@ -277,7 +302,7 @@
             </div>
           </button>
 
-          <div class="stock-pagination" *ngIf="filteredStocks.length > stockPageSize">
+          <div class="stock-pagination" *ngIf="totalStockCount > stockPageSize">
             <button
               type="button"
               class="stock-page-btn"
@@ -299,7 +324,7 @@
             </button>
           </div>
 
-          <div class="empty-state small" *ngIf="!filteredStocks.length && !boardLoading">
+          <div class="empty-state small" *ngIf="!topStocks.length && !boardLoading">
             Khong tim thay ma phu hop trong du lieu backend hien co.
           </div>
         </div>
@@ -308,64 +333,105 @@
 
   </div>
 
-  <ion-modal
-    class="symbol-detail-modal"
-    [isOpen]="symbolModalOpen"
-    [keepContentsMounted]="true"
-    (didDismiss)="closeSymbolModal()"
-    (didPresent)="onSymbolModalDidPresent()"
-  >
-    <div class="symbol-modal-shell">
-      <div class="symbol-modal-head">
-        <div>
-          <div class="panel-kicker">Symbol Detail</div>
-          <div class="panel-title">Bieu do chi tiet theo ma</div>
-          <div class="panel-subtitle">
-            Dang xem: <strong>{{ selectedSymbolDisplay }}</strong>
-          </div>
+  <div class="symbol-modal-backdrop" *ngIf="symbolModalOpen" (click)="closeSymbolModal()"></div>
+  <section class="symbol-modal" *ngIf="symbolModalOpen">
+    <div class="symbol-modal-head">
+      <div>
+        <div class="panel-title">Chi tiet ma {{ selectedSymbolDisplay }}</div>
+        <div class="panel-subtitle">Quote, bien dong va bieu do chi tiet cho ma dang duoc chon tu market watch.</div>
+      </div>
+      <div class="symbol-modal-actions">
+        <button type="button" class="symbol-financial-btn" (click)="openFinancialModal()">Xem bao cao tai chinh</button>
+        <button type="button" class="symbol-modal-close" (click)="closeSymbolModal()">Dong</button>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-summary">
+        <div class="summary-box">
+          <div class="summary-label">Gia hien tai</div>
+          <div class="summary-value">{{ selectedPriceText }}</div>
         </div>
 
-        <div class="symbol-modal-actions">
-          <div class="section-chip">{{ selectedSymbolDisplay }}</div>
-          <button type="button" class="symbol-close-btn" (click)="closeSymbolModal()">Dong</button>
+        <div class="summary-box">
+          <div class="summary-label">Thay doi</div>
+          <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedChangeText }}</div>
+        </div>
+
+        <div class="summary-box">
+          <div class="summary-label">%</div>
+          <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedPercentText }}</div>
+        </div>
+
+        <div class="summary-box">
+          <div class="summary-label">Khoi luong</div>
+          <div class="summary-value">{{ selectedVolumeText }}</div>
+        </div>
+
+        <div class="summary-box">
+          <div class="summary-label">Gia tri giao dich</div>
+          <div class="summary-value">{{ selectedTradingValueText }}</div>
         </div>
       </div>
 
-      <div class="detail-grid">
-        <div class="detail-summary">
-          <div class="detail-card">
-            <div class="detail-label">Gia hien tai</div>
-            <div class="detail-value">{{ selectedPriceText }}</div>
-          </div>
-
-          <div class="detail-card">
-            <div class="detail-label">Thay doi</div>
-            <div class="detail-value" [class.down]="!selectedQuoteUp">{{ selectedChangeText }}</div>
-          </div>
-
-          <div class="detail-card">
-            <div class="detail-label">Phan tram</div>
-            <div class="detail-value" [class.down]="!selectedQuoteUp">{{ selectedPercentText }}</div>
-          </div>
-
-          <div class="detail-card">
-            <div class="detail-label">Khoi luong</div>
-            <div class="detail-value">{{ selectedVolumeText }}</div>
-          </div>
-
-          <div class="detail-card">
-            <div class="detail-label">Gia tri giao dich</div>
-            <div class="detail-value">{{ selectedTradingValueText }}</div>
-          </div>
-        </div>
-
-        <div class="detail-chart-card">
-          <div id="chart-symbol-detail"></div>
-          <div class="empty-state" *ngIf="!selectedHourly.length && !symbolLoading">
-            Chua co du lieu chi tiet theo ma.
-          </div>
+      <div class="detail-chart-card symbol-chart-box">
+        <div id="chart-symbol-detail"></div>
+        <div class="empty-state" *ngIf="!selectedHourly.length && !symbolLoading">
+          Chua co du lieu chi tiet theo ma.
         </div>
       </div>
     </div>
-  </ion-modal>
+  </section>
+
+  <div class="symbol-modal-backdrop" *ngIf="financialModalOpen" (click)="closeFinancialModal()"></div>
+  <section class="symbol-modal financial-modal" *ngIf="financialModalOpen">
+    <div class="symbol-modal-head">
+      <div>
+        <div class="panel-title">Bao cao tai chinh {{ selectedSymbolDisplay }}</div>
+        <div class="panel-subtitle">Doc du lieu tu vnstock collector da luu trong database local.</div>
+      </div>
+      <button type="button" class="symbol-modal-close" (click)="closeFinancialModal()">Dong</button>
+    </div>
+
+    <div class="empty-state" *ngIf="financialLoading">Dang tai bao cao tai chinh...</div>
+    <div class="empty-state" *ngIf="!financialLoading && !financialOverview">Chua co du lieu bao cao tai chinh cho ma nay.</div>
+
+    <div class="detail-summary" *ngIf="!financialLoading && financialOverview">
+      <div class="summary-box" *ngFor="let item of financialHighlights">
+        <div class="summary-label">{{ item.label }}</div>
+        <div class="summary-value">{{ item.value }}</div>
+        <div class="summary-caption">{{ item.helper }}</div>
+      </div>
+    </div>
+
+    <div class="financial-sections" *ngIf="!financialLoading && financialOverview">
+      <article class="financial-section-card" *ngFor="let section of financialSections">
+        <div class="financial-section-head">
+          <div>
+            <div class="financial-section-title">{{ section.title }}</div>
+            <div class="financial-section-meta">
+              {{ section.latestPeriod || '--' }} / {{ section.periodType || '--' }} / {{ section.rowCount }} dong
+            </div>
+          </div>
+        </div>
+
+        <div class="financial-table" *ngIf="section.rows.length; else emptyFinancialRows">
+          <div class="financial-row header">
+            <span>Chi tieu</span>
+            <span>Gia tri</span>
+            <span>Ky</span>
+          </div>
+          <div class="financial-row" *ngFor="let row of section.rows | slice:0:10">
+            <span>{{ row.metricLabel }}</span>
+            <span>{{ row.valueNumber !== null && row.valueNumber !== undefined ? row.valueNumber : (row.valueText || '--') }}</span>
+            <span>{{ row.reportPeriod || '--' }}</span>
+          </div>
+        </div>
+
+        <ng-template #emptyFinancialRows>
+          <div class="empty-state small">Chua co du lieu cho nhom nay.</div>
+        </ng-template>
+      </article>
+    </div>
+  </section>
 </ion-content>

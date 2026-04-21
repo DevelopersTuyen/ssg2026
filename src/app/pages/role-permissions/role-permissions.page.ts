@@ -12,7 +12,7 @@ type PermissionTab = 'users' | 'roles' | 'matrix' | 'logs';
 
 interface PermissionTabItem {
   key: PermissionTab;
-  label: string;
+  labelKey: string;
 }
 
 interface NewUserForm {
@@ -53,10 +53,10 @@ export class RolePermissionsPage implements OnInit {
   newRole: NewRoleForm = this.buildNewRoleForm();
 
   readonly tabs: PermissionTabItem[] = [
-    { key: 'users', label: 'Nguoi dung' },
-    { key: 'roles', label: 'Vai tro' },
-    { key: 'matrix', label: 'Ma tran quyen' },
-    { key: 'logs', label: 'Nhat ky phan quyen' },
+    { key: 'users', labelKey: 'permissions.tabs.users' },
+    { key: 'roles', labelKey: 'permissions.tabs.roles' },
+    { key: 'matrix', labelKey: 'permissions.tabs.matrix' },
+    { key: 'logs', labelKey: 'permissions.tabs.logs' },
   ];
 
   constructor(private api: MarketApiService) {}

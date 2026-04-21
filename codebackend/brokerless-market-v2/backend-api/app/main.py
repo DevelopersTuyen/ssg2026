@@ -17,6 +17,7 @@ from app.routers import (
     market_alerts,
     settings,
     role_permissions,
+    strategy,
 )
 
 setup_logging()
@@ -45,6 +46,8 @@ app.add_middleware(
         "http://localhost:4200",
         "http://127.0.0.1:4200",
         "http://14.224.134.120:8100",
+        "http://14.224.134.120:8000",
+        "http://14.224.134.120",
         "http://192.168.101.170:8100",
         "capacitor://localhost",
         "ionic://localhost",
@@ -65,3 +68,4 @@ app.include_router(ai_local.router)
 app.include_router(market_alerts.router)
 app.include_router(settings.router)
 app.include_router(role_permissions.router)
+app.include_router(strategy.router)

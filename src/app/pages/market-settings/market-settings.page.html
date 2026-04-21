@@ -2,34 +2,37 @@
   <div class="settings-page container-fluid py-3">
     <div class="settings-breadcrumb mb-3">
       <ion-icon name="settings-outline"></ion-icon>
-      <span>He thong</span>
+      <span>{{ 'common.system' | translate }}</span>
       <span class="sep">›</span>
-      <span>Market Settings</span>
+      <span>{{ 'tabs.settings' | translate }}</span>
     </div>
 
     <div class="settings-shell">
       <div class="settings-header">
         <div>
           <div class="page-kicker">Personal Config</div>
-          <h1>Market settings cho tai khoan dang dang nhap</h1>
-          <p>Cau hinh nay duoc luu tren backend va tai lai lai khi ban dang nhap.</p>
+          <h1>{{ 'settings.title' | translate }}</h1>
+          <p>{{ 'settings.subtitle' | translate }}</p>
         </div>
 
         <div class="header-actions">
           <button type="button" class="btn btn-outline-secondary" (click)="loadSettings()" [disabled]="loading || saving">
-            Tai lai
+            {{ 'common.reload' | translate }}
           </button>
           <button type="button" class="btn btn-light btn-reset" (click)="resetSettings()" [disabled]="saving">
-            Mac dinh
+            {{ 'common.reset' | translate }}
+          </button>
+          <button type="button" class="btn btn-outline-danger btn-logout" (click)="logout()" [disabled]="loading || saving">
+            {{ 'common.logout' | translate }}
           </button>
           <button type="button" class="btn btn-save" (click)="saveSettings()" [disabled]="loading || saving">
-            {{ saving ? 'Dang luu...' : 'Luu cau hinh' }}
+            {{ saving ? ('common.saving' | translate) : ('common.save' | translate) }}
           </button>
         </div>
       </div>
 
       <div class="status-row" *ngIf="message || error || loading">
-        <div class="status-pill loading" *ngIf="loading">Dang tai cau hinh...</div>
+        <div class="status-pill loading" *ngIf="loading">{{ 'settings.loading' | translate }}</div>
         <div class="status-pill success" *ngIf="message">{{ message }}</div>
         <div class="status-pill error" *ngIf="error">{{ error }}</div>
       </div>
@@ -42,8 +45,8 @@
           [class.active]="selectedTab === tab.key"
           (click)="selectTab(tab.key)"
         >
-          <span>{{ tab.label }}</span>
-          <small>{{ tab.helper }}</small>
+          <span>{{ tab.labelKey | translate }}</span>
+          <small>{{ tab.helperKey | translate }}</small>
         </button>
       </div>
 
@@ -52,10 +55,11 @@
           <div class="section-title">Cai dat chung</div>
           <div class="form-grid">
             <div class="form-item">
-              <label>Ngon ngu</label>
-              <select class="form-select" [(ngModel)]="settings.language">
-                <option value="vi">Tieng Viet</option>
-                <option value="en">English</option>
+              <label>{{ 'settings.language' | translate }}</label>
+              <select class="form-select" [(ngModel)]="settings.language" (ngModelChange)="onLanguageChange()">
+                <option value="vi">{{ 'settings.langVi' | translate }}</option>
+                <option value="en">{{ 'settings.langEn' | translate }}</option>
+                <option value="ja">{{ 'settings.langJa' | translate }}</option>
               </select>
             </div>
 
@@ -75,6 +79,7 @@
                 <option value="market-watch">Market Watch</option>
                 <option value="market-alerts">Market Alerts</option>
                 <option value="ai-agent">AI Agent</option>
+                <option value="strategy-hub">Strategy Hub</option>
               </select>
             </div>
 
@@ -85,6 +90,7 @@
                 <option value="market-watch">Market Watch</option>
                 <option value="market-alerts">Market Alerts</option>
                 <option value="ai-agent">AI Agent</option>
+                <option value="strategy-hub">Strategy Hub</option>
               </select>
             </div>
 
@@ -182,6 +188,61 @@
 
         <div *ngSwitchCase="'data'" class="settings-section">
           <div class="section-title">Du lieu</div>
+          <div class="data-sync-hero">
+            <div>
+              <strong>{{ 'settings.dataSyncTitle' | translate }}</strong>
+              <p>{{ 'settings.dataSyncText' | translate }}</p>
+            </div>
+          </div>
+
+          <div class="sync-status-grid">
+            <article class="sync-status-card">
+              <div class="sync-status-head">
+                <strong>Quote market</strong>
+                <span class="sync-status-badge">{{ syncStatus.quotes.status }}</span>
+              </div>
+              <div class="sync-status-line">Batch: {{ getSyncBatchText(syncStatus.quotes) }}</div>
+              <div class="sync-status-line">Con lai: {{ getSyncRemainingText(syncStatus.quotes) }}</div>
+              <div class="sync-status-line">Requests/luot: {{ syncStatus.quotes.itemsInBatch ?? '--' }}</div>
+              <div class="sync-status-line">Tong requests: {{ syncStatus.quotes.itemsResolved ?? '--' }}</div>
+              <div class="sync-status-time">Lan cuoi: {{ formatSyncTime(syncStatus.quotes.finishedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.quotes.message || 'Chua co log quote.' }}</div>
+            </article>
+
+            <article class="sync-status-card">
+              <div class="sync-status-head">
+                <strong>Intraday market</strong>
+                <span class="sync-status-badge">{{ syncStatus.intraday.status }}</span>
+              </div>
+              <div class="sync-status-line">Batch: {{ getSyncBatchText(syncStatus.intraday) }}</div>
+              <div class="sync-status-line">Con lai: {{ getSyncRemainingText(syncStatus.intraday) }}</div>
+              <div class="sync-status-line">Ma/luot: {{ syncStatus.intraday.itemsInBatch ?? '--' }}</div>
+              <div class="sync-status-line">Tong ma: {{ syncStatus.intraday.itemsResolved ?? '--' }}</div>
+              <div class="sync-status-time">Lan cuoi: {{ formatSyncTime(syncStatus.intraday.finishedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.intraday.message || 'Chua co log intraday.' }}</div>
+            </article>
+
+            <article class="sync-status-card">
+              <div class="sync-status-head">
+                <strong>Index / Seed</strong>
+                <span class="sync-status-badge">{{ syncStatus.indexDaily.status }}</span>
+              </div>
+              <div class="sync-status-line">Index daily: {{ formatSyncTime(syncStatus.indexDaily.finishedAt) }}</div>
+              <div class="sync-status-line">Seed symbols: {{ formatSyncTime(syncStatus.seedSymbols.finishedAt) }}</div>
+              <div class="sync-status-time">Checked: {{ formatSyncTime(syncStatus.checkedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.seedSymbols.message || syncStatus.indexDaily.message || 'Chua co log index/seed.' }}</div>
+            </article>
+
+            <article class="sync-status-card">
+              <div class="sync-status-head">
+                <strong>CafeF news</strong>
+                <span class="sync-status-badge">{{ syncStatus.news.status }}</span>
+              </div>
+              <div class="sync-status-line">Lan cuoi: {{ formatSyncTime(syncStatus.news.finishedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.news.message || 'Chua co tin CafeF.' }}</div>
+            </article>
+          </div>
+
           <div class="form-grid">
             <div class="form-item">
               <label>Auto refresh (giay)</label>
@@ -205,6 +266,20 @@
           </div>
 
           <div class="toggle-list">
+            <div class="toggle-row toggle-row-highlight">
+              <div class="toggle-copy">
+                <span>{{ 'settings.syncMarketData' | translate }}</span>
+                <small>{{ 'settings.syncMarketDataHelp' | translate }}</small>
+              </div>
+              <ion-toggle [(ngModel)]="settings.syncMarketData"></ion-toggle>
+            </div>
+            <div class="toggle-row toggle-row-highlight">
+              <div class="toggle-copy">
+                <span>{{ 'settings.syncNewsData' | translate }}</span>
+                <small>{{ 'settings.syncNewsDataHelp' | translate }}</small>
+              </div>
+              <ion-toggle [(ngModel)]="settings.syncNewsData"></ion-toggle>
+            </div>
             <div class="toggle-row">
               <span>Preload chart</span>
               <ion-toggle [(ngModel)]="settings.preloadCharts"></ion-toggle>
@@ -266,6 +341,474 @@
               <label>Lich chay AI</label>
               <input class="form-control" [(ngModel)]="settings.aiTaskSchedule" />
             </div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'strategy'" class="settings-section strategy-settings-section">
+          <div class="strategy-section-headline">
+            <div class="section-title">Strategy engine</div>
+            <span class="unsaved-badge" *ngIf="hasUnsavedStrategyChanges">Dang co thay doi chua luu</span>
+          </div>
+
+          <div class="strategy-status-row" *ngIf="strategyLoading || strategyMessage || strategyError">
+            <div class="status-pill loading" *ngIf="strategyLoading">Dang tai strategy config...</div>
+            <div class="status-pill success" *ngIf="strategyMessage">{{ strategyMessage }}</div>
+            <div class="status-pill error" *ngIf="strategyError">{{ strategyError }}</div>
+          </div>
+
+          <div class="strategy-hero-inline">
+            <div>
+              <strong>Cong thuc, rule va checklist dong</strong>
+              <p>Toan bo phan setting cua Strategy Hub da duoc chuyen ve day de su dung tap trung, it roi hon va de quan tri hon.</p>
+            </div>
+            <div class="toolbar">
+              <select class="toolbar-select" [(ngModel)]="activeStrategyProfileId" (change)="onStrategyProfileChange()">
+                <option *ngFor="let profile of strategyProfiles; trackBy: trackByStrategyCode" [ngValue]="profile.id">
+                  {{ profile.name }}
+                </option>
+              </select>
+              <button type="button" class="btn btn-outline-secondary" (click)="loadStrategyOverview()" [disabled]="strategyLoading">
+                Tai lai
+              </button>
+              <button type="button" class="btn btn-light btn-reset" (click)="saveStrategyConfig()" [disabled]="strategySaving">
+                {{ strategySaving ? 'Dang luu...' : 'Luu config' }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-apply-strategy"
+                (click)="applyStrategyToHub()"
+                [disabled]="strategySaving || strategyPublishing || strategyLoading || !strategyConfig"
+              >
+                {{ strategySaving ? 'Dang ap dung...' : 'Ap dung ngay vao Strategy Hub' }}
+              </button>
+              <button type="button" class="btn btn-save" (click)="publishStrategyConfig()" [disabled]="strategyPublishing">
+                {{ strategyPublishing ? 'Dang publish...' : 'Publish version' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-layout" *ngIf="strategyConfig">
+            <aside class="settings-sidebar">
+              <button
+                type="button"
+                class="settings-nav-item"
+                [class.active]="selectedStrategySection === 'profiles'"
+                (click)="selectStrategySection('profiles')"
+              >
+                <span>Profiles</span>
+                <strong>{{ getStrategySectionCount('profiles') }}</strong>
+              </button>
+              <button
+                type="button"
+                class="settings-nav-item"
+                [class.active]="selectedStrategySection === 'formulas'"
+                (click)="selectStrategySection('formulas')"
+              >
+                <span>Formulas</span>
+                <strong>{{ getStrategySectionCount('formulas') }}</strong>
+              </button>
+              <button
+                type="button"
+                class="settings-nav-item"
+                [class.active]="selectedStrategySection === 'screenRules'"
+                (click)="selectStrategySection('screenRules')"
+              >
+                <span>Screener rules</span>
+                <strong>{{ getStrategySectionCount('screenRules') }}</strong>
+              </button>
+              <button
+                type="button"
+                class="settings-nav-item"
+                [class.active]="selectedStrategySection === 'alertRules'"
+                (click)="selectStrategySection('alertRules')"
+              >
+                <span>Alert rules</span>
+                <strong>{{ getStrategySectionCount('alertRules') }}</strong>
+              </button>
+              <button
+                type="button"
+                class="settings-nav-item"
+                [class.active]="selectedStrategySection === 'checklists'"
+                (click)="selectStrategySection('checklists')"
+              >
+                <span>Checklists</span>
+                <strong>{{ getStrategySectionCount('checklists') }}</strong>
+              </button>
+              <button
+                type="button"
+                class="settings-nav-item"
+                [class.active]="selectedStrategySection === 'versions'"
+                (click)="selectStrategySection('versions')"
+              >
+                <span>Versions</span>
+                <strong>{{ getStrategySectionCount('versions') }}</strong>
+              </button>
+            </aside>
+
+            <article class="settings-panel settings-detail-panel" *ngIf="selectedStrategySection === 'profiles' || selectedStrategySection === 'versions'">
+              <h3 *ngIf="selectedStrategySection === 'profiles'">Profiles</h3>
+              <div class="profile-list" *ngIf="selectedStrategySection === 'profiles'">
+                <button type="button" class="profile-pill" *ngFor="let profile of strategyProfiles" (click)="activateStrategyProfile(profile)">
+                  {{ profile.name }}
+                  <small *ngIf="profile.isDefault">Default</small>
+                </button>
+              </div>
+              <div class="form-grid compact" *ngIf="selectedStrategySection === 'profiles'">
+                <div class="form-item">
+                  <label>Code</label>
+                  <input class="form-control" [(ngModel)]="newStrategyProfile.code" />
+                </div>
+                <div class="form-item">
+                  <label>Name</label>
+                  <input class="form-control" [(ngModel)]="newStrategyProfile.name" />
+                </div>
+                <div class="form-item full">
+                  <label>Description</label>
+                  <input class="form-control" [(ngModel)]="newStrategyProfile.description" />
+                </div>
+              </div>
+              <button type="button" class="btn btn-outline-secondary create-profile-btn" *ngIf="selectedStrategySection === 'profiles'" (click)="createStrategyProfile()">
+                Tao profile
+              </button>
+
+              <h3 *ngIf="selectedStrategySection === 'versions'">Versions</h3>
+              <div class="version-list" *ngIf="selectedStrategySection === 'versions'">
+                <div class="version-row" *ngFor="let version of strategyConfig.versions">
+                  <strong>#{{ version.versionNo }}</strong>
+                  <span>{{ version.changeSummary || 'Publish strategy profile' }}</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="settings-panel settings-detail-panel" *ngIf="selectedStrategySection === 'formulas'">
+              <div class="settings-section-head">
+                <div>
+                  <h3>Formulas</h3>
+                  <p>Chi mo cong thuc dang chinh de tranh roi. Bam vao dong nao thi bung dong do.</p>
+                </div>
+              </div>
+              <div
+                class="config-card collapsible"
+                *ngFor="let formula of strategyConfig.formulas; trackBy: trackByStrategyCode"
+                [class.open]="isStrategyCardOpen('formulas', formula)"
+              >
+                <button type="button" class="config-header config-toggle" (click)="toggleStrategyCard('formulas', formula)">
+                  <div>
+                    <strong>{{ formula.label }}</strong>
+                    <small>{{ formula.formulaCode }} · cong thuc ky thuat</small>
+                  </div>
+                  <div class="config-header-actions">
+                    <span class="config-status" [class.off]="!formula.isEnabled">{{ formula.isEnabled ? 'Dang bat' : 'Dang tat' }}</span>
+                    <span class="config-arrow">{{ isStrategyCardOpen('formulas', formula) ? '−' : '+' }}</span>
+                  </div>
+                </button>
+                <div class="config-body" *ngIf="isStrategyCardOpen('formulas', formula)">
+                  <label class="toggle-inline">
+                    <input type="checkbox" [(ngModel)]="formula.isEnabled" />
+                    Enabled
+                  </label>
+                  <div class="formula-readable">
+                    <span>Ten hien thi cho nguoi dung</span>
+                    <strong>{{ getFriendlyExpression(formula) }}</strong>
+                  </div>
+                  <div class="expression-builder">
+                    <div class="builder-title">Builder cong thuc</div>
+                    <div class="builder-help">Bam vao toan tu hoac bien ben duoi de chen thang vao cong thuc.</div>
+                    <div class="builder-operators">
+                      <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
+                        <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(formula, formulaEditor, operator)">
+                          {{ operator.trim() || operator }}
+                        </button>
+                      </div>
+                    </div>
+                    <div class="builder-variables">
+                      <button
+                        type="button"
+                        class="builder-chip variable"
+                        *ngFor="let variable of getExpressionBuilderVariables(formula)"
+                        (click)="insertExpressionToken(formula, formulaEditor, variable.key)"
+                        [title]="variable.description"
+                      >
+                        <span>{{ variable.label }}</span>
+                        <small>{{ variable.key }}</small>
+                      </button>
+                    </div>
+                  </div>
+                  <textarea #formulaEditor class="form-control formula-editor" rows="3" [(ngModel)]="formula.expression"></textarea>
+                  <div class="variable-help" *ngIf="getVariableHints(formula).length">
+                    <div class="variable-help-title">Cac bien dang dung trong cong thuc</div>
+                    <div class="variable-list">
+                      <div class="variable-item" *ngFor="let variable of getVariableHints(formula)">
+                        <div class="variable-label-row">
+                          <strong>{{ variable.label }}</strong>
+                          <code>{{ variable.key }}</code>
+                        </div>
+                        <small>{{ variable.description }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="parameter-grid">
+                    <div class="parameter-item" *ngFor="let parameter of formula.parameters">
+                      <label>{{ parameter.label }}</label>
+                      <div class="parameter-meta">
+                        <code>{{ parameter.paramKey }}</code>
+                        <span>Gia tri hien tai: {{ getParameterValueLabel(parameter) }}</span>
+                      </div>
+                      <input
+                        *ngIf="parameter.dataType !== 'boolean'"
+                        class="form-control"
+                        [value]="parameter.value ?? ''"
+                        (input)="updateParameterNumber(parameter, $event)"
+                      />
+                      <ion-toggle *ngIf="parameter.dataType === 'boolean'" [(ngModel)]="parameter.value"></ion-toggle>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="settings-panel settings-detail-panel" *ngIf="selectedStrategySection === 'screenRules' || selectedStrategySection === 'alertRules' || selectedStrategySection === 'checklists'">
+              <div class="settings-section-head" *ngIf="selectedStrategySection === 'screenRules'">
+                <div>
+                  <h3>Screener rules</h3>
+                  <p>Tach rieng bo rule loc 3 tang de team chi tap trung vao logic loc co phieu.</p>
+                </div>
+              </div>
+              <div
+                class="config-card collapsible"
+                *ngFor="let rule of strategyConfig.screenRules; trackBy: trackByStrategyCode"
+                [hidden]="selectedStrategySection !== 'screenRules'"
+                [class.open]="isStrategyCardOpen('screenRules', rule)"
+              >
+                <button type="button" class="config-header config-toggle" (click)="toggleStrategyCard('screenRules', rule)">
+                  <div>
+                    <strong>{{ rule.label }}</strong>
+                    <small>{{ rule.layerCode }} · rule loc</small>
+                  </div>
+                  <div class="config-header-actions">
+                    <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Dang bat' : 'Dang tat' }}</span>
+                    <span class="config-arrow">{{ isStrategyCardOpen('screenRules', rule) ? '−' : '+' }}</span>
+                  </div>
+                </button>
+                <div class="config-body" *ngIf="isStrategyCardOpen('screenRules', rule)">
+                  <label class="toggle-inline">
+                    <input type="checkbox" [(ngModel)]="rule.isEnabled" />
+                    Enabled
+                  </label>
+                  <div class="formula-readable">
+                    <span>Dien giai business</span>
+                    <strong>{{ getFriendlyExpression(rule) }}</strong>
+                  </div>
+                  <div class="expression-builder">
+                    <div class="builder-title">Builder rule loc</div>
+                    <div class="builder-help">Chon bien va toan tu de ghep rule thay vi go tay.</div>
+                    <div class="builder-operators">
+                      <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
+                        <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, screenRuleEditor, operator)">
+                          {{ operator.trim() || operator }}
+                        </button>
+                      </div>
+                    </div>
+                    <div class="builder-variables">
+                      <button
+                        type="button"
+                        class="builder-chip variable"
+                        *ngFor="let variable of getExpressionBuilderVariables(rule)"
+                        (click)="insertExpressionToken(rule, screenRuleEditor, variable.key)"
+                        [title]="variable.description"
+                      >
+                        <span>{{ variable.label }}</span>
+                        <small>{{ variable.key }}</small>
+                      </button>
+                    </div>
+                  </div>
+                  <textarea #screenRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
+                  <div class="variable-help" *ngIf="getVariableHints(rule).length">
+                    <div class="variable-help-title">Bien va nguong cua rule nay</div>
+                    <div class="variable-list">
+                      <div class="variable-item" *ngFor="let variable of getVariableHints(rule)">
+                        <div class="variable-label-row">
+                          <strong>{{ variable.label }}</strong>
+                          <code>{{ variable.key }}</code>
+                        </div>
+                        <small>{{ variable.description }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="parameter-grid">
+                    <div class="parameter-item" *ngFor="let parameter of rule.parameters">
+                      <label>{{ parameter.label }}</label>
+                      <div class="parameter-meta">
+                        <code>{{ parameter.paramKey }}</code>
+                        <span>Gia tri hien tai: {{ getParameterValueLabel(parameter) }}</span>
+                      </div>
+                      <input class="form-control" [value]="parameter.value ?? ''" (input)="updateParameterNumber(parameter, $event)" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-section-head" *ngIf="selectedStrategySection === 'alertRules'">
+                <div>
+                  <h3>Alert rules</h3>
+                  <p>Nhom rieng rule canh bao de xem, chinh va publish ma khong bi lan voi scoring.</p>
+                </div>
+              </div>
+              <div
+                class="config-card collapsible"
+                *ngFor="let rule of strategyConfig.alertRules; trackBy: trackByStrategyCode"
+                [hidden]="selectedStrategySection !== 'alertRules'"
+                [class.open]="isStrategyCardOpen('alertRules', rule)"
+              >
+                <button type="button" class="config-header config-toggle" (click)="toggleStrategyCard('alertRules', rule)">
+                  <div>
+                    <strong>{{ rule.label }}</strong>
+                    <small>{{ rule.ruleCode }} · rule canh bao</small>
+                  </div>
+                  <div class="config-header-actions">
+                    <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Dang bat' : 'Dang tat' }}</span>
+                    <span class="config-arrow">{{ isStrategyCardOpen('alertRules', rule) ? '−' : '+' }}</span>
+                  </div>
+                </button>
+                <div class="config-body" *ngIf="isStrategyCardOpen('alertRules', rule)">
+                  <label class="toggle-inline">
+                    <input type="checkbox" [(ngModel)]="rule.isEnabled" />
+                    Enabled
+                  </label>
+                  <div class="formula-readable">
+                    <span>Dien giai business</span>
+                    <strong>{{ getFriendlyExpression(rule) }}</strong>
+                  </div>
+                  <div class="expression-builder">
+                    <div class="builder-title">Builder rule canh bao</div>
+                    <div class="builder-help">Dung cac chip ben duoi de lap rule canh bao de hieu hon.</div>
+                    <div class="builder-operators">
+                      <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
+                        <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, alertRuleEditor, operator)">
+                          {{ operator.trim() || operator }}
+                        </button>
+                      </div>
+                    </div>
+                    <div class="builder-variables">
+                      <button
+                        type="button"
+                        class="builder-chip variable"
+                        *ngFor="let variable of getExpressionBuilderVariables(rule)"
+                        (click)="insertExpressionToken(rule, alertRuleEditor, variable.key)"
+                        [title]="variable.description"
+                      >
+                        <span>{{ variable.label }}</span>
+                        <small>{{ variable.key }}</small>
+                      </button>
+                    </div>
+                  </div>
+                  <textarea #alertRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
+                  <input class="form-control mb-2" [(ngModel)]="rule.messageTemplate" placeholder="Message template" />
+                  <div class="variable-help" *ngIf="getVariableHints(rule).length">
+                    <div class="variable-help-title">Bien va nguong cua alert nay</div>
+                    <div class="variable-list">
+                      <div class="variable-item" *ngFor="let variable of getVariableHints(rule)">
+                        <div class="variable-label-row">
+                          <strong>{{ variable.label }}</strong>
+                          <code>{{ variable.key }}</code>
+                        </div>
+                        <small>{{ variable.description }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="parameter-grid">
+                    <div class="parameter-item" *ngFor="let parameter of rule.parameters">
+                      <label>{{ parameter.label }}</label>
+                      <div class="parameter-meta">
+                        <code>{{ parameter.paramKey }}</code>
+                        <span>Gia tri hien tai: {{ getParameterValueLabel(parameter) }}</span>
+                      </div>
+                      <input class="form-control" [value]="parameter.value ?? ''" (input)="updateParameterNumber(parameter, $event)" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-section-head" *ngIf="selectedStrategySection === 'checklists'">
+                <div>
+                  <h3>Checklists</h3>
+                  <p>Giu rieng checklist de nguoi dung tap trung vao quy trinh thay vi doc lan cong thuc cham diem.</p>
+                </div>
+              </div>
+              <div
+                class="config-card collapsible"
+                *ngFor="let item of strategyConfig.checklists; trackBy: trackByStrategyCode"
+                [hidden]="selectedStrategySection !== 'checklists'"
+                [class.open]="isStrategyCardOpen('checklists', item)"
+              >
+                <button type="button" class="config-header config-toggle" (click)="toggleStrategyCard('checklists', item)">
+                  <div>
+                    <strong>{{ item.label }}</strong>
+                    <small>{{ item.checklistType }} · checklist</small>
+                  </div>
+                  <div class="config-header-actions">
+                    <span class="config-status" [class.off]="!item.isEnabled">{{ item.isEnabled ? 'Dang bat' : 'Dang tat' }}</span>
+                    <span class="config-arrow">{{ isStrategyCardOpen('checklists', item) ? '−' : '+' }}</span>
+                  </div>
+                </button>
+                <div class="config-body" *ngIf="isStrategyCardOpen('checklists', item)">
+                  <label class="toggle-inline">
+                    <input type="checkbox" [(ngModel)]="item.isEnabled" />
+                    Enabled
+                  </label>
+                  <div class="formula-readable">
+                    <span>Dien giai business</span>
+                    <strong>{{ getFriendlyExpression(item) }}</strong>
+                  </div>
+                  <div class="expression-builder">
+                    <div class="builder-title">Builder checklist</div>
+                    <div class="builder-help">Bam vao bien/nguong de tao checklist nhanh cho tung giai doan giao dich.</div>
+                    <div class="builder-operators">
+                      <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
+                        <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(item, checklistEditor, operator)">
+                          {{ operator.trim() || operator }}
+                        </button>
+                      </div>
+                    </div>
+                    <div class="builder-variables">
+                      <button
+                        type="button"
+                        class="builder-chip variable"
+                        *ngFor="let variable of getExpressionBuilderVariables(item)"
+                        (click)="insertExpressionToken(item, checklistEditor, variable.key)"
+                        [title]="variable.description"
+                      >
+                        <span>{{ variable.label }}</span>
+                        <small>{{ variable.key }}</small>
+                      </button>
+                    </div>
+                  </div>
+                  <textarea #checklistEditor class="form-control formula-editor" rows="2" [(ngModel)]="item.expression"></textarea>
+                  <div class="variable-help" *ngIf="getVariableHints(item).length">
+                    <div class="variable-help-title">Bien va nguong cua checklist nay</div>
+                    <div class="variable-list">
+                      <div class="variable-item" *ngFor="let variable of getVariableHints(item)">
+                        <div class="variable-label-row">
+                          <strong>{{ variable.label }}</strong>
+                          <code>{{ variable.key }}</code>
+                        </div>
+                        <small>{{ variable.description }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="parameter-grid">
+                    <div class="parameter-item" *ngFor="let parameter of item.parameters">
+                      <label>{{ parameter.label }}</label>
+                      <div class="parameter-meta">
+                        <code>{{ parameter.paramKey }}</code>
+                        <span>Gia tri hien tai: {{ getParameterValueLabel(parameter) }}</span>
+                      </div>
+                      <input class="form-control" [value]="parameter.value ?? ''" (input)="updateParameterNumber(parameter, $event)" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
           </div>
         </div>
 

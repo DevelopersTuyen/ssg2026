@@ -5,6 +5,8 @@ import {
   AiForecastCard,
   AiLocalAnalysisSection,
   AiLocalDataStat,
+  AiLocalFinancialMetric,
+  AiLocalFinancialReport,
   AiLocalNewsItem,
   AiLocalOverviewResponse,
   AiLocalStorageStatus,
@@ -36,11 +38,13 @@ interface PromptTemplate {
 })
 export class AiLocalPage implements OnInit {
   private readonly autoAnalyzeStorageKey = 'ai-local.auto-analyze-enabled';
+  readonly newsPageSize = 5;
 
   selectedTab: LocalTab = 'overview';
   selectedExchange: ExchangeTab = 'HSX';
   currentPrompt = '';
   autoAnalyzeEnabled = false;
+  currentNewsPage = 1;
 
   loadingOverview = false;
   sendingPrompt = false;
@@ -53,6 +57,7 @@ export class AiLocalPage implements OnInit {
   datasetStats: AiLocalDataStat[] = [];
   focusSymbols: string[] = [];
   newsItems: AiLocalNewsItem[] = [];
+  financialReports: AiLocalFinancialReport[] = [];
   analysisSections: AiLocalAnalysisSection[] = [];
   cafefStorage: AiLocalStorageStatus | null = null;
 
@@ -215,7 +220,7 @@ export class AiLocalPage implements OnInit {
       });
   }
 
-  trackByLabel(_: number, item: AiStatusItem | AiLocalDataStat): string {
+  trackByLabel(_: number, item: AiStatusItem | AiLocalDataStat | AiLocalFinancialMetric): string {
     return item.label;
   }
 
@@ -239,12 +244,33 @@ export class AiLocalPage implements OnInit {
     return item.title;
   }
 
+  trackByFinancialReport(_: number, item: AiLocalFinancialReport): string {
+    return item.symbol;
+  }
+
   trackByNews(_: number, item: AiLocalNewsItem): string {
     return `${item.source}-${item.title}`;
   }
 
   trackByChat(_: number, item: ChatMessage): string {
     return `${item.role}-${item.time}-${item.content}`;
+  }
+
+  get pagedNewsItems(): AiLocalNewsItem[] {
+    const start = (this.currentNewsPage - 1) * this.newsPageSize;
+    return this.newsItems.slice(start, start + this.newsPageSize);
+  }
+
+  get totalNewsPages(): number {
+    return Math.max(1, Math.ceil(this.newsItems.length / this.newsPageSize));
+  }
+
+  get newsRangeLabel(): string {
+    if (!this.newsItems.length) {
+      return '0/0';
+    }
+    const end = Math.min(this.currentNewsPage * this.newsPageSize, this.newsItems.length);
+    return `${end}/${this.newsItems.length}`;
   }
 
   statusToneClass(item: AiStatusItem): string {
@@ -255,6 +281,10 @@ export class AiLocalPage implements OnInit {
 
   directionClass(item: AiForecastCard): string {
     return item.direction;
+  }
+
+  goToNewsPage(page: number): void {
+    this.currentNewsPage = Math.min(Math.max(page, 1), this.totalNewsPages);
   }
 
   private loadOverview(): void {
@@ -289,6 +319,8 @@ export class AiLocalPage implements OnInit {
     this.datasetStats = data.dataset_stats || [];
     this.focusSymbols = data.focus_symbols || [];
     this.newsItems = data.news_items || [];
+    this.currentNewsPage = 1;
+    this.financialReports = data.financial_reports || [];
     this.analysisSections = data.analysis_sections || [];
     this.cafefStorage = data.cafef_storage || null;
     this.connected = data.connected;

@@ -5,7 +5,7 @@ import { catchError } from 'rxjs/operators';
 import { environment } from 'src/environments/environment';
 
 export type ExchangeTab = 'HSX' | 'HNX' | 'UPCOM';
-export type SortTab = 'actives' | 'gainers' | 'losers';
+export type SortTab = 'all' | 'actives' | 'gainers' | 'losers';
 
 export interface ApiEnvelope<T = any> {
   data: T;
@@ -125,6 +125,43 @@ export interface LiveSymbolHourlyItem {
 export interface LiveSymbolHourlyResponse {
   symbol: string;
   items: LiveSymbolHourlyItem[];
+}
+
+export interface FinancialHighlightItem {
+  label: string;
+  value: string;
+  helper: string;
+}
+
+export interface FinancialStatementRow {
+  metricKey: string;
+  metricLabel: string;
+  reportPeriod: string | null;
+  periodType: string | null;
+  fiscalYear: number | null;
+  fiscalQuarter: number | null;
+  statementDate: string | null;
+  valueNumber: number | null;
+  valueText: string | null;
+  updatedAt: string | null;
+  rawJson: Record<string, any> | null;
+}
+
+export interface FinancialStatementSection {
+  type: string;
+  title: string;
+  latestPeriod: string | null;
+  periodType: string | null;
+  rowCount: number;
+  rows: FinancialStatementRow[];
+}
+
+export interface FinancialOverviewResponse {
+  symbol: string;
+  exchange: string | null;
+  updatedAt: string | null;
+  highlights: FinancialHighlightItem[];
+  sections: FinancialStatementSection[];
 }
 
 export interface NewsItem {
@@ -291,6 +328,20 @@ export interface AiLocalStorageStatus {
   checked_at: string;
 }
 
+export interface AiLocalFinancialMetric {
+  label: string;
+  value: string;
+  helper: string;
+}
+
+export interface AiLocalFinancialReport {
+  symbol: string;
+  exchange?: string | null;
+  updated_at?: string | null;
+  highlights: AiLocalFinancialMetric[];
+  note: string;
+}
+
 export interface AiLocalOverviewResponse {
   exchange: string;
   provider: string;
@@ -306,6 +357,7 @@ export interface AiLocalOverviewResponse {
   dataset_stats: AiLocalDataStat[];
   focus_symbols: string[];
   news_items: AiLocalNewsItem[];
+  financial_reports: AiLocalFinancialReport[];
   analysis_sections: AiLocalAnalysisSection[];
   cafef_storage: AiLocalStorageStatus;
   assistant_greeting: string;
@@ -407,6 +459,8 @@ export interface MarketSettingsData {
   autoRefreshSeconds: string;
   preloadCharts: boolean;
   cacheDays: string;
+  syncMarketData: boolean;
+  syncNewsData: boolean;
   syncCloud: boolean;
   downloadOnWifiOnly: boolean;
   aiEnabled: boolean;
@@ -421,6 +475,27 @@ export interface MarketSettingsData {
   biometricLogin: boolean;
   sessionTimeout: string;
   deviceBinding: boolean;
+}
+
+export interface MarketSyncJobStatus {
+  status: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  message: string | null;
+  batchIndex: number | null;
+  totalBatches: number | null;
+  remainingBatches: number | null;
+  itemsInBatch: number | null;
+  itemsResolved: number | null;
+}
+
+export interface MarketSyncStatusData {
+  quotes: MarketSyncJobStatus;
+  intraday: MarketSyncJobStatus;
+  indexDaily: MarketSyncJobStatus;
+  seedSymbols: MarketSyncJobStatus;
+  news: MarketSyncJobStatus;
+  checkedAt: string | null;
 }
 
 export interface RolePermissionUser {
@@ -473,6 +548,214 @@ export interface RolePermissionsOverviewResponse {
   logs: RolePermissionLog[];
 }
 
+export interface StrategyProfile {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+  createdBy?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface StrategyParameter {
+  id?: number;
+  paramKey: string;
+  label: string;
+  value: string | number | boolean | null;
+  dataType: 'number' | 'text' | 'boolean' | string;
+  minValue?: number | null;
+  maxValue?: number | null;
+  stepValue?: number | null;
+  uiControl?: string | null;
+}
+
+export interface StrategyFormula {
+  id: number;
+  profileId: number;
+  formulaCode: string;
+  label: string;
+  description?: string | null;
+  expression: string;
+  resultType: string;
+  displayOrder: number;
+  isEditable: boolean;
+  isEnabled: boolean;
+  parameters: StrategyParameter[];
+}
+
+export interface StrategyScreenRule {
+  id: number;
+  profileId: number;
+  layerCode: 'qualitative' | 'quantitative' | 'technical' | string;
+  ruleCode: string;
+  label: string;
+  expression: string;
+  severity: string;
+  isRequired: boolean;
+  isEnabled: boolean;
+  displayOrder: number;
+  parameters: StrategyParameter[];
+}
+
+export interface StrategyAlertRule {
+  id: number;
+  profileId: number;
+  ruleCode: string;
+  label: string;
+  expression: string;
+  severity: string;
+  cooldownMinutes: number;
+  notifyTelegram: boolean;
+  notifyInApp: boolean;
+  messageTemplate?: string | null;
+  isEnabled: boolean;
+  displayOrder: number;
+  parameters: StrategyParameter[];
+}
+
+export interface StrategyChecklistItem {
+  id: number;
+  profileId: number;
+  checklistType: string;
+  itemCode: string;
+  label: string;
+  expression: string;
+  isRequired: boolean;
+  isEnabled: boolean;
+  displayOrder: number;
+  parameters: StrategyParameter[];
+}
+
+export interface StrategyVersion {
+  id: number;
+  versionNo: number;
+  changeSummary?: string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
+}
+
+export interface StrategyProfileConfigResponse {
+  profile: StrategyProfile;
+  formulas: StrategyFormula[];
+  screenRules: StrategyScreenRule[];
+  alertRules: StrategyAlertRule[];
+  checklists: StrategyChecklistItem[];
+  versions: StrategyVersion[];
+}
+
+export interface StrategyRuleResult {
+  id: number;
+  layerCode?: string;
+  ruleCode: string;
+  label: string;
+  expression: string;
+  severity: string;
+  isRequired: boolean;
+  passed: boolean;
+  message: string;
+  parameters: StrategyParameter[];
+}
+
+export interface StrategyDriver {
+  label: string;
+  value: number;
+}
+
+export interface StrategyScoredItem {
+  rank: number;
+  symbol: string;
+  name?: string | null;
+  exchange: string;
+  price: number;
+  changePercent: number;
+  tradingValue: number;
+  volume: number;
+  currentPrice: number;
+  fairValue: number | null;
+  marginOfSafety: number;
+  qScore: number;
+  lScore: number;
+  mScore: number;
+  pScore: number;
+  winningScore: number;
+  riskScore: number;
+  isWatchlist: boolean;
+  newsMentions: number;
+  passedLayer1: boolean;
+  passedLayer2: boolean;
+  passedLayer3: boolean;
+  passedAllLayers: boolean;
+  metrics: Record<string, any>;
+  layerResults: StrategyRuleResult[];
+  alertResults: StrategyRuleResult[];
+  checklistResults: StrategyRuleResult[];
+  explanation: {
+    topDrivers: StrategyDriver[];
+    ruleResults: StrategyRuleResult[];
+    alerts: StrategyRuleResult[];
+    checklists: StrategyRuleResult[];
+  };
+}
+
+export interface StrategyPagedResponse {
+  page: number;
+  pageSize: number;
+  total: number;
+  items: StrategyScoredItem[];
+  summary?: {
+    passed: number;
+    total: number;
+    passRate: number;
+  };
+}
+
+export interface StrategySummaryCard {
+  label: string;
+  value: string | number;
+  helper: string;
+}
+
+export interface StrategyRiskOverviewResponse {
+  profile: StrategyProfile;
+  summaryCards: StrategySummaryCard[];
+  highRiskItems: StrategyScoredItem[];
+}
+
+export interface StrategyJournalEntry {
+  id: number;
+  profileId?: number | null;
+  symbol: string;
+  tradeSide: string;
+  entryPrice?: number | null;
+  exitPrice?: number | null;
+  stopLossPrice?: number | null;
+  positionSize?: number | null;
+  checklistResult?: Record<string, any>;
+  notes?: string | null;
+  mistakeTags: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface StrategyOverviewResponse {
+  profiles: StrategyProfile[];
+  activeProfile: StrategyProfile;
+  configSummary: {
+    formulaCount: number;
+    screenRuleCount: number;
+    alertRuleCount: number;
+    checklistCount: number;
+    versionCount: number;
+  };
+  rankings: StrategyPagedResponse;
+  screener: StrategyPagedResponse;
+  risk: StrategyRiskOverviewResponse;
+  journal: StrategyJournalEntry[];
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -502,10 +785,21 @@ export class MarketApiService {
     );
   }
 
-  getLiveIndexSeries(exchange: string): Observable<LiveIndexSeriesResponse> {
+  getLiveIndexSeries(
+    exchange: string,
+    options?: { days?: number; preferDaily?: boolean }
+  ): Observable<LiveIndexSeriesResponse> {
+    const params: Record<string, string> = { exchange };
+    if (options?.days) {
+      params['days'] = `${options.days}`;
+    }
+    if (options?.preferDaily) {
+      params['prefer_daily'] = 'true';
+    }
+
     return this.http
       .get<LiveIndexSeriesResponse>(`${this.baseUrl}/api/live/index-series`, {
-        params: { exchange },
+        params,
       })
       .pipe(
         catchError(() =>
@@ -536,7 +830,7 @@ export class MarketApiService {
     exchange: ExchangeTab,
     sort: SortTab = 'actives',
     page = 1,
-    pageSize = 5000,
+    pageSize = 50,
     keyword?: string
   ): Observable<LiveStocksResponse> {
     const params: Record<string, string | number> = {
@@ -592,6 +886,16 @@ export class MarketApiService {
           })
         )
       );
+  }
+
+  getSymbolFinancials(symbol: string, limitPerSection = 24): Observable<FinancialOverviewResponse | null> {
+    return this.http
+      .get<FinancialOverviewResponse>(`${this.baseUrl}/api/live/symbols/${symbol}/financials`, {
+        params: {
+          limit_per_section: limitPerSection,
+        },
+      })
+      .pipe(catchError(() => of(null)));
   }
 
   getNews(limit = 10): Observable<NewsItem[]> {
@@ -775,6 +1079,16 @@ export class MarketApiService {
     );
   }
 
+  getSyncStatus(): Observable<ApiEnvelope<MarketSyncStatusData | null>> {
+    return this.http.get<ApiEnvelope<MarketSyncStatusData>>(`${this.baseUrl}/api/settings/sync-status`).pipe(
+      catchError(() =>
+        of({
+          data: null,
+        })
+      )
+    );
+  }
+
   getRolePermissionsOverview(roleKey?: string): Observable<ApiEnvelope<RolePermissionsOverviewResponse | null>> {
     const options = roleKey ? { params: { role_key: roleKey } } : {};
     return this.http
@@ -879,5 +1193,141 @@ export class MarketApiService {
           })
         )
       );
+  }
+
+  getStrategyOverview(profileId?: number): Observable<ApiEnvelope<StrategyOverviewResponse | null>> {
+    const params: Record<string, string | number | boolean> = {};
+    if (profileId) {
+      params['profile_id'] = profileId;
+    }
+    return this.http
+      .get<ApiEnvelope<StrategyOverviewResponse>>(`${this.baseUrl}/api/strategy/overview`, { params })
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  listStrategyProfiles(): Observable<ApiEnvelope<StrategyProfile[]>> {
+    return this.http
+      .get<ApiEnvelope<StrategyProfile[]>>(`${this.baseUrl}/api/strategy/profiles`)
+      .pipe(catchError(() => of({ data: [] })));
+  }
+
+  createStrategyProfile(body: {
+    code: string;
+    name: string;
+    description?: string;
+  }): Observable<ApiEnvelope<StrategyProfile | null>> {
+    return this.http
+      .post<ApiEnvelope<StrategyProfile>>(`${this.baseUrl}/api/strategy/profiles`, body)
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  activateStrategyProfile(profileId: number): Observable<ApiEnvelope<StrategyProfile | null>> {
+    return this.http
+      .post<ApiEnvelope<StrategyProfile>>(`${this.baseUrl}/api/strategy/profiles/${profileId}/activate`, {})
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  getStrategyProfileConfig(profileId: number): Observable<ApiEnvelope<StrategyProfileConfigResponse | null>> {
+    return this.http
+      .get<ApiEnvelope<StrategyProfileConfigResponse>>(`${this.baseUrl}/api/strategy/profiles/${profileId}/config`)
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  saveStrategyProfileConfig(
+    profileId: number,
+    body: StrategyProfileConfigResponse
+  ): Observable<ApiEnvelope<StrategyProfileConfigResponse | null>> {
+    return this.http
+      .put<ApiEnvelope<StrategyProfileConfigResponse>>(`${this.baseUrl}/api/strategy/profiles/${profileId}/config`, body)
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  publishStrategyProfile(profileId: number, summary?: string): Observable<ApiEnvelope<{ versionId: number; versionNo: number } | null>> {
+    return this.http
+      .post<ApiEnvelope<{ versionId: number; versionNo: number }>>(`${this.baseUrl}/api/strategy/profiles/${profileId}/publish`, { summary })
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  getStrategyRankings(options: {
+    profileId: number;
+    exchange?: string;
+    keyword?: string;
+    watchlistOnly?: boolean;
+    page?: number;
+    pageSize?: number;
+  }): Observable<ApiEnvelope<StrategyPagedResponse | null>> {
+    const params: Record<string, string | number | boolean> = {
+      profile_id: options.profileId,
+      page: options.page ?? 1,
+      page_size: options.pageSize ?? 20,
+    };
+    if (options.exchange) params['exchange'] = options.exchange;
+    if (options.keyword) params['keyword'] = options.keyword;
+    if (options.watchlistOnly) params['watchlist_only'] = true;
+    return this.http
+      .get<ApiEnvelope<StrategyPagedResponse>>(`${this.baseUrl}/api/strategy/scoring/rankings`, { params })
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  getStrategySymbolScore(profileId: number, symbol: string): Observable<ApiEnvelope<StrategyScoredItem | null>> {
+    return this.http
+      .get<ApiEnvelope<StrategyScoredItem>>(`${this.baseUrl}/api/strategy/scoring/symbol/${symbol}`, {
+        params: { profile_id: profileId },
+      })
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  runStrategyScreener(options: {
+    profileId: number;
+    exchange?: string;
+    keyword?: string;
+    watchlistOnly?: boolean;
+    page?: number;
+    pageSize?: number;
+  }): Observable<ApiEnvelope<StrategyPagedResponse | null>> {
+    const params: Record<string, string | number | boolean> = {
+      profile_id: options.profileId,
+      page: options.page ?? 1,
+      page_size: options.pageSize ?? 20,
+    };
+    if (options.exchange) params['exchange'] = options.exchange;
+    if (options.keyword) params['keyword'] = options.keyword;
+    if (options.watchlistOnly) params['watchlist_only'] = true;
+    return this.http
+      .get<ApiEnvelope<StrategyPagedResponse>>(`${this.baseUrl}/api/strategy/screener/run`, { params })
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  getStrategyRiskOverview(profileId: number): Observable<ApiEnvelope<StrategyRiskOverviewResponse | null>> {
+    return this.http
+      .get<ApiEnvelope<StrategyRiskOverviewResponse>>(`${this.baseUrl}/api/strategy/risk/overview`, {
+        params: { profile_id: profileId },
+      })
+      .pipe(catchError(() => of({ data: null })));
+  }
+
+  listStrategyJournal(limit = 50): Observable<ApiEnvelope<StrategyJournalEntry[]>> {
+    return this.http
+      .get<ApiEnvelope<StrategyJournalEntry[]>>(`${this.baseUrl}/api/strategy/journal`, {
+        params: { limit },
+      })
+      .pipe(catchError(() => of({ data: [] })));
+  }
+
+  createStrategyJournal(body: {
+    profile_id?: number | null;
+    symbol: string;
+    trade_side: string;
+    entry_price?: number | null;
+    exit_price?: number | null;
+    stop_loss_price?: number | null;
+    position_size?: number | null;
+    checklist_result_json?: Record<string, any>;
+    notes?: string;
+    mistake_tags_json?: string[];
+  }): Observable<ApiEnvelope<StrategyJournalEntry | null>> {
+    return this.http
+      .post<ApiEnvelope<StrategyJournalEntry>>(`${this.baseUrl}/api/strategy/journal`, body)
+      .pipe(catchError(() => of({ data: null })));
   }
 }

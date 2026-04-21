@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 
 import { RolePermissionsPageRoutingModule } from './role-permissions-routing.module';
+import { SharedModule } from '../../shared/shared.module';
 
 import { RolePermissionsPage } from './role-permissions.page';
 
@@ -13,6 +14,7 @@ import { RolePermissionsPage } from './role-permissions.page';
     CommonModule,
     FormsModule,
     IonicModule,
+    SharedModule,
     RolePermissionsPageRoutingModule
   ],
   declarations: [RolePermissionsPage]

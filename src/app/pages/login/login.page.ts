@@ -2,10 +2,11 @@ import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
+import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import { AuthService } from 'src/app/core/services/auth.service';
 
 interface LoginHighlight {
-  label: string;
+  labelKey: string;
   value: string;
   tone: 'up' | 'neutral';
 }
@@ -36,30 +37,29 @@ export class LoginPage {
   showPassword = false;
   loading = false;
   errorMessage = '';
-  helpMessage =
-    'Dùng tài khoản nội bộ để truy cập dữ liệu thị trường, cảnh báo và AI Agent.';
+  helpMessage = '';
 
   readonly highlights: LoginHighlight[] = [
-    { label: 'Độ phủ dữ liệu', value: 'HSX / HNX / UPCOM', tone: 'neutral' },
-    { label: 'Tần suất cập nhật', value: 'Near real-time', tone: 'up' },
-    { label: 'Tác vụ AI', value: 'Watchlist + Summary', tone: 'up' },
+    { labelKey: 'login.highlightCoverage', value: 'HSX / HNX / UPCOM', tone: 'neutral' },
+    { labelKey: 'login.highlightRefresh', value: 'Near real-time', tone: 'up' },
+    { labelKey: 'login.highlightAi', value: 'Watchlist + Summary', tone: 'up' },
   ];
 
   readonly features: LoginFeature[] = [
     {
       icon: 'pulse-outline',
       title: 'Market stream',
-      text: 'Theo dõi biến động chỉ số, dòng tiền và mã nổi bật trên cùng một màn hình.',
+      text: 'Theo doi bien dong chi so, dong tien va ma noi bat tren cung mot man hinh.',
     },
     {
       icon: 'sparkles-outline',
       title: 'AI context',
-      text: 'AI Agent trả lời theo watchlist, tin tức và dữ liệu thị trường đang có.',
+      text: 'AI Agent tra loi theo watchlist, tin tuc va du lieu thi truong dang co.',
     },
     {
       icon: 'shield-checkmark-outline',
       title: 'Role control',
-      text: 'Phân quyền theo người dùng để chốt đúng dashboard và tác vụ được phép dùng.',
+      text: 'Phan quyen theo nguoi dung de chot dung dashboard va tac vu duoc phep dung.',
     },
   ];
 
@@ -71,8 +71,11 @@ export class LoginPage {
 
   constructor(
     private router: Router,
-    private auth: AuthService
-  ) {}
+    private auth: AuthService,
+    private i18n: AppI18nService
+  ) {
+    this.helpMessage = this.i18n.translate('login.helpDefault');
+  }
 
   get canSubmit(): boolean {
     return Boolean(this.companyCode.trim() && this.username.trim() && this.password.trim()) && !this.loading;
@@ -93,12 +96,12 @@ export class LoginPage {
     this.errorMessage = '';
 
     if (!this.companyCode.trim()) {
-      this.errorMessage = 'Bạn chưa nhập mã công ty.';
+      this.errorMessage = this.i18n.translate('login.errorCompany');
       return;
     }
 
     if (!this.username.trim() || !this.password.trim()) {
-      this.errorMessage = 'Bạn cần nhập đầy đủ tài khoản và mật khẩu.';
+      this.errorMessage = this.i18n.translate('login.errorCredentials');
       return;
     }
 
@@ -110,7 +113,7 @@ export class LoginPage {
       );
 
       if (!session) {
-        this.errorMessage = 'Đăng nhập thất bại. Kiểm tra backend auth hoặc thông tin tài khoản.';
+        this.errorMessage = this.i18n.translate('login.errorFailed');
         return;
       }
 
@@ -123,6 +126,6 @@ export class LoginPage {
 
   forgotPassword(): void {
     this.errorMessage = '';
-    this.helpMessage = 'Liên hệ quản trị hệ thống để cấp lại mật khẩu hoặc mở khóa phiên đăng nhập.';
+    this.helpMessage = this.i18n.translate('login.helpForgot');
   }
 }

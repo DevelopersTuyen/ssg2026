@@ -12,6 +12,13 @@ INDEX_EXCHANGE_MAP = {
     "UPCOMINDEX": "UPCOM",
 }
 
+EXCHANGE_ALIAS_MAP = {
+    "HOSE": "HSX",
+    "HSX": "HSX",
+    "HNX": "HNX",
+    "UPCOM": "UPCOM",
+}
+
 
 def resolve_index_exchange(index_symbol: str) -> str:
     symbol = str(index_symbol or "").upper()
@@ -24,6 +31,15 @@ def resolve_index_exchange(index_symbol: str) -> str:
     if symbol.startswith("VN"):
         return "HSX"
     return "INDEX"
+
+
+def normalize_exchange(exchange: str | None) -> str | None:
+    if exchange is None:
+        return None
+    value = str(exchange).strip().upper()
+    if not value:
+        return None
+    return EXCHANGE_ALIAS_MAP.get(value, value)
 
 
 class NormalizationService:
@@ -54,6 +70,14 @@ class NormalizationService:
             return value.replace(tzinfo=None)
         if isinstance(value, date):
             return datetime.combine(value, datetime.min.time())
+        if isinstance(value, (int, float)):
+            try:
+                timestamp = float(value)
+                if timestamp > 1_000_000_000_000:
+                    timestamp /= 1000
+                return datetime.fromtimestamp(timestamp).replace(tzinfo=None)
+            except Exception:
+                pass
         if hasattr(value, "to_pydatetime"):
             try:
                 return value.to_pydatetime().replace(tzinfo=None)
@@ -80,15 +104,30 @@ class NormalizationService:
         if not symbol:
             return None
 
-        price = self.to_float(self.pick(row, ["price", "match_price", "lastPrice", "last_price", "close", "Close", "last", "Last"]))
+        price = self.to_float(
+            self.pick(
+                row,
+                [
+                    "price",
+                    "match_price",
+                    "lastPrice",
+                    "last_price",
+                    "close",
+                    "close_price",
+                    "Close",
+                    "last",
+                    "Last",
+                ],
+            )
+        )
         ref = self.to_float(self.pick(row, ["reference_price", "reference", "refPrice", "prevClose", "prior_close", "basic_price", "referencePrice"]))
         open_price = self.to_float(self.pick(row, ["open", "Open", "open_price"]))
         high_price = self.to_float(self.pick(row, ["high", "High", "high_price"]))
         low_price = self.to_float(self.pick(row, ["low", "Low", "low_price"]))
-        volume = self.to_float(self.pick(row, ["volume", "Volume", "match_volume", "total_volume"]))
+        volume = self.to_float(self.pick(row, ["volume", "Volume", "match_volume", "total_volume", "volume_accumulated"]))
         trading_value = self.to_float(self.pick(row, ["value", "Value", "trading_value", "match_value", "total_value"]))
-        change_value = self.to_float(self.pick(row, ["change_value", "change", "priceChange", "Change"]))
-        change_percent = self.to_float(self.pick(row, ["change_percent", "pct_change", "percentChange", "%", "ChangePct"]))
+        change_value = self.to_float(self.pick(row, ["change_value", "change", "priceChange", "price_change", "Change"]))
+        change_percent = self.to_float(self.pick(row, ["change_percent", "pct_change", "percentChange", "percent_change", "%", "ChangePct"]))
         if change_value is None and price is not None and ref not in (None, 0):
             change_value = price - ref
         if change_percent is None and change_value is not None and ref not in (None, 0):
@@ -101,7 +140,7 @@ class NormalizationService:
 
         return {
             "symbol": symbol,
-            "exchange": str(self.pick(row, ["exchange", "market", "Exchange"]) or default_exchange or "").upper() or None,
+            "exchange": normalize_exchange(self.pick(row, ["exchange", "market", "Exchange"]) or default_exchange),
             "source": source,
             "price": price,
             "reference_price": ref,
@@ -129,7 +168,7 @@ class NormalizationService:
 
         return {
             "symbol": symbol,
-            "exchange": exchange,
+            "exchange": normalize_exchange(exchange),
             "source": source,
             "point_time": point_time,
             "price": price,

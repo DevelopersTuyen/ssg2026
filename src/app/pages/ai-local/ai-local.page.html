@@ -156,11 +156,14 @@
               <span class="panel-kicker">CAFEF LOCAL FEED</span>
               <h2>Tin tuc dua vao local context</h2>
             </div>
+            <span class="panel-badge">{{ newsRangeLabel }}</span>
           </div>
+
+          <div class="empty-state" *ngIf="!newsItems.length">Chua co tin CafeF trong local context.</div>
 
           <a
             class="news-item"
-            *ngFor="let item of newsItems; trackBy: trackByNews"
+            *ngFor="let item of pagedNewsItems; trackBy: trackByNews"
             [href]="item.url || null"
             target="_blank"
             rel="noreferrer"
@@ -170,6 +173,20 @@
             <p>{{ item.summary }}</p>
             <small>{{ item.published_at || 'Moi cap nhat' }}</small>
           </a>
+
+          <div class="pagination-row" *ngIf="newsItems.length > newsPageSize">
+            <button type="button" (click)="goToNewsPage(currentNewsPage - 1)" [disabled]="currentNewsPage === 1">
+              Truoc
+            </button>
+            <span>Trang {{ currentNewsPage }}/{{ totalNewsPages }}</span>
+            <button
+              type="button"
+              (click)="goToNewsPage(currentNewsPage + 1)"
+              [disabled]="currentNewsPage === totalNewsPages"
+            >
+              Sau
+            </button>
+          </div>
         </article>
       </section>
 
@@ -187,6 +204,28 @@
             <p>{{ section.summary }}</p>
             <ul *ngIf="section.bullets?.length" class="analysis-list">
               <li *ngFor="let bullet of section.bullets; trackBy: trackByPrompt">{{ bullet }}</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel full-width-panel" *ngIf="financialReports.length">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-kicker">FINANCIAL REPORTS</span>
+            <h2>Du lieu bao cao tai chinh dang dua vao AI Local</h2>
+          </div>
+          <span class="panel-badge">{{ financialReports.length }} doanh nghiep</span>
+        </div>
+
+        <div class="analysis-grid">
+          <article class="analysis-card" *ngFor="let report of financialReports; trackBy: trackByFinancialReport">
+            <h3>{{ report.symbol }} <span *ngIf="report.exchange">/ {{ report.exchange }}</span></h3>
+            <p>{{ report.note }}</p>
+            <ul *ngIf="report.highlights.length" class="analysis-list">
+              <li *ngFor="let metric of report.highlights; trackBy: trackByLabel">
+                {{ metric.label }}: {{ metric.value }} <span *ngIf="metric.helper">({{ metric.helper }})</span>
+              </li>
             </ul>
           </article>
         </div>
@@ -329,18 +368,42 @@
         </div>
       </section>
 
+      <section class="panel full-width-panel" *ngIf="financialReports.length">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-kicker">FINANCIAL COVERAGE</span>
+            <h2>Doanh nghiep dang co bao cao tai chinh trong local context</h2>
+          </div>
+        </div>
+
+        <div class="analysis-grid">
+          <article class="analysis-card" *ngFor="let report of financialReports; trackBy: trackByFinancialReport">
+            <h3>{{ report.symbol }} <span *ngIf="report.exchange">/ {{ report.exchange }}</span></h3>
+            <p>{{ report.note }}</p>
+            <ul *ngIf="report.highlights.length" class="analysis-list">
+              <li *ngFor="let metric of report.highlights; trackBy: trackByLabel">
+                {{ metric.label }}: {{ metric.value }} <span *ngIf="metric.helper">({{ metric.helper }})</span>
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
       <section class="panel full-width-panel">
         <div class="panel-heading">
           <div>
             <span class="panel-kicker">NEWS CONTEXT</span>
             <h2>Toan bo tin dang duoc AI Local doc</h2>
           </div>
+          <span class="panel-badge">{{ newsRangeLabel }}</span>
         </div>
 
-        <div class="news-grid">
+        <div class="empty-state" *ngIf="!newsItems.length">Chua co tin CafeF trong local context.</div>
+
+        <div class="news-grid" *ngIf="newsItems.length">
           <a
             class="news-item"
-            *ngFor="let item of newsItems; trackBy: trackByNews"
+            *ngFor="let item of pagedNewsItems; trackBy: trackByNews"
             [href]="item.url || null"
             target="_blank"
             rel="noreferrer"
@@ -350,6 +413,20 @@
             <p>{{ item.summary }}</p>
             <small>{{ item.published_at || 'Moi cap nhat' }}</small>
           </a>
+        </div>
+
+        <div class="pagination-row" *ngIf="newsItems.length > newsPageSize">
+          <button type="button" (click)="goToNewsPage(currentNewsPage - 1)" [disabled]="currentNewsPage === 1">
+            Truoc
+          </button>
+          <span>Trang {{ currentNewsPage }}/{{ totalNewsPages }}</span>
+          <button
+            type="button"
+            (click)="goToNewsPage(currentNewsPage + 1)"
+            [disabled]="currentNewsPage === totalNewsPages"
+          >
+            Sau
+          </button>
         </div>
       </section>
     </ng-container>

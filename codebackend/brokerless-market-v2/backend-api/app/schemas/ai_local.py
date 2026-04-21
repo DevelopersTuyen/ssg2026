@@ -34,6 +34,20 @@ class AiLocalStorageStatus(BaseModel):
     checked_at: datetime
 
 
+class AiLocalFinancialMetric(BaseModel):
+    label: str
+    value: str
+    helper: str = ""
+
+
+class AiLocalFinancialReport(BaseModel):
+    symbol: str
+    exchange: str | None = None
+    updated_at: str | None = None
+    highlights: list[AiLocalFinancialMetric] = Field(default_factory=list)
+    note: str = ""
+
+
 class AiLocalOverviewResponse(BaseModel):
     exchange: str
     provider: str
@@ -49,6 +63,7 @@ class AiLocalOverviewResponse(BaseModel):
     dataset_stats: list[AiLocalDataStat]
     focus_symbols: list[str]
     news_items: list[AiLocalNewsItem]
+    financial_reports: list[AiLocalFinancialReport]
     analysis_sections: list[AiLocalAnalysisSection]
     cafef_storage: AiLocalStorageStatus
     assistant_greeting: str

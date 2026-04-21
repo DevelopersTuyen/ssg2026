@@ -25,3 +25,25 @@ export const loginRedirectGuard: CanActivateFn = () => {
 
   return true;
 };
+
+export const permissionGuard: CanActivateFn = (route) => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+
+  if (!auth.isAuthenticated()) {
+    auth.logout();
+    return router.createUrlTree(['/login']);
+  }
+
+  const requiredPermission = route.data?.['permission'];
+  if (!requiredPermission) {
+    return true;
+  }
+
+  const permissions = auth.profile?.permissions || [];
+  if (permissions.includes(requiredPermission)) {
+    return true;
+  }
+
+  return router.createUrlTree(['/tabs/dashboard']);
+};

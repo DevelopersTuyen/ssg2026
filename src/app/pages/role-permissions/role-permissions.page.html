@@ -2,31 +2,31 @@
   <div class="perm-page container-fluid py-3">
     <div class="perm-breadcrumb mb-3">
       <ion-icon name="shield-checkmark-outline"></ion-icon>
-      <span>He thong</span>
+      <span>{{ 'common.system' | translate }}</span>
       <span class="sep">›</span>
-      <span>Role Permissions</span>
+      <span>{{ 'tabs.permissions' | translate }}</span>
     </div>
 
     <div class="perm-shell">
       <div class="perm-header">
         <div>
           <div class="page-kicker">RBAC Console</div>
-          <h1>Quan tri user, role va permission matrix</h1>
-          <p>Du lieu doc va ghi truc tiep tu backend auth. Man hinh nay phuc vu van hanh va demo cho cap quan ly.</p>
+          <h1>{{ 'permissions.title' | translate }}</h1>
+          <p>{{ 'permissions.subtitle' | translate }}</p>
         </div>
 
         <div class="perm-status">
           <span class="state-chip" [class.readonly]="!canManage">
-            {{ canManage ? 'can-manage' : 'read-only' }}
+            {{ canManage ? ('common.canManage' | translate) : ('common.readOnly' | translate) }}
           </span>
           <button type="button" class="btn btn-outline-secondary" (click)="loadOverview(selectedMatrixRole)" [disabled]="loading || saving">
-            Tai lai
+            {{ 'common.reload' | translate }}
           </button>
         </div>
       </div>
 
       <div class="status-row" *ngIf="loading || notice || error">
-        <div class="status-pill loading" *ngIf="loading">Dang tai du lieu...</div>
+        <div class="status-pill loading" *ngIf="loading">{{ 'permissions.loading' | translate }}</div>
         <div class="status-pill success" *ngIf="notice">{{ notice }}</div>
         <div class="status-pill error" *ngIf="error">{{ error }}</div>
       </div>
@@ -39,7 +39,7 @@
           [class.active]="selectedTab === tab.key"
           (click)="selectTab(tab.key)"
         >
-          {{ tab.label }}
+          {{ tab.labelKey | translate }}
         </button>
       </div>
 

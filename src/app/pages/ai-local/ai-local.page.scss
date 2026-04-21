@@ -426,6 +426,14 @@
   text-decoration: none;
 }
 
+.empty-state {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px dashed rgba(129, 151, 173, 0.3);
+  background: rgba(243, 248, 252, 0.8);
+  color: #5b6e84;
+}
+
 .source {
   color: #13517f;
 }
@@ -608,6 +616,35 @@
 
 .storage-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pagination-row {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pagination-row span {
+  color: #5b6e84;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.pagination-row button {
+  border: 0;
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: #eaf1f7;
+  color: #133c5f;
+  font-weight: 700;
+}
+
+.pagination-row button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .full-width-panel {

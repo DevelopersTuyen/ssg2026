@@ -1,0 +1,769 @@
+<ion-content [fullscreen]="true" class="strategy-content">
+  <div class="strategy-shell">
+    <section class="hero-panel">
+      <div class="hero-copy">
+        <div class="page-kicker">Strategy OS</div>
+        <h1>Strategy Hub cho hệ thống AI chứng khoán</h1>
+        <p>Quản lý công thức, bộ lọc, cảnh báo, risk và nhật ký giao dịch theo đúng logic mà sếp đang yêu cầu.</p>
+      </div>
+
+      <div class="hero-actions">
+        <select class="hero-select" [(ngModel)]="activeProfileId" (change)="onProfileChange()">
+          <option *ngFor="let profile of profiles; trackBy: trackByCode" [ngValue]="profile.id">
+            {{ profile.name }}
+          </option>
+        </select>
+        <button type="button" class="btn-light" (click)="refreshData()" [disabled]="loading">Tải lại</button>
+        <button type="button" class="btn-light" routerLink="/tabs/market-settings">Market Settings</button>
+      </div>
+    </section>
+
+    <div class="status-row" *ngIf="loading || message || error">
+      <div class="status-pill loading" *ngIf="loading">Đang tải dữ liệu strategy...</div>
+      <div class="status-pill success" *ngIf="message">{{ message }}</div>
+      <div class="status-pill error" *ngIf="error">{{ error }}</div>
+    </div>
+
+    <section class="overview-grid" *ngIf="overview">
+      <article class="overview-card">
+        <span>Formula</span>
+        <strong>{{ overview.configSummary.formulaCount }}</strong>
+        <small>Công thức đang hoạt động</small>
+      </article>
+      <article class="overview-card">
+        <span>Screen Rules</span>
+        <strong>{{ overview.configSummary.screenRuleCount }}</strong>
+        <small>Rule 3 tầng lọc</small>
+      </article>
+      <article class="overview-card">
+        <span>Alert Rules</span>
+        <strong>{{ overview.configSummary.alertRuleCount }}</strong>
+        <small>Cảnh báo sớm</small>
+      </article>
+      <article class="overview-card">
+        <span>Versions</span>
+        <strong>{{ overview.configSummary.versionCount }}</strong>
+        <small>Lịch sử publish</small>
+      </article>
+    </section>
+
+    <div class="strategy-tabs">
+      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'overview'" (click)="selectTab('overview')">Overview</button>
+      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'screener'" (click)="selectTab('screener')">Screener</button>
+      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'scoring'" (click)="selectTab('scoring')">Scoring</button>
+      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'risk'" (click)="selectTab('risk')">Risk</button>
+      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'journal'" (click)="selectTab('journal')">Journal</button>
+    </div>
+
+    <div [ngSwitch]="selectedTab">
+      <section *ngSwitchCase="'overview'" class="workspace-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Top ranking hiện tại</div>
+              <div class="panel-subtitle">Những mã được Winning Score cao nhất theo profile đang chọn.</div>
+            </div>
+          </div>
+          <div class="score-list">
+            <button type="button" class="score-row" *ngFor="let item of rankings?.items || []" (click)="chooseScoreItem(item)">
+              <div>
+                <strong>{{ item.symbol }}</strong>
+                <small>{{ item.exchange }} · Score {{ item.winningScore | number:'1.0-0' }}</small>
+              </div>
+              <span [class.positive]="item.changePercent >= 0" [class.negative]="item.changePercent < 0">
+                {{ item.changePercent | number:'1.2-2' }}%
+              </span>
+            </button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Top driver</div>
+              <div class="panel-subtitle">Vì sao mã đang chọn đạt điểm cao hoặc thấp.</div>
+            </div>
+          </div>
+          <ng-container *ngIf="selectedScoreItem; else noScoreItem">
+            <div class="symbol-card">
+              <div>
+                <h3>{{ selectedScoreItem.symbol }}</h3>
+                <p>{{ selectedScoreItem.name || 'Chưa có tên doanh nghiệp' }}</p>
+              </div>
+              <div class="symbol-score">{{ selectedScoreItem.winningScore | number:'1.0-0' }}</div>
+            </div>
+            <div class="driver-grid">
+              <div class="driver-card" *ngFor="let driver of selectedScoreItem.explanation.topDrivers">
+                <span>{{ driver.label }}</span>
+                <strong>{{ driver.value | number:'1.0-0' }}</strong>
+              </div>
+            </div>
+            <div class="status-chip-row">
+              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer1">Layer 1</span>
+              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer2">Layer 2</span>
+              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer3">Layer 3</span>
+              <span class="status-chip" [class.risk]="selectedScoreItem.riskScore >= 65">Risk {{ selectedScoreItem.riskScore | number:'1.0-0' }}</span>
+            </div>
+          </ng-container>
+          <ng-template #noScoreItem>
+            <div class="empty-state">Chưa có mã nào để hiển thị chi tiết.</div>
+          </ng-template>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Risk snapshot</div>
+              <div class="panel-subtitle">Các điểm cần xem đầu tiên trong risk review.</div>
+            </div>
+          </div>
+          <div class="risk-summary" *ngIf="risk">
+            <div class="driver-card" *ngFor="let item of risk.summaryCards">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.helper }}</small>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section *ngSwitchCase="'screener'" class="panel page-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">3-layer screener</div>
+            <div class="panel-subtitle">Lọc định tính, định lượng và kỹ thuật theo cấu hình động.</div>
+          </div>
+          <div class="toolbar">
+            <select class="toolbar-select" [(ngModel)]="screenerExchange">
+              <option value="ALL">Tất cả sàn</option>
+              <option value="HSX">HSX</option>
+              <option value="HNX">HNX</option>
+              <option value="UPCOM">UPCOM</option>
+            </select>
+            <input class="toolbar-input" [(ngModel)]="screenerKeyword" placeholder="Tìm mã" />
+            <label class="toolbar-checkbox">
+              <input type="checkbox" [(ngModel)]="screenerWatchlistOnly" />
+              Watchlist
+            </label>
+            <button type="button" class="btn-primary" (click)="reloadScreener()">Chạy lọc</button>
+          </div>
+        </div>
+        <div class="result-summary" *ngIf="screener?.summary">
+          Pass {{ screener?.summary?.passed }}/{{ screener?.summary?.total }} mã · {{ screener?.summary?.passRate | number:'1.0-2' }}%
+        </div>
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Mã</th>
+                <th>Winning</th>
+                <th>Q/L/M/P</th>
+                <th>Margin</th>
+                <th>Layers</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of screener?.items || []" (click)="chooseScoreItem(item)">
+                <td>{{ item.rank }}</td>
+                <td>
+                  <strong>{{ item.symbol }}</strong>
+                  <small>{{ item.exchange }}</small>
+                </td>
+                <td>{{ item.winningScore | number:'1.0-0' }}</td>
+                <td>{{ item.qScore | number:'1.0-0' }}/{{ item.lScore | number:'1.0-0' }}/{{ item.mScore | number:'1.0-0' }}/{{ item.pScore | number:'1.0-0' }}</td>
+                <td>{{ item.marginOfSafety | percent:'1.0-1' }}</td>
+                <td>{{ item.passedLayer1 ? '1' : '-' }} {{ item.passedLayer2 ? '2' : '-' }} {{ item.passedLayer3 ? '3' : '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section *ngSwitchCase="'scoring'" class="workspace-grid">
+        <article class="panel panel-span-2">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Bảng xếp hạng scoring</div>
+              <div class="panel-subtitle">Xếp hạng universe theo Winning Score và hiển thị chi tiết điểm thành phần.</div>
+            </div>
+            <div class="toolbar">
+              <select class="toolbar-select" [(ngModel)]="scoringExchange">
+                <option value="ALL">Tất cả sàn</option>
+                <option value="HSX">HSX</option>
+                <option value="HNX">HNX</option>
+                <option value="UPCOM">UPCOM</option>
+              </select>
+              <input class="toolbar-input" [(ngModel)]="scoringKeyword" placeholder="Tìm mã" />
+              <label class="toolbar-checkbox">
+                <input type="checkbox" [(ngModel)]="scoringWatchlistOnly" />
+                Watchlist
+              </label>
+              <button type="button" class="btn-primary" (click)="reloadScoring()">Làm mới score</button>
+            </div>
+          </div>
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Mã</th>
+                  <th>Price</th>
+                  <th>Winning</th>
+                  <th>Risk</th>
+                  <th>News</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let item of rankings?.items || []" (click)="chooseScoreItem(item)" [class.selected]="selectedScoreItem?.symbol === item.symbol">
+                  <td>{{ item.rank }}</td>
+                  <td>{{ item.symbol }}</td>
+                  <td>{{ item.currentPrice | number:'1.0-2' }}</td>
+                  <td>{{ item.winningScore | number:'1.0-0' }}</td>
+                  <td>{{ item.riskScore | number:'1.0-0' }}</td>
+                  <td>{{ item.newsMentions }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel" *ngIf="selectedScoreItem">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">{{ selectedScoreItem.symbol }} breakdown</div>
+              <div class="panel-subtitle">Chi tiết công thức, signals và checklists.</div>
+            </div>
+          </div>
+          <div class="driver-grid">
+            <div class="driver-card">
+              <span>Fair Value</span>
+              <strong>{{ selectedScoreItem.fairValue | number:'1.0-2' }}</strong>
+            </div>
+            <div class="driver-card">
+              <span>Margin</span>
+              <strong>{{ selectedScoreItem.marginOfSafety | percent:'1.0-1' }}</strong>
+            </div>
+            <div class="driver-card">
+              <span>Change</span>
+              <strong>{{ selectedScoreItem.changePercent | number:'1.2-2' }}%</strong>
+            </div>
+            <div class="driver-card">
+              <span>Watchlist</span>
+              <strong>{{ selectedScoreItem.isWatchlist ? 'Có' : 'Không' }}</strong>
+            </div>
+          </div>
+
+          <div class="rule-list">
+            <div class="rule-group">
+              <h4>Layer rules</h4>
+              <div class="rule-item" *ngFor="let item of selectedScoreItem.layerResults">
+                <span>{{ item.label }}</span>
+                <strong [class.pass]="item.passed" [class.fail]="!item.passed">{{ item.passed ? 'PASS' : 'FAIL' }}</strong>
+              </div>
+            </div>
+            <div class="rule-group">
+              <h4>Alert rules</h4>
+              <div class="rule-item" *ngFor="let item of selectedScoreItem.alertResults">
+                <span>{{ item.label }}</span>
+                <strong [class.fail]="item.passed">{{ item.passed ? 'TRIGGER' : 'OK' }}</strong>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section *ngSwitchCase="'risk'" class="panel page-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Risk review</div>
+            <div class="panel-subtitle">Dùng để stress test watchlist và xác định mã cần xem xét stop-loss.</div>
+          </div>
+          <button type="button" class="btn-primary" (click)="reloadRisk()">Quét lại risk</button>
+        </div>
+        <div class="risk-summary" *ngIf="risk">
+          <div class="driver-card" *ngFor="let item of risk.summaryCards">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.helper }}</small>
+          </div>
+        </div>
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Winning</th>
+                <th>Risk</th>
+                <th>Margin</th>
+                <th>Triggers</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of risk?.highRiskItems || []" (click)="chooseScoreItem(item)">
+                <td>{{ item.symbol }}</td>
+                <td>{{ item.winningScore | number:'1.0-0' }}</td>
+                <td>{{ item.riskScore | number:'1.0-0' }}</td>
+                <td>{{ item.marginOfSafety | percent:'1.0-1' }}</td>
+                <td>{{ item.alertResults.length }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section *ngSwitchCase="'journal'" class="workspace-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Thêm nhật ký giao dịch</div>
+              <div class="panel-subtitle">Dùng để tự debug lỗi và kiểm tra lại kỷ luật cuối ngày.</div>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="form-item">
+              <label>Mã</label>
+              <input class="form-control" [(ngModel)]="journalForm.symbol" />
+            </div>
+            <div class="form-item">
+              <label>Chiều giao dịch</label>
+              <select class="form-select" [(ngModel)]="journalForm.trade_side">
+                <option value="buy">Buy</option>
+                <option value="sell">Sell</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label>Entry price</label>
+              <input class="form-control" type="number" [(ngModel)]="journalForm.entry_price" />
+            </div>
+            <div class="form-item">
+              <label>Exit price</label>
+              <input class="form-control" type="number" [(ngModel)]="journalForm.exit_price" />
+            </div>
+            <div class="form-item">
+              <label>Stop-loss</label>
+              <input class="form-control" type="number" [(ngModel)]="journalForm.stop_loss_price" />
+            </div>
+            <div class="form-item">
+              <label>Position size</label>
+              <input class="form-control" type="number" [(ngModel)]="journalForm.position_size" />
+            </div>
+            <div class="form-item full">
+              <label>Mistake tags (ngăn cách bởi dấu phẩy)</label>
+              <input class="form-control" (change)="parseTags($any($event.target).value)" placeholder="fomo, bo-stoploss, overconfidence" />
+            </div>
+            <div class="form-item full">
+              <label>Notes</label>
+              <textarea class="form-control" rows="4" [(ngModel)]="journalForm.notes"></textarea>
+            </div>
+          </div>
+          <button type="button" class="btn-primary" (click)="saveJournal()">Lưu journal</button>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Nhật ký gần đây</div>
+              <div class="panel-subtitle">Các entry gần nhất để team review lỗi lặp lại.</div>
+            </div>
+          </div>
+          <div class="journal-list">
+            <div class="journal-item" *ngFor="let item of journal">
+              <div>
+                <strong>{{ item.symbol }}</strong>
+                <small>{{ item.tradeSide | uppercase }} · {{ item.createdAt | date:'dd/MM HH:mm' }}</small>
+              </div>
+              <p>{{ item.notes || 'Chưa có ghi chú.' }}</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section *ngSwitchCase="'settings'" class="panel page-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Strategy settings động</div>
+            <div class="panel-subtitle">Hiển thị trực tiếp công thức, tham số và rule để chỉnh từ UI thay vì sửa code.</div>
+          </div>
+          <div class="toolbar">
+            <button type="button" class="btn-light" (click)="saveConfig()" [disabled]="saving">{{ saving ? 'Đang lưu...' : 'Lưu config' }}</button>
+            <button type="button" class="btn-primary" (click)="publishConfig()" [disabled]="publishing">{{ publishing ? 'Đang publish...' : 'Publish version' }}</button>
+          </div>
+        </div>
+
+        <div class="settings-layout" *ngIf="config">
+          <aside class="settings-sidebar">
+            <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'profiles'" (click)="selectSettingsSection('profiles')">
+              <span>Profiles</span>
+              <strong>{{ getSettingsSectionCount('profiles') }}</strong>
+            </button>
+            <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'formulas'" (click)="selectSettingsSection('formulas')">
+              <span>Formulas</span>
+              <strong>{{ getSettingsSectionCount('formulas') }}</strong>
+            </button>
+            <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'screenRules'" (click)="selectSettingsSection('screenRules')">
+              <span>Screener rules</span>
+              <strong>{{ getSettingsSectionCount('screenRules') }}</strong>
+            </button>
+            <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'alertRules'" (click)="selectSettingsSection('alertRules')">
+              <span>Alert rules</span>
+              <strong>{{ getSettingsSectionCount('alertRules') }}</strong>
+            </button>
+            <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'checklists'" (click)="selectSettingsSection('checklists')">
+              <span>Checklists</span>
+              <strong>{{ getSettingsSectionCount('checklists') }}</strong>
+            </button>
+            <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'versions'" (click)="selectSettingsSection('versions')">
+              <span>Versions</span>
+              <strong>{{ getSettingsSectionCount('versions') }}</strong>
+            </button>
+          </aside>
+
+          <article class="settings-panel settings-detail-panel" *ngIf="selectedSettingsSection === 'profiles' || selectedSettingsSection === 'versions'">
+            <h3 *ngIf="selectedSettingsSection === 'profiles'">Profiles</h3>
+            <div class="profile-list" *ngIf="selectedSettingsSection === 'profiles'">
+              <button type="button" class="profile-pill" *ngFor="let profile of profiles" (click)="activateProfile(profile)">
+                {{ profile.name }}
+                <small *ngIf="profile.isDefault">Default</small>
+              </button>
+            </div>
+            <div class="form-grid compact" *ngIf="selectedSettingsSection === 'profiles'">
+              <div class="form-item">
+                <label>Code</label>
+                <input class="form-control" [(ngModel)]="newProfile.code" />
+              </div>
+              <div class="form-item">
+                <label>Name</label>
+                <input class="form-control" [(ngModel)]="newProfile.name" />
+              </div>
+              <div class="form-item full">
+                <label>Description</label>
+                <input class="form-control" [(ngModel)]="newProfile.description" />
+              </div>
+            </div>
+            <button type="button" class="btn-light create-profile-btn" *ngIf="selectedSettingsSection === 'profiles'" (click)="createProfile()">Tạo profile</button>
+
+            <h3 *ngIf="selectedSettingsSection === 'versions'">Versions</h3>
+            <div class="version-list" *ngIf="selectedSettingsSection === 'versions'">
+              <div class="version-row" *ngFor="let version of config.versions">
+                <strong>#{{ version.versionNo }}</strong>
+                <span>{{ version.changeSummary || 'Publish strategy profile' }}</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="settings-panel settings-detail-panel" *ngIf="selectedSettingsSection === 'formulas'">
+            <div class="settings-section-head">
+              <div>
+                <h3>Formulas</h3>
+                <p>Chỉ mở công thức đang chỉnh để tránh rối. Bấm vào dòng nào thì bung dòng đó.</p>
+              </div>
+            </div>
+            <div class="config-card collapsible" *ngFor="let formula of config.formulas; trackBy: trackByCode" [class.open]="isSettingsCardOpen('formulas', formula)">
+              <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('formulas', formula)">
+                <div>
+                  <strong>{{ formula.label }}</strong>
+                  <small>{{ formula.formulaCode }} · công thức kỹ thuật</small>
+                </div>
+                <div class="config-header-actions">
+                  <span class="config-status" [class.off]="!formula.isEnabled">{{ formula.isEnabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                  <span class="config-arrow">{{ isSettingsCardOpen('formulas', formula) ? '−' : '+' }}</span>
+                </div>
+              </button>
+              <div class="config-body" *ngIf="isSettingsCardOpen('formulas', formula)">
+                <label class="toggle-inline">
+                  <input type="checkbox" [(ngModel)]="formula.isEnabled" />
+                  Enabled
+                </label>
+              <div class="formula-readable">
+                <span>Tên hiển thị cho người dùng</span>
+                <strong>{{ getFriendlyExpression(formula) }}</strong>
+              </div>
+              <div class="expression-builder">
+                <div class="builder-title">Builder công thức</div>
+                <div class="builder-help">Bấm vào toán tử hoặc biến bên dưới để chèn thẳng vào công thức.</div>
+                <div class="builder-operators">
+                  <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
+                    <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(formula, formulaEditor, operator)">
+                      {{ operator.trim() || operator }}
+                    </button>
+                  </div>
+                </div>
+                <div class="builder-variables">
+                  <button
+                    type="button"
+                    class="builder-chip variable"
+                    *ngFor="let variable of getExpressionBuilderVariables(formula)"
+                    (click)="insertExpressionToken(formula, formulaEditor, variable.key)"
+                    [title]="variable.description"
+                  >
+                    <span>{{ variable.label }}</span>
+                    <small>{{ variable.key }}</small>
+                  </button>
+                </div>
+              </div>
+              <textarea #formulaEditor class="form-control formula-editor" rows="3" [(ngModel)]="formula.expression"></textarea>
+              <div class="variable-help" *ngIf="getVariableHints(formula).length">
+                <div class="variable-help-title">Các biến đang dùng trong công thức</div>
+                <div class="variable-list">
+                  <div class="variable-item" *ngFor="let variable of getVariableHints(formula)">
+                    <div class="variable-label-row">
+                      <strong>{{ variable.label }}</strong>
+                      <code>{{ variable.key }}</code>
+                    </div>
+                    <small>{{ variable.description }}</small>
+                  </div>
+                </div>
+              </div>
+              <div class="parameter-grid">
+                <div class="parameter-item" *ngFor="let parameter of formula.parameters">
+                  <label>{{ parameter.label }}</label>
+                  <div class="parameter-meta">
+                    <code>{{ parameter.paramKey }}</code>
+                    <span>Giá trị hiện tại: {{ getParameterValueLabel(parameter) }}</span>
+                  </div>
+                  <input
+                    *ngIf="parameter.dataType !== 'boolean'"
+                    class="form-control"
+                    [value]="parameter.value ?? ''"
+                    (input)="updateParameterNumber(parameter, $event)"
+                  />
+                  <ion-toggle *ngIf="parameter.dataType === 'boolean'" [(ngModel)]="parameter.value"></ion-toggle>
+                </div>
+              </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="settings-panel settings-detail-panel" *ngIf="selectedSettingsSection === 'screenRules' || selectedSettingsSection === 'alertRules' || selectedSettingsSection === 'checklists'">
+            <div class="settings-section-head" *ngIf="selectedSettingsSection === 'screenRules'">
+              <div>
+                <h3>Screener rules</h3>
+                <p>Tách riêng bộ rule lọc 3 tầng để team chỉ tập trung vào logic lọc cổ phiếu.</p>
+              </div>
+            </div>
+            <div class="config-card collapsible" *ngFor="let rule of config.screenRules; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'screenRules'" [class.open]="isSettingsCardOpen('screenRules', rule)">
+              <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('screenRules', rule)">
+                <div>
+                  <strong>{{ rule.label }}</strong>
+                  <small>{{ rule.layerCode }} · rule lọc</small>
+                </div>
+                <div class="config-header-actions">
+                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                  <span class="config-arrow">{{ isSettingsCardOpen('screenRules', rule) ? '−' : '+' }}</span>
+                </div>
+              </button>
+              <div class="config-body" *ngIf="isSettingsCardOpen('screenRules', rule)">
+                <label class="toggle-inline">
+                  <input type="checkbox" [(ngModel)]="rule.isEnabled" />
+                  Enabled
+                </label>
+              <div class="formula-readable">
+                <span>Diễn giải business</span>
+                <strong>{{ getFriendlyExpression(rule) }}</strong>
+              </div>
+              <div class="expression-builder">
+                <div class="builder-title">Builder rule lọc</div>
+                <div class="builder-help">Chọn biến và toán tử để ghép rule thay vì gõ tay.</div>
+                <div class="builder-operators">
+                  <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
+                    <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, screenRuleEditor, operator)">
+                      {{ operator.trim() || operator }}
+                    </button>
+                  </div>
+                </div>
+                <div class="builder-variables">
+                  <button
+                    type="button"
+                    class="builder-chip variable"
+                    *ngFor="let variable of getExpressionBuilderVariables(rule)"
+                    (click)="insertExpressionToken(rule, screenRuleEditor, variable.key)"
+                    [title]="variable.description"
+                  >
+                    <span>{{ variable.label }}</span>
+                    <small>{{ variable.key }}</small>
+                  </button>
+                </div>
+              </div>
+              <textarea #screenRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
+              <div class="variable-help" *ngIf="getVariableHints(rule).length">
+                <div class="variable-help-title">Biến và ngưỡng của rule này</div>
+                <div class="variable-list">
+                  <div class="variable-item" *ngFor="let variable of getVariableHints(rule)">
+                    <div class="variable-label-row">
+                      <strong>{{ variable.label }}</strong>
+                      <code>{{ variable.key }}</code>
+                    </div>
+                    <small>{{ variable.description }}</small>
+                  </div>
+                </div>
+              </div>
+              <div class="parameter-grid">
+                <div class="parameter-item" *ngFor="let parameter of rule.parameters">
+                  <label>{{ parameter.label }}</label>
+                  <div class="parameter-meta">
+                    <code>{{ parameter.paramKey }}</code>
+                    <span>Giá trị hiện tại: {{ getParameterValueLabel(parameter) }}</span>
+                  </div>
+                  <input class="form-control" [value]="parameter.value ?? ''" (input)="updateParameterNumber(parameter, $event)" />
+                </div>
+              </div>
+              </div>
+            </div>
+
+            <div class="settings-section-head" *ngIf="selectedSettingsSection === 'alertRules'">
+              <div>
+                <h3>Alert rules</h3>
+                <p>Nhóm riêng rule cảnh báo để xem, chỉnh và publish mà không bị lẫn với scoring.</p>
+              </div>
+            </div>
+            <div class="config-card collapsible" *ngFor="let rule of config.alertRules; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'alertRules'" [class.open]="isSettingsCardOpen('alertRules', rule)">
+              <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('alertRules', rule)">
+                <div>
+                  <strong>{{ rule.label }}</strong>
+                  <small>{{ rule.ruleCode }} · rule cảnh báo</small>
+                </div>
+                <div class="config-header-actions">
+                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                  <span class="config-arrow">{{ isSettingsCardOpen('alertRules', rule) ? '−' : '+' }}</span>
+                </div>
+              </button>
+              <div class="config-body" *ngIf="isSettingsCardOpen('alertRules', rule)">
+                <label class="toggle-inline">
+                  <input type="checkbox" [(ngModel)]="rule.isEnabled" />
+                  Enabled
+                </label>
+              <div class="formula-readable">
+                <span>Diễn giải business</span>
+                <strong>{{ getFriendlyExpression(rule) }}</strong>
+              </div>
+              <div class="expression-builder">
+                <div class="builder-title">Builder rule cảnh báo</div>
+                <div class="builder-help">Dùng các chip bên dưới để lắp rule cảnh báo dễ hiểu hơn.</div>
+                <div class="builder-operators">
+                  <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
+                    <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, alertRuleEditor, operator)">
+                      {{ operator.trim() || operator }}
+                    </button>
+                  </div>
+                </div>
+                <div class="builder-variables">
+                  <button
+                    type="button"
+                    class="builder-chip variable"
+                    *ngFor="let variable of getExpressionBuilderVariables(rule)"
+                    (click)="insertExpressionToken(rule, alertRuleEditor, variable.key)"
+                    [title]="variable.description"
+                  >
+                    <span>{{ variable.label }}</span>
+                    <small>{{ variable.key }}</small>
+                  </button>
+                </div>
+              </div>
+              <textarea #alertRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
+              <input class="form-control mb-2" [(ngModel)]="rule.messageTemplate" placeholder="Message template" />
+              <div class="variable-help" *ngIf="getVariableHints(rule).length">
+                <div class="variable-help-title">Biến và ngưỡng của alert này</div>
+                <div class="variable-list">
+                  <div class="variable-item" *ngFor="let variable of getVariableHints(rule)">
+                    <div class="variable-label-row">
+                      <strong>{{ variable.label }}</strong>
+                      <code>{{ variable.key }}</code>
+                    </div>
+                    <small>{{ variable.description }}</small>
+                  </div>
+                </div>
+              </div>
+              <div class="parameter-grid">
+                <div class="parameter-item" *ngFor="let parameter of rule.parameters">
+                  <label>{{ parameter.label }}</label>
+                  <div class="parameter-meta">
+                    <code>{{ parameter.paramKey }}</code>
+                    <span>Giá trị hiện tại: {{ getParameterValueLabel(parameter) }}</span>
+                  </div>
+                  <input class="form-control" [value]="parameter.value ?? ''" (input)="updateParameterNumber(parameter, $event)" />
+                </div>
+              </div>
+              </div>
+            </div>
+
+            <div class="settings-section-head" *ngIf="selectedSettingsSection === 'checklists'">
+              <div>
+                <h3>Checklists</h3>
+                <p>Giữ riêng checklist để người dùng tập trung vào quy trình thay vì đọc lẫn công thức chấm điểm.</p>
+              </div>
+            </div>
+            <div class="config-card collapsible" *ngFor="let item of config.checklists; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'checklists'" [class.open]="isSettingsCardOpen('checklists', item)">
+              <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('checklists', item)">
+                <div>
+                  <strong>{{ item.label }}</strong>
+                  <small>{{ item.checklistType }} · checklist</small>
+                </div>
+                <div class="config-header-actions">
+                  <span class="config-status" [class.off]="!item.isEnabled">{{ item.isEnabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                  <span class="config-arrow">{{ isSettingsCardOpen('checklists', item) ? '−' : '+' }}</span>
+                </div>
+              </button>
+              <div class="config-body" *ngIf="isSettingsCardOpen('checklists', item)">
+                <label class="toggle-inline">
+                  <input type="checkbox" [(ngModel)]="item.isEnabled" />
+                  Enabled
+                </label>
+              <div class="formula-readable">
+                <span>Diễn giải business</span>
+                <strong>{{ getFriendlyExpression(item) }}</strong>
+              </div>
+              <div class="expression-builder">
+                <div class="builder-title">Builder checklist</div>
+                <div class="builder-help">Bấm vào biến/ngưỡng để tạo checklist nhanh cho từng giai đoạn giao dịch.</div>
+                <div class="builder-operators">
+                  <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
+                    <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(item, checklistEditor, operator)">
+                      {{ operator.trim() || operator }}
+                    </button>
+                  </div>
+                </div>
+                <div class="builder-variables">
+                  <button
+                    type="button"
+                    class="builder-chip variable"
+                    *ngFor="let variable of getExpressionBuilderVariables(item)"
+                    (click)="insertExpressionToken(item, checklistEditor, variable.key)"
+                    [title]="variable.description"
+                  >
+                    <span>{{ variable.label }}</span>
+                    <small>{{ variable.key }}</small>
+                  </button>
+                </div>
+              </div>
+              <textarea #checklistEditor class="form-control formula-editor" rows="2" [(ngModel)]="item.expression"></textarea>
+              <div class="variable-help" *ngIf="getVariableHints(item).length">
+                <div class="variable-help-title">Biến và ngưỡng của checklist này</div>
+                <div class="variable-list">
+                  <div class="variable-item" *ngFor="let variable of getVariableHints(item)">
+                    <div class="variable-label-row">
+                      <strong>{{ variable.label }}</strong>
+                      <code>{{ variable.key }}</code>
+                    </div>
+                    <small>{{ variable.description }}</small>
+                  </div>
+                </div>
+              </div>
+              <div class="parameter-grid">
+                <div class="parameter-item" *ngFor="let parameter of item.parameters">
+                  <label>{{ parameter.label }}</label>
+                  <div class="parameter-meta">
+                    <code>{{ parameter.paramKey }}</code>
+                    <span>Giá trị hiện tại: {{ getParameterValueLabel(parameter) }}</span>
+                  </div>
+                  <input class="form-control" [value]="parameter.value ?? ''" (input)="updateParameterNumber(parameter, $event)" />
+                </div>
+              </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </div>
+</ion-content>

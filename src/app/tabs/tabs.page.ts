@@ -11,8 +11,16 @@ import { AuthService } from '../core/services/auth.service';
 export class TabsPage {
   constructor(private auth: AuthService) {}
 
-  get canViewPermissions(): boolean {
+  can(permission: string): boolean {
     const permissions = this.auth.profile?.permissions || [];
-    return permissions.some((item) => item.startsWith('role-permissions.'));
+    return permissions.includes(permission);
+  }
+
+  get canViewStrategy(): boolean {
+    return this.can('strategy-hub.view');
+  }
+
+  get canViewPermissions(): boolean {
+    return this.can('role-permissions.view');
   }
 }

@@ -4,6 +4,7 @@ import asyncio
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.financial_statement_collector import FinancialStatementCollector
 from app.services.index_collector import IndexCollector
 from app.services.intraday_collector import IntradayCollector
 from app.services.quote_collector import QuoteCollector
@@ -16,6 +17,7 @@ class CollectorScheduler:
         self.quote_collector = QuoteCollector()
         self.intraday_collector = IntradayCollector()
         self.index_collector = IndexCollector()
+        self.financial_statement_collector = FinancialStatementCollector()
         self.tasks: list[asyncio.Task] = []
         self._running = False
 
@@ -48,6 +50,14 @@ class CollectorScheduler:
                     self.index_collector.run_daily,
                     settings.index_daily_poll_seconds,
                     initial_delay=90,
+                )
+            ),
+            asyncio.create_task(
+                self._run_loop(
+                    "financial_statements",
+                    self.financial_statement_collector.run,
+                    settings.financial_poll_seconds,
+                    initial_delay=150,
                 )
             ),
         ]

@@ -14,6 +14,11 @@ async def init_db() -> None:
         AppRole,
         AppUser,
         AppUserSetting,
+        MarketFinancialBalanceSheet,
+        MarketFinancialCashFlow,
+        MarketFinancialIncomeStatement,
+        MarketFinancialNote,
+        MarketFinancialRatio,
         MarketSymbol,
         MarketQuoteSnapshot,
         MarketIntradayPoint,
@@ -22,15 +27,28 @@ async def init_db() -> None:
         MarketNewsArticle,
         MarketSyncLog,
         MarketWatchlistItem,
+        StrategyAlertRule,
+        StrategyAuditLog,
+        StrategyChecklistItem,
+        StrategyFormulaDefinition,
+        StrategyFormulaParameter,
+        StrategyProfile,
+        StrategyScreenRule,
+        StrategyStockScoreSnapshot,
+        StrategyTradeJournalEntry,
+        StrategyVersion,
     )
     from app.repositories.auth_repo import AuthRepository
     from app.services.auth_service import seed_authorization_data
+    from app.services.strategy_service import seed_default_strategy_data
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.exec_driver_sql("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS email VARCHAR(255)")
         await conn.exec_driver_sql("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS department VARCHAR(120)")
+        await conn.exec_driver_sql("ALTER TABLE strategy_formula_parameters ALTER COLUMN formula_id DROP NOT NULL")
 
     async with SessionLocal() as session:
         await seed_authorization_data(AuthRepository(session))
+        await seed_default_strategy_data(session)
         await session.commit()

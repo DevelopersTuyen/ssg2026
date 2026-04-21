@@ -5,10 +5,15 @@ from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.market import (
+    MarketFinancialBalanceSheet,
+    MarketFinancialCashFlow,
+    MarketFinancialIncomeStatement,
+    MarketFinancialNote,
+    MarketFinancialRatio,
     MarketIndexDailyPoint,
     MarketIndexIntradayPoint,
     MarketIntradayPoint,
@@ -35,12 +40,40 @@ INDEX_PRIORITY = [
     "VNINDEX",
     "VN30",
     "VN100",
+    "VNALL",
+    "VNSI",
+    "VNFIN",
+    "VNCOND",
+    "VNCONS",
+    "VNENE",
+    "VNHEAL",
+    "VNIND",
+    "VNIT",
+    "VNMAT",
+    "VNREAL",
+    "VNX50",
     "VNMID",
     "VNSML",
     "HNXINDEX",
     "HNX30",
     "UPCOMINDEX",
 ]
+
+FINANCIAL_TABLES = {
+    "balance_sheet": MarketFinancialBalanceSheet,
+    "income_statement": MarketFinancialIncomeStatement,
+    "cash_flow": MarketFinancialCashFlow,
+    "ratio": MarketFinancialRatio,
+    "note": MarketFinancialNote,
+}
+
+FINANCIAL_TITLES = {
+    "balance_sheet": "Bang can doi ke toan",
+    "income_statement": "Bao cao ket qua kinh doanh",
+    "cash_flow": "Bao cao luu chuyen tien te",
+    "ratio": "Chi so tai chinh",
+    "note": "Thuyet minh bao cao tai chinh",
+}
 
 
 class MarketReadRepository:
@@ -53,6 +86,215 @@ class MarketReadRepository:
         start = datetime.combine(d, time.min)
         end = start + timedelta(days=1)
         return start, end
+
+    async def _resolve_latest_intraday_date(
+        self,
+        *,
+        symbol: str | None = None,
+        symbols: list[str] | None = None,
+    ) -> date | None:
+        stmt = select(func.max(MarketIntradayPoint.point_time))
+
+        if symbol:
+            stmt = stmt.where(MarketIntradayPoint.symbol == symbol.upper())
+        elif symbols:
+            normalized = [item.upper() for item in symbols if item]
+            if not normalized:
+                return None
+            stmt = stmt.where(MarketIntradayPoint.symbol.in_(normalized))
+
+        latest_point_time = await self.session.scalar(stmt)
+        return latest_point_time.date() if latest_point_time else None
+
+    @staticmethod
+    def _normalize_reference_price(reference_price: float | None, current_price: float | None) -> float | None:
+        if reference_price is None:
+            return None
+        if current_price in (None, 0):
+            return reference_price
+
+        ref = float(reference_price)
+        price = float(current_price)
+
+        if ref > price * 100:
+            return ref / 1000
+        if ref > price * 10:
+            return ref / 100
+        return ref
+
+    @staticmethod
+    def _quote_timestamp(row: MarketQuoteSnapshot) -> datetime:
+        return getattr(row, "quote_time", None) or row.captured_at
+
+    @staticmethod
+    def _quote_bucket_time(row: MarketQuoteSnapshot, multi_day: bool) -> datetime:
+        if multi_day:
+            return datetime.combine(MarketReadRepository._quote_timestamp(row).date(), time(15, 0))
+        return row.captured_at.replace(second=0, microsecond=0)
+
+    def _build_symbol_quote_series(self, quote_rows: list[MarketQuoteSnapshot]) -> list[dict[str, Any]]:
+        if not quote_rows:
+            return []
+
+        buckets: dict[datetime, dict[str, Any]] = {}
+        multi_day = len({self._quote_timestamp(item).date() for item in quote_rows}) > 1
+
+        for row in reversed(quote_rows):
+            bucket = self._quote_bucket_time(row, multi_day)
+            item = buckets.get(bucket)
+            price = row.price
+
+            if item is None:
+                buckets[bucket] = {
+                    "time": bucket,
+                    "open": price,
+                    "high": row.high_price if row.high_price is not None else price,
+                    "low": row.low_price if row.low_price is not None else price,
+                    "close": price,
+                    "volume": row.volume or 0,
+                    "trading_value": row.trading_value or 0,
+                    "point_count": 1,
+                }
+            else:
+                if price is not None:
+                    if item["open"] is None:
+                        item["open"] = price
+                    item["close"] = price
+                    item["high"] = (
+                        max(item["high"], row.high_price or price)
+                        if item["high"] is not None
+                        else (row.high_price or price)
+                    )
+                    item["low"] = (
+                        min(item["low"], row.low_price or price)
+                        if item["low"] is not None
+                        else (row.low_price or price)
+                    )
+
+                item["volume"] = max(item["volume"], row.volume or 0)
+                item["trading_value"] = max(item["trading_value"], row.trading_value or 0)
+                item["point_count"] += 1
+
+        series = [buckets[k] for k in sorted(buckets.keys())]
+        if len(series) >= 2:
+            return series
+
+        latest = quote_rows[0]
+        timestamp = self._quote_timestamp(latest).replace(minute=0, second=0, microsecond=0)
+        reference_price = self._normalize_reference_price(latest.reference_price, latest.price)
+        open_price = latest.open_price if latest.open_price is not None else reference_price
+        start_price = open_price if open_price not in (None, 0) else reference_price
+
+        if start_price is None or latest.price is None:
+            return series
+
+        synthetic_start = timestamp.replace(hour=9, minute=0, second=0, microsecond=0)
+        return [
+            {
+                "time": synthetic_start,
+                "open": start_price,
+                "high": max(start_price, latest.price),
+                "low": min(start_price, latest.price),
+                "close": start_price,
+                "volume": 0,
+                "trading_value": 0,
+                "point_count": 1,
+            },
+            {
+                "time": timestamp,
+                "open": start_price,
+                "high": latest.high_price if latest.high_price is not None else max(start_price, latest.price),
+                "low": latest.low_price if latest.low_price is not None else min(start_price, latest.price),
+                "close": latest.price,
+                "volume": latest.volume or 0,
+                "trading_value": latest.trading_value or 0,
+                "point_count": 1,
+            },
+        ]
+
+    def _build_exchange_quote_series(self, quote_rows: list[MarketQuoteSnapshot]) -> list[dict[str, Any]]:
+        if not quote_rows:
+            return []
+
+        buckets: dict[datetime, dict[str, Any]] = {}
+        symbol_seen_per_bucket: dict[datetime, set[str]] = defaultdict(set)
+        multi_day = len({self._quote_timestamp(item).date() for item in quote_rows}) > 1
+
+        for row in reversed(quote_rows):
+            bucket = self._quote_bucket_time(row, multi_day)
+            item = buckets.get(bucket)
+
+            if item is None:
+                buckets[bucket] = {
+                    "time": bucket,
+                    "volume": row.volume or 0,
+                    "trading_value": row.trading_value or 0,
+                    "point_count": 1,
+                    "symbol_count": 0,
+                }
+            else:
+                item["volume"] += row.volume or 0
+                item["trading_value"] += row.trading_value or 0
+                item["point_count"] += 1
+
+            symbol_seen_per_bucket[bucket].add(row.symbol)
+
+        for bucket, seen in symbol_seen_per_bucket.items():
+            buckets[bucket]["symbol_count"] = len(seen)
+
+        return [buckets[k] for k in sorted(buckets.keys())]
+
+    async def _get_symbol_quote_rows(
+        self,
+        symbol: str,
+        latest_only: bool = True,
+        history_days: int = 14,
+    ) -> list[MarketQuoteSnapshot]:
+        cutoff = datetime.now() - timedelta(days=max(1, history_days))
+        result = await self.session.execute(
+            select(MarketQuoteSnapshot)
+            .where(
+                MarketQuoteSnapshot.symbol == symbol.upper(),
+                MarketQuoteSnapshot.price.is_not(None),
+                MarketQuoteSnapshot.captured_at >= cutoff,
+            )
+            .order_by(desc(MarketQuoteSnapshot.captured_at))
+            .limit(2000)
+        )
+        rows = result.scalars().all()
+        if not rows:
+            return []
+        if not latest_only:
+            return rows
+
+        latest_date = self._quote_timestamp(rows[0]).date()
+        return [row for row in rows if self._quote_timestamp(row).date() == latest_date]
+
+    async def _get_exchange_quote_rows(
+        self,
+        exchange: str,
+        latest_only: bool = True,
+        history_days: int = 14,
+    ) -> list[MarketQuoteSnapshot]:
+        cutoff = datetime.now() - timedelta(days=max(1, history_days))
+        result = await self.session.execute(
+            select(MarketQuoteSnapshot)
+            .where(
+                MarketQuoteSnapshot.exchange == exchange.upper(),
+                MarketQuoteSnapshot.price.is_not(None),
+                MarketQuoteSnapshot.captured_at >= cutoff,
+            )
+            .order_by(desc(MarketQuoteSnapshot.captured_at))
+            .limit(25000)
+        )
+        rows = result.scalars().all()
+        if not rows:
+            return []
+        if not latest_only:
+            return rows
+
+        latest_date = self._quote_timestamp(rows[0]).date()
+        return [row for row in rows if self._quote_timestamp(row).date() == latest_date]
 
     @staticmethod
     def _resolve_index_exchange(index_symbol: str, exchange: str | None = None) -> str:
@@ -75,18 +317,69 @@ class MarketReadRepository:
             ~MarketSymbol.symbol.in_(list(INDEX_SYMBOL_TO_EXCHANGE.keys())),
             or_(
                 MarketSymbol.instrument_type.is_(None),
-                func.lower(func.coalesce(MarketSymbol.instrument_type, "")) != "index",
+                func.lower(func.coalesce(MarketSymbol.instrument_type, "")).in_(
+                    ["stock", "cw", "etf"]
+                ),
             ),
         )
 
-    async def search_symbols(self, keyword: str, limit: int = 20):
-        pattern = f"%{keyword.upper()}%"
-        stmt = self._stock_symbols_stmt().where(
+    @staticmethod
+    def _normalize_symbol_keyword(keyword: str | None) -> str | None:
+        value = str(keyword or "").strip().upper()
+        return value or None
+
+    def _apply_symbol_keyword_filter(self, stmt, keyword: str | None):
+        normalized = self._normalize_symbol_keyword(keyword)
+        if not normalized:
+            return stmt
+
+        prefix_pattern = f"{normalized}%"
+        name_pattern = f"%{normalized}%"
+        normalized_name = func.upper(func.coalesce(MarketSymbol.name, ""))
+        normalized_symbol = func.upper(MarketSymbol.symbol)
+        return stmt.where(
             or_(
-                func.upper(MarketSymbol.symbol).like(pattern),
-                func.upper(func.coalesce(MarketSymbol.name, "")).like(pattern),
+                normalized_symbol == normalized,
+                normalized_symbol.like(prefix_pattern),
+                and_(
+                    normalized_name.like(name_pattern),
+                    normalized_name != normalized_symbol,
+                ),
             )
-        ).order_by(MarketSymbol.exchange.asc(), MarketSymbol.symbol.asc()).limit(limit)
+        )
+
+    def _symbol_keyword_ordering(self, keyword: str | None):
+        normalized = self._normalize_symbol_keyword(keyword)
+        if not normalized:
+            return [MarketSymbol.exchange.asc(), MarketSymbol.symbol.asc()]
+
+        prefix_pattern = f"{normalized}%"
+        name_pattern = f"%{normalized}%"
+        normalized_name = func.upper(func.coalesce(MarketSymbol.name, ""))
+        normalized_symbol = func.upper(MarketSymbol.symbol)
+        return [
+            case(
+                (normalized_symbol == normalized, 0),
+                (normalized_symbol.like(prefix_pattern), 1),
+                (
+                    and_(
+                        normalized_name.like(name_pattern),
+                        normalized_name != normalized_symbol,
+                    ),
+                    2,
+                ),
+                else_=3,
+            ),
+            MarketSymbol.exchange.asc(),
+            MarketSymbol.symbol.asc(),
+        ]
+
+    async def search_symbols(self, keyword: str, limit: int = 20):
+        stmt = (
+            self._apply_symbol_keyword_filter(self._stock_symbols_stmt(), keyword)
+            .order_by(*self._symbol_keyword_ordering(keyword))
+            .limit(limit)
+        )
 
         result = await self.session.execute(stmt)
         return result.scalars().all()
@@ -104,14 +397,7 @@ class MarketReadRepository:
         if exchange:
             stmt = stmt.where(MarketSymbol.exchange == exchange.upper())
 
-        if keyword:
-            pattern = f"%{keyword.upper()}%"
-            stmt = stmt.where(
-                or_(
-                    func.upper(MarketSymbol.symbol).like(pattern),
-                    func.upper(func.coalesce(MarketSymbol.name, "")).like(pattern),
-                )
-            )
+        stmt = self._apply_symbol_keyword_filter(stmt, keyword)
 
         result = await self.session.execute(stmt)
         return int(result.scalar_one() or 0)
@@ -129,17 +415,10 @@ class MarketReadRepository:
         if exchange:
             stmt = stmt.where(MarketSymbol.exchange == exchange.upper())
 
-        if keyword:
-            pattern = f"%{keyword.upper()}%"
-            stmt = stmt.where(
-                or_(
-                    func.upper(MarketSymbol.symbol).like(pattern),
-                    func.upper(func.coalesce(MarketSymbol.name, "")).like(pattern),
-                )
-            )
+        stmt = self._apply_symbol_keyword_filter(stmt, keyword)
 
         stmt = (
-            stmt.order_by(MarketSymbol.exchange.asc(), MarketSymbol.symbol.asc())
+            stmt.order_by(*self._symbol_keyword_ordering(keyword))
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -246,6 +525,16 @@ class MarketReadRepository:
                 point_time = intraday_row.point_time
                 captured_at = intraday_row.captured_at or captured_at
 
+            reference_price = self._normalize_reference_price(
+                getattr(quote_row, "reference_price", None),
+                price,
+            )
+            if change_value is None and price is not None and reference_price not in (None, 0):
+                change_value = price - reference_price
+
+            if change_percent is None and change_value is not None and reference_price not in (None, 0):
+                change_percent = (change_value / reference_price) * 100
+
             items.append(
                 {
                     "symbol": row.symbol,
@@ -264,7 +553,13 @@ class MarketReadRepository:
             )
 
         sort_key = sort.lower()
-        if sort_key == "gainers":
+        if sort_key == "all":
+            items.sort(
+                key=lambda x: (
+                    x["symbol"],
+                )
+            )
+        elif sort_key == "gainers":
             items.sort(
                 key=lambda x: (
                     -(x["change_percent"] if x["change_percent"] is not None else float("-inf")),
@@ -299,35 +594,27 @@ class MarketReadRepository:
         }
 
     async def search_symbols(self, keyword: str, limit: int = 20):
-        pattern = f"%{keyword.upper()}%"
         result = await self.session.execute(
-            select(MarketSymbol)
-            .where(
-                MarketSymbol.is_active.is_(True),
-                or_(
-                    func.upper(MarketSymbol.symbol).like(pattern),
-                    func.upper(func.coalesce(MarketSymbol.name, "")).like(pattern),
-                ),
-            )
-            .order_by(MarketSymbol.exchange.asc(), MarketSymbol.symbol.asc())
+            self._apply_symbol_keyword_filter(self._stock_symbols_stmt(), keyword)
+            .order_by(*self._symbol_keyword_ordering(keyword))
             .limit(limit)
         )
         return result.scalars().all()
 
     async def count_symbols(self, exchange: str | None = None, keyword: str | None = None) -> int:
-        stmt = select(func.count()).select_from(MarketSymbol).where(MarketSymbol.is_active.is_(True))
+        stmt = select(func.count()).select_from(MarketSymbol).where(
+            MarketSymbol.is_active.is_(True),
+            ~MarketSymbol.symbol.in_(list(INDEX_SYMBOL_TO_EXCHANGE.keys())),
+            or_(
+                MarketSymbol.instrument_type.is_(None),
+                func.lower(func.coalesce(MarketSymbol.instrument_type, "")) != "index",
+            ),
+        )
 
         if exchange:
             stmt = stmt.where(MarketSymbol.exchange == exchange.upper())
 
-        if keyword:
-            pattern = f"%{keyword.upper()}%"
-            stmt = stmt.where(
-                or_(
-                    func.upper(MarketSymbol.symbol).like(pattern),
-                    func.upper(func.coalesce(MarketSymbol.name, "")).like(pattern),
-                )
-            )
+        stmt = self._apply_symbol_keyword_filter(stmt, keyword)
 
         result = await self.session.execute(stmt)
         return int(result.scalar_one() or 0)
@@ -340,22 +627,15 @@ class MarketReadRepository:
         exchange: str | None = None,
         keyword: str | None = None,
     ):
-        stmt = select(MarketSymbol).where(MarketSymbol.is_active.is_(True))
+        stmt = self._stock_symbols_stmt()
 
         if exchange:
             stmt = stmt.where(MarketSymbol.exchange == exchange.upper())
 
-        if keyword:
-            pattern = f"%{keyword.upper()}%"
-            stmt = stmt.where(
-                or_(
-                    func.upper(MarketSymbol.symbol).like(pattern),
-                    func.upper(func.coalesce(MarketSymbol.name, "")).like(pattern),
-                )
-            )
+        stmt = self._apply_symbol_keyword_filter(stmt, keyword)
 
         stmt = (
-            stmt.order_by(MarketSymbol.exchange.asc(), MarketSymbol.symbol.asc())
+            stmt.order_by(*self._symbol_keyword_ordering(keyword))
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -365,11 +645,8 @@ class MarketReadRepository:
 
     async def get_symbols_by_exchange(self, exchange: str, limit: int | None = None):
         stmt = (
-            select(MarketSymbol)
-            .where(
-                MarketSymbol.exchange == exchange.upper(),
-                MarketSymbol.is_active.is_(True),
-            )
+            self._stock_symbols_stmt()
+            .where(MarketSymbol.exchange == exchange.upper())
             .order_by(MarketSymbol.symbol.asc())
         )
 
@@ -385,8 +662,9 @@ class MarketReadRepository:
         limit: int = 5000,
         trading_date: date | None = None,
     ):
-        start, end = self._today_bounds(trading_date)
-        result = await self.session.execute(
+        effective_date = trading_date
+        start, end = self._today_bounds(effective_date)
+        stmt = (
             select(MarketIntradayPoint)
             .where(
                 MarketIntradayPoint.symbol == symbol.upper(),
@@ -396,46 +674,88 @@ class MarketReadRepository:
             .order_by(MarketIntradayPoint.point_time.asc())
             .limit(limit)
         )
-        return result.scalars().all()
+        result = await self.session.execute(stmt)
+        rows = result.scalars().all()
+
+        if rows or trading_date is not None:
+            return rows
+
+        latest_date = await self._resolve_latest_intraday_date(symbol=symbol)
+        if latest_date is None or latest_date == start.date():
+            return rows
+
+        fallback_start, fallback_end = self._today_bounds(latest_date)
+        fallback_stmt = (
+            select(MarketIntradayPoint)
+            .where(
+                MarketIntradayPoint.symbol == symbol.upper(),
+                MarketIntradayPoint.point_time >= fallback_start,
+                MarketIntradayPoint.point_time < fallback_end,
+            )
+            .order_by(MarketIntradayPoint.point_time.asc())
+            .limit(limit)
+        )
+        fallback_result = await self.session.execute(fallback_stmt)
+        return fallback_result.scalars().all()
 
     async def get_symbol_intraday_hourly(
         self,
         symbol: str,
         trading_date: date | None = None,
     ) -> list[dict[str, Any]]:
+        quote_rows = await self._get_symbol_quote_rows(symbol, latest_only=False)
+        quote_series = self._build_symbol_quote_series(quote_rows)
+        if quote_series and (len(quote_series) >= 3 or trading_date is None):
+            return quote_series
+
         rows = await self.get_intraday_points(symbol=symbol, limit=20000, trading_date=trading_date)
+        latest_intraday_time = rows[-1].point_time if rows else None
+        latest_quote_time = self._quote_timestamp(quote_rows[0]) if quote_rows else None
+        prefer_quote = (
+            bool(quote_rows)
+            and (
+                not rows
+                or latest_intraday_time is None
+                or (latest_quote_time is not None and latest_quote_time.date() > latest_intraday_time.date())
+            )
+        )
 
         buckets: dict[datetime, dict[str, Any]] = {}
 
-        for row in rows:
-            bucket = row.point_time.replace(minute=0, second=0, microsecond=0)
-            item = buckets.get(bucket)
+        if rows and not prefer_quote:
+            for row in rows:
+                bucket = row.point_time.replace(minute=0, second=0, microsecond=0)
+                item = buckets.get(bucket)
 
-            if item is None:
-                buckets[bucket] = {
-                    "time": bucket,
-                    "open": row.price,
-                    "high": row.price,
-                    "low": row.price,
-                    "close": row.price,
-                    "volume": row.volume or 0,
-                    "trading_value": row.trading_value or 0,
-                    "point_count": 1,
-                }
-            else:
-                price = row.price
-                if price is not None:
-                    if item["open"] is None:
-                        item["open"] = price
-                    item["close"] = price
-                    item["high"] = price if item["high"] is None else max(item["high"], price)
-                    item["low"] = price if item["low"] is None else min(item["low"], price)
+                if item is None:
+                    buckets[bucket] = {
+                        "time": bucket,
+                        "open": row.price,
+                        "high": row.price,
+                        "low": row.price,
+                        "close": row.price,
+                        "volume": row.volume or 0,
+                        "trading_value": row.trading_value or 0,
+                        "point_count": 1,
+                    }
+                else:
+                    price = row.price
+                    if price is not None:
+                        if item["open"] is None:
+                            item["open"] = price
+                        item["close"] = price
+                        item["high"] = price if item["high"] is None else max(item["high"], price)
+                        item["low"] = price if item["low"] is None else min(item["low"], price)
 
-                item["volume"] += row.volume or 0
-                item["trading_value"] += row.trading_value or 0
-                item["point_count"] += 1
+                    item["volume"] += row.volume or 0
+                    item["trading_value"] += row.trading_value or 0
+                    item["point_count"] += 1
 
-        return [buckets[k] for k in sorted(buckets.keys())]
+            return [buckets[k] for k in sorted(buckets.keys())]
+
+        if not quote_rows:
+            return []
+        return quote_series
 
     async def get_exchange_intraday_hourly(
         self,
@@ -443,13 +763,19 @@ class MarketReadRepository:
         trading_date: date | None = None,
     ) -> list[dict[str, Any]]:
         exchange = exchange.upper()
+        quote_rows = await self._get_exchange_quote_rows(exchange, latest_only=False)
+        quote_series = self._build_exchange_quote_series(quote_rows)
+        if quote_series and (len(quote_series) >= 2 or trading_date is None):
+            return quote_series
+
         symbols = [row.symbol for row in await self.get_symbols_by_exchange(exchange, limit=None)]
         if not symbols:
-            return []
+            return quote_series
 
-        start, end = self._today_bounds(trading_date)
+        effective_date = trading_date
+        start, end = self._today_bounds(effective_date)
 
-        result = await self.session.execute(
+        stmt = (
             select(MarketIntradayPoint)
             .where(
                 MarketIntradayPoint.symbol.in_(symbols),
@@ -458,39 +784,76 @@ class MarketReadRepository:
             )
             .order_by(MarketIntradayPoint.point_time.asc())
         )
+        result = await self.session.execute(stmt)
         rows = result.scalars().all()
+
+        if not rows and trading_date is None:
+            latest_date = await self._resolve_latest_intraday_date(symbols=symbols)
+            if latest_date and latest_date != start.date():
+                fallback_start, fallback_end = self._today_bounds(latest_date)
+                fallback_stmt = (
+                    select(MarketIntradayPoint)
+                    .where(
+                        MarketIntradayPoint.symbol.in_(symbols),
+                        MarketIntradayPoint.point_time >= fallback_start,
+                        MarketIntradayPoint.point_time < fallback_end,
+                    )
+                    .order_by(MarketIntradayPoint.point_time.asc())
+                )
+                fallback_result = await self.session.execute(fallback_stmt)
+                rows = fallback_result.scalars().all()
+
+        latest_intraday_time = rows[-1].point_time if rows else None
+        latest_quote_time = self._quote_timestamp(quote_rows[0]) if quote_rows else None
+        intraday_symbol_total = len({row.symbol for row in rows})
+        minimum_coverage = max(5, int(len(symbols) * 0.05))
+        prefer_quote = (
+            bool(quote_rows)
+            and (
+                not rows
+                or latest_intraday_time is None
+                or (latest_quote_time is not None and latest_quote_time.date() > latest_intraday_time.date())
+                or intraday_symbol_total < minimum_coverage
+            )
+        )
 
         buckets: dict[datetime, dict[str, Any]] = {}
         symbol_seen_per_bucket: dict[datetime, set[str]] = defaultdict(set)
 
-        for row in rows:
-            bucket = row.point_time.replace(minute=0, second=0, microsecond=0)
-            item = buckets.get(bucket)
+        if rows and not prefer_quote:
+            for row in rows:
+                bucket = row.point_time.replace(minute=0, second=0, microsecond=0)
+                item = buckets.get(bucket)
 
-            if item is None:
-                buckets[bucket] = {
-                    "time": bucket,
-                    "volume": row.volume or 0,
-                    "trading_value": row.trading_value or 0,
-                    "point_count": 1,
-                    "symbol_count": 0,
-                }
-            else:
-                item["volume"] += row.volume or 0
-                item["trading_value"] += row.trading_value or 0
-                item["point_count"] += 1
+                if item is None:
+                    buckets[bucket] = {
+                        "time": bucket,
+                        "volume": row.volume or 0,
+                        "trading_value": row.trading_value or 0,
+                        "point_count": 1,
+                        "symbol_count": 0,
+                    }
+                else:
+                    item["volume"] += row.volume or 0
+                    item["trading_value"] += row.trading_value or 0
+                    item["point_count"] += 1
 
-            symbol_seen_per_bucket[bucket].add(row.symbol)
+                symbol_seen_per_bucket[bucket].add(row.symbol)
 
-        for bucket, seen in symbol_seen_per_bucket.items():
-            buckets[bucket]["symbol_count"] = len(seen)
+            for bucket, seen in symbol_seen_per_bucket.items():
+                buckets[bucket]["symbol_count"] = len(seen)
 
-        return [buckets[k] for k in sorted(buckets.keys())]
+            return [buckets[k] for k in sorted(buckets.keys())]
+
+        return quote_series
 
     async def get_latest_quote(self, symbol: str):
         result = await self.session.execute(
             select(MarketQuoteSnapshot)
-            .where(MarketQuoteSnapshot.symbol == symbol.upper())
+            .where(
+                MarketQuoteSnapshot.symbol == symbol.upper(),
+                MarketQuoteSnapshot.price.is_not(None),
+            )
             .order_by(desc(MarketQuoteSnapshot.captured_at))
             .limit(1)
         )
@@ -499,14 +862,34 @@ class MarketReadRepository:
         if quote_row and quote_row.price is not None:
             return quote_row
 
-        rows = await self.get_intraday_points(symbol=symbol, limit=10)
+        latest_date = await self._resolve_latest_intraday_date(symbol=symbol)
+        if latest_date is None:
+            return None
+
+        start, end = self._today_bounds(latest_date)
+        intraday_result = await self.session.execute(
+            select(MarketIntradayPoint)
+            .where(
+                MarketIntradayPoint.symbol == symbol.upper(),
+                MarketIntradayPoint.point_time >= start,
+                MarketIntradayPoint.point_time < end,
+            )
+            .order_by(MarketIntradayPoint.point_time.desc())
+            .limit(2)
+        )
+        rows = list(reversed(intraday_result.scalars().all()))
         if not rows:
             return None
 
         latest = rows[-1]
         prev = rows[-2] if len(rows) > 1 else None
 
-        prev_price = prev.price if prev else None
+        prev_price = self._normalize_reference_price(
+            getattr(quote_row, "reference_price", None),
+            latest.price,
+        )
+        if prev_price in (None, 0) and prev:
+            prev_price = prev.price if prev else None
         change_value = None
         change_percent = None
 
@@ -656,6 +1039,16 @@ class MarketReadRepository:
                 point_time = intraday_row.point_time
                 captured_at = intraday_row.captured_at or captured_at
 
+            reference_price = self._normalize_reference_price(
+                getattr(quote_row, "reference_price", None),
+                price,
+            )
+            if change_value is None and price is not None and reference_price not in (None, 0):
+                change_value = price - reference_price
+
+            if change_percent is None and change_value is not None and reference_price not in (None, 0):
+                change_percent = (change_value / reference_price) * 100
+
             items.append(
                 {
                     "symbol": row.symbol,
@@ -677,7 +1070,13 @@ class MarketReadRepository:
 
         sort_key = sort.lower()
 
-        if sort_key == "gainers":
+        if sort_key == "all":
+            items.sort(
+                key=lambda x: (
+                    x["symbol"],
+                )
+            )
+        elif sort_key == "gainers":
             items.sort(
                 key=lambda x: (
                     -(x["change_percent"] if x["change_percent"] is not None else float("-inf")),
@@ -810,20 +1209,6 @@ class MarketReadRepository:
     async def list_available_indices(self) -> list[dict[str, str]]:
         symbols: dict[str, str] = {}
 
-        symbol_rows = await self.session.execute(
-            select(MarketSymbol.symbol, MarketSymbol.exchange)
-            .where(
-                MarketSymbol.is_active.is_(True),
-                func.lower(func.coalesce(MarketSymbol.instrument_type, "")) == "index",
-            )
-            .order_by(MarketSymbol.symbol.asc())
-        )
-        for symbol, exchange in symbol_rows.all():
-            if not symbol:
-                continue
-            key = str(symbol).upper()
-            symbols[key] = self._resolve_index_exchange(key, exchange)
-
         daily_rows = await self.session.execute(
             select(MarketIndexDailyPoint.index_symbol, MarketIndexDailyPoint.exchange)
             .distinct()
@@ -868,6 +1253,9 @@ class MarketReadRepository:
             latest_intraday = await self.get_latest_index_intraday(index_symbol)
             latest_daily, prev_daily = await self.get_latest_index_card(index_symbol)
 
+            if not latest_intraday and not latest_daily:
+                continue
+
             close = None
             if latest_intraday and latest_intraday.price is not None:
                 close = latest_intraday.price
@@ -909,6 +1297,142 @@ class MarketReadRepository:
             select(MarketSyncLog).order_by(desc(MarketSyncLog.started_at)).limit(limit)
         )
         return result.scalars().all()
+
+    async def get_symbol_financial_bundle(
+        self,
+        symbol: str,
+        *,
+        limit_per_section: int = 24,
+    ) -> dict[str, Any]:
+        normalized_symbol = symbol.upper()
+        symbol_row = await self.session.get(MarketSymbol, normalized_symbol)
+        exchange = getattr(symbol_row, "exchange", None)
+        sections: list[dict[str, Any]] = []
+        latest_updated_at: datetime | None = None
+
+        for statement_type, table in FINANCIAL_TABLES.items():
+            result = await self.session.execute(
+                select(table)
+                .where(table.symbol == normalized_symbol)
+                .order_by(
+                    desc(table.fiscal_year).nullslast(),
+                    desc(table.fiscal_quarter).nullslast(),
+                    desc(table.statement_date).nullslast(),
+                    desc(table.updated_at),
+                )
+                .limit(limit_per_section)
+            )
+            rows = result.scalars().all()
+            if not rows:
+                sections.append(
+                    {
+                        "type": statement_type,
+                        "title": FINANCIAL_TITLES.get(statement_type, statement_type),
+                        "latestPeriod": None,
+                        "periodType": None,
+                        "rowCount": 0,
+                        "rows": [],
+                    }
+                )
+                continue
+
+            latest_row = rows[0]
+            latest_updated_at = max(
+                latest_updated_at or latest_row.updated_at,
+                latest_row.updated_at,
+            )
+            sections.append(
+                {
+                    "type": statement_type,
+                    "title": FINANCIAL_TITLES.get(statement_type, statement_type),
+                    "latestPeriod": latest_row.report_period,
+                    "periodType": latest_row.period_type,
+                    "rowCount": len(rows),
+                    "rows": [
+                        {
+                            "metricKey": row.metric_key,
+                            "metricLabel": row.metric_label,
+                            "reportPeriod": row.report_period,
+                            "periodType": row.period_type,
+                            "fiscalYear": row.fiscal_year,
+                            "fiscalQuarter": row.fiscal_quarter,
+                            "statementDate": row.statement_date.isoformat() if row.statement_date else None,
+                            "valueNumber": row.value_number,
+                            "valueText": row.value_text,
+                            "updatedAt": row.updated_at.isoformat() if row.updated_at else None,
+                            "rawJson": row.raw_json,
+                        }
+                        for row in rows
+                    ],
+                }
+            )
+
+        highlights = self._build_financial_highlights(sections)
+
+        return {
+            "symbol": normalized_symbol,
+            "exchange": exchange,
+            "updatedAt": latest_updated_at.isoformat() if latest_updated_at else None,
+            "highlights": highlights,
+            "sections": sections,
+        }
+
+    @staticmethod
+    def _build_financial_highlights(sections: list[dict[str, Any]]) -> list[dict[str, str]]:
+        mappings = [
+            ("Doanh thu", ["doanh thu", "revenue", "sales"]),
+            ("LNST", ["loi nhuan sau thue", "profit after tax", "net income", "lợi nhuận sau thuế"]),
+            ("Tong tai san", ["tong tai san", "total assets"]),
+            ("Dong tien KD", ["luu chuyen tien tu hd kinh doanh", "operating cash flow", "cash flow from operating"]),
+            ("ROE/ROA", ["roe", "roa"]),
+        ]
+        highlights: list[dict[str, str]] = []
+
+        for label, patterns in mappings:
+            match = None
+            for section in sections:
+                for row in section.get("rows", []):
+                    metric_label = str(row.get("metricLabel") or "").lower()
+                    if any(pattern in metric_label for pattern in patterns):
+                        match = row
+                        break
+                if match:
+                    break
+
+            if not match:
+                continue
+
+            value_number = match.get("valueNumber")
+            if value_number is not None:
+                value_text = MarketReadRepository._format_financial_value(value_number)
+            else:
+                value_text = str(match.get("valueText") or "--")
+
+            report_period = match.get("reportPeriod") or "--"
+            highlights.append(
+                {
+                    "label": label,
+                    "value": value_text,
+                    "helper": f"Ky {report_period}",
+                }
+            )
+
+        return highlights[:6]
+
+    @staticmethod
+    def _format_financial_value(value: float | int | None) -> str:
+        if value in (None, ""):
+            return "--"
+        number = float(value)
+        if abs(number) >= 1_000_000_000:
+            return f"{number / 1_000_000_000:.2f}B"
+        if abs(number) >= 1_000_000:
+            return f"{number / 1_000_000:.2f}M"
+        if abs(number) >= 1_000:
+            return f"{number / 1_000:.2f}K"
+        if number.is_integer():
+            return f"{int(number)}"
+        return f"{number:.2f}"
 
     async def get_latest_news_articles(
         self,

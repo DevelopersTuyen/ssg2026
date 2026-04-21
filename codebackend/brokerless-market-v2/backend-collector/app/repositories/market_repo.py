@@ -3,11 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.market import (
+    MarketFinancialBalanceSheet,
+    MarketFinancialCashFlow,
+    MarketFinancialIncomeStatement,
+    MarketFinancialNote,
+    MarketFinancialRatio,
     MarketIndexDailyPoint,
     MarketIndexIntradayPoint,
     MarketIntradayPoint,
@@ -17,6 +22,15 @@ from app.models.market import (
     MarketWatchlistItem,
 )
 from app.utils.json_safe import to_jsonable
+
+
+FINANCIAL_TABLES = {
+    "balance_sheet": MarketFinancialBalanceSheet,
+    "income_statement": MarketFinancialIncomeStatement,
+    "cash_flow": MarketFinancialCashFlow,
+    "ratio": MarketFinancialRatio,
+    "note": MarketFinancialNote,
+}
 
 
 class MarketRepository:
@@ -79,6 +93,34 @@ class MarketRepository:
         stmt = insert(MarketIndexIntradayPoint).values(**payload)
         stmt = stmt.on_conflict_do_nothing(
             index_elements=[MarketIndexIntradayPoint.index_symbol, MarketIndexIntradayPoint.point_time, MarketIndexIntradayPoint.source]
+        )
+        await self.session.execute(stmt)
+
+    async def upsert_financial_record(self, statement_type: str, payload: dict[str, Any]) -> None:
+        table = FINANCIAL_TABLES[statement_type]
+        payload = dict(payload)
+        payload["raw_json"] = to_jsonable(payload.get("raw_json"))
+        stmt = insert(table).values(**payload)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[
+                table.symbol,
+                table.period_type,
+                table.report_period,
+                table.metric_key,
+                table.source,
+            ],
+            set_={
+                "exchange": payload.get("exchange"),
+                "fiscal_year": payload.get("fiscal_year"),
+                "fiscal_quarter": payload.get("fiscal_quarter"),
+                "statement_date": payload.get("statement_date"),
+                "metric_label": payload.get("metric_label"),
+                "value_number": payload.get("value_number"),
+                "value_text": payload.get("value_text"),
+                "raw_json": payload.get("raw_json"),
+                "captured_at": payload.get("captured_at"),
+                "updated_at": payload.get("updated_at"),
+            },
         )
         await self.session.execute(stmt)
 
@@ -165,6 +207,7 @@ class MarketRepository:
         result = await self.session.execute(
             select(MarketSymbol.symbol)
             .where(MarketSymbol.is_active.is_(True))
+            .where(or_(MarketSymbol.instrument_type != "index", MarketSymbol.instrument_type.is_(None)))
             .order_by(MarketSymbol.exchange.asc(), MarketSymbol.symbol.asc())
         )
         return [x.upper() for x in result.scalars().all() if x]
@@ -173,6 +216,7 @@ class MarketRepository:
         result = await self.session.execute(
             select(MarketSymbol.symbol, MarketSymbol.exchange)
             .where(MarketSymbol.is_active.is_(True))
+            .where(or_(MarketSymbol.instrument_type != "index", MarketSymbol.instrument_type.is_(None)))
             .order_by(MarketSymbol.exchange.asc(), MarketSymbol.symbol.asc())
         )
 

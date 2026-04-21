@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 
 import { MarketSettingsPageRoutingModule } from './market-settings-routing.module';
+import { SharedModule } from '../../shared/shared.module';
 
 import { MarketSettingsPage } from './market-settings.page';
 
@@ -13,6 +14,7 @@ import { MarketSettingsPage } from './market-settings.page';
     CommonModule,
     FormsModule,
     IonicModule,
+    SharedModule,
     MarketSettingsPageRoutingModule
   ],
   declarations: [MarketSettingsPage]

@@ -9,16 +9,14 @@
 
           <div>
             <div class="eyebrow">BROKERLESS MARKET</div>
-            <h1>Đăng nhập để vào workspace giao dịch và phân tích.</h1>
-            <p>
-              Một nơi để xem dashboard, market watch, watchlist, cảnh báo và AI Agent trên cùng một ngữ cảnh dữ liệu.
-            </p>
+            <h1>{{ 'login.title' | translate }}</h1>
+            <p>{{ 'login.subtitle' | translate }}</p>
           </div>
         </div>
 
         <div class="highlight-strip">
           <div class="highlight-card" *ngFor="let item of highlights">
-            <div class="highlight-label">{{ item.label }}</div>
+            <div class="highlight-label">{{ item.labelKey | translate }}</div>
             <div class="highlight-value" [class.up]="item.tone === 'up'">{{ item.value }}</div>
           </div>
         </div>
@@ -44,61 +42,38 @@
 
       <section class="login-panel">
         <div class="panel-head">
-          <div class="panel-title">Sign in</div>
+          <div class="panel-title">{{ 'login.signIn' | translate }}</div>
           <div class="panel-subtitle">{{ helpMessage }}</div>
         </div>
 
         <div class="demo-row">
-          <button
-            type="button"
-            class="demo-chip"
-            *ngFor="let account of demoAccounts"
-            (click)="useDemo(account)"
-          >
+          <button type="button" class="demo-chip" *ngFor="let account of demoAccounts" (click)="useDemo(account)">
             {{ account.label }}
           </button>
         </div>
 
         <form class="login-form" (ngSubmit)="submit()">
           <label class="field">
-            <span>Mã công ty</span>
+            <span>{{ 'login.companyCode' | translate }}</span>
             <div class="input-shell">
               <ion-icon name="business-outline"></ion-icon>
-              <input
-                type="text"
-                class="form-control"
-                placeholder="Ví dụ: MW"
-                [(ngModel)]="companyCode"
-                name="companyCode"
-              />
+              <input type="text" class="form-control" placeholder="MW" [(ngModel)]="companyCode" name="companyCode" />
             </div>
           </label>
 
           <label class="field">
-            <span>Tài khoản</span>
+            <span>{{ 'login.username' | translate }}</span>
             <div class="input-shell">
               <ion-icon name="person-outline"></ion-icon>
-              <input
-                type="text"
-                class="form-control"
-                placeholder="Nhập tài khoản nội bộ"
-                [(ngModel)]="username"
-                name="username"
-              />
+              <input type="text" class="form-control" placeholder="admin.demo" [(ngModel)]="username" name="username" />
             </div>
           </label>
 
           <label class="field">
-            <span>Mật khẩu</span>
+            <span>{{ 'login.password' | translate }}</span>
             <div class="input-shell password-shell">
               <ion-icon name="lock-closed-outline"></ion-icon>
-              <input
-                [type]="showPassword ? 'text' : 'password'"
-                class="form-control"
-                placeholder="Nhập mật khẩu"
-                [(ngModel)]="password"
-                name="password"
-              />
+              <input [type]="showPassword ? 'text' : 'password'" class="form-control" placeholder="demo123" [(ngModel)]="password" name="password" />
               <button type="button" class="toggle-password" (click)="togglePassword()">
                 <ion-icon [name]="showPassword ? 'eye-off-outline' : 'eye-outline'"></ion-icon>
               </button>
@@ -108,32 +83,32 @@
           <div class="option-row">
             <label class="remember-box">
               <input type="checkbox" [(ngModel)]="rememberMe" name="rememberMe" />
-              <span>Giữ phiên đăng nhập</span>
+              <span>{{ 'login.remember' | translate }}</span>
             </label>
 
-            <button type="button" class="ghost-link" (click)="forgotPassword()">Quên mật khẩu?</button>
+            <button type="button" class="ghost-link" (click)="forgotPassword()">{{ 'login.forgot' | translate }}</button>
           </div>
 
           <div class="error-box" *ngIf="errorMessage">{{ errorMessage }}</div>
 
           <button type="submit" class="btn-login" [disabled]="!canSubmit">
             <ion-spinner *ngIf="loading" name="crescent"></ion-spinner>
-            <span>{{ loading ? 'Đang xác thực...' : 'Đăng nhập vào hệ thống' }}</span>
+            <span>{{ loading ? ('login.authenticating' | translate) : ('login.submit' | translate) }}</span>
           </button>
         </form>
 
         <div class="panel-meta">
           <div class="meta-item">
             <ion-icon name="shield-checkmark-outline"></ion-icon>
-            <span>Kết nối bảo mật</span>
+            <span>{{ 'login.secure' | translate }}</span>
           </div>
           <div class="meta-item">
             <ion-icon name="sparkles-outline"></ion-icon>
-            <span>AI Agent sẵn sàng</span>
+            <span>{{ 'login.aiReady' | translate }}</span>
           </div>
           <div class="meta-item">
             <ion-icon name="stats-chart-outline"></ion-icon>
-            <span>Dữ liệu thị trường nội bộ</span>
+            <span>{{ 'login.marketData' | translate }}</span>
           </div>
         </div>
 

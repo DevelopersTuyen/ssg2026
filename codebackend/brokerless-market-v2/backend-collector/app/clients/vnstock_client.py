@@ -60,6 +60,38 @@ class VnstockClient:
             return [to_jsonable(df)]
         return []
 
+    def get_listing_symbols(self, source: str | None = None) -> VnstockDataResult:
+        self._ensure_ready()
+        self._apply_api_key_if_supported()
+
+        listing_source = str(source or settings.symbol_master_source or self.source).strip().lower()
+        raw: Any = None
+        errors: list[str] = []
+
+        try:
+            Listing = getattr(self._vnstock, "Listing")
+            listing = Listing(source=listing_source, show_log=False)
+            raw = listing.symbols_by_exchange()
+            rows = self._df_to_records(raw)
+            if rows:
+                return VnstockDataResult(rows=rows, raw=raw)
+        except Exception as exc:
+            errors.append(f"Listing.symbols_by_exchange failed for {listing_source}: {exc}")
+
+        try:
+            Listing = getattr(self._vnstock, "Listing")
+            listing = Listing(source=listing_source, show_log=False)
+            raw = listing.all_symbols()
+            rows = self._df_to_records(raw)
+            if rows:
+                return VnstockDataResult(rows=rows, raw=raw)
+        except Exception as exc:
+            errors.append(f"Listing.all_symbols failed for {listing_source}: {exc}")
+
+        if errors:
+            logger.warning("listing fetch failed: %s", " | ".join(errors[:3]))
+        return VnstockDataResult(rows=[], raw=raw)
+
     def get_price_board(self, symbols: list[str]) -> VnstockDataResult:
         self._ensure_ready()
         self._apply_api_key_if_supported()
@@ -145,16 +177,93 @@ class VnstockClient:
             logger.warning("intraday fetch failed for %s: %s", symbol, " | ".join(errors[:3]))
         return VnstockDataResult(rows=[], raw=raw)
 
-    def get_history(self, symbol: str, interval: str = "1D", months: int = 6) -> VnstockDataResult:
+    def get_history(
+        self,
+        symbol: str,
+        interval: str = "1D",
+        months: int = 6,
+        source: str | None = None,
+    ) -> VnstockDataResult:
         self._ensure_ready()
         self._apply_api_key_if_supported()
-        quote = self._make_quote(symbol)
+        quote = self._make_quote(symbol, source=source)
         raw = self._quote_history_fallback(quote, length=f"{months}M", interval=interval)
         return VnstockDataResult(rows=self._df_to_records(raw), raw=raw)
 
-    def _make_quote(self, symbol: str) -> Any:
+    def get_financial_statement(
+        self,
+        symbol: str,
+        statement_type: str,
+        period: str = "quarter",
+        source: str | None = None,
+    ) -> VnstockDataResult:
+        self._ensure_ready()
+        self._apply_api_key_if_supported()
+
+        source_name = str(source or settings.financial_source or settings.vnstock_source or self.source).strip() or self.source
+        finance = self._make_finance(symbol=symbol, period=period, source=source_name)
+        method = getattr(finance, statement_type, None)
+        if not callable(method):
+            raise RuntimeError(f"vnstock Finance.{statement_type} is not available")
+
+        errors: list[str] = []
+        raw: Any = None
+        for kwargs in (
+            {"dropna": False},
+            {"dropna": True},
+            {},
+        ):
+            try:
+                raw = method(**kwargs)
+                rows = self._df_to_records(raw)
+                if rows:
+                    return VnstockDataResult(rows=rows, raw=raw)
+                if raw is not None:
+                    return VnstockDataResult(rows=rows, raw=raw)
+            except TypeError:
+                try:
+                    raw = method()
+                    rows = self._df_to_records(raw)
+                    if rows or raw is not None:
+                        return VnstockDataResult(rows=rows, raw=raw)
+                except Exception as exc:
+                    errors.append(str(exc))
+                    continue
+            except Exception as exc:
+                errors.append(str(exc))
+
+        if errors:
+            logger.warning(
+                "financial statement fetch failed | symbol=%s | statement=%s | period=%s | err=%s",
+                symbol,
+                statement_type,
+                period,
+                " | ".join(errors[:3]),
+            )
+        return VnstockDataResult(rows=[], raw=raw)
+
+    def _make_quote(self, symbol: str, source: str | None = None) -> Any:
         Quote = getattr(self._vnstock, "Quote")
-        return Quote(symbol=symbol, source=self.source)
+        return Quote(symbol=symbol, source=(source or self.source))
+
+    def _make_finance(self, symbol: str, period: str = "quarter", source: str | None = None) -> Any:
+        Finance = getattr(self._vnstock, "Finance")
+        kwargs = {
+            "symbol": symbol,
+            "period": period,
+            "source": source or self.source,
+        }
+
+        for variant in (
+            {**kwargs, "show_log": False},
+            kwargs,
+        ):
+            try:
+                return Finance(**variant)
+            except TypeError:
+                continue
+
+        return Finance(**kwargs)
 
     def _quote_history_fallback(self, quote: Any, length: str = "6M", interval: str = "1D") -> Any:
         errors: list[str] = []
