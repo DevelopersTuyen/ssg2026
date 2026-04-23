@@ -133,6 +133,30 @@ export interface FinancialHighlightItem {
   helper: string;
 }
 
+export interface FinancialStatementPeriod {
+  key: string;
+  label: string;
+  reportPeriod: string | null;
+  periodType: string | null;
+  fiscalYear: number | null;
+  fiscalQuarter: number | null;
+  statementDate: string | null;
+}
+
+export interface FinancialStatementValue {
+  periodKey: string;
+  reportPeriod: string | null;
+  periodType: string | null;
+  fiscalYear: number | null;
+  fiscalQuarter: number | null;
+  statementDate: string | null;
+  valueNumber: number | null;
+  valueText: string | null;
+  displayValue: string;
+  updatedAt: string | null;
+  hasValue: boolean;
+}
+
 export interface FinancialStatementRow {
   metricKey: string;
   metricLabel: string;
@@ -143,8 +167,10 @@ export interface FinancialStatementRow {
   statementDate: string | null;
   valueNumber: number | null;
   valueText: string | null;
+  displayValue: string;
   updatedAt: string | null;
   rawJson: Record<string, any> | null;
+  values: FinancialStatementValue[];
 }
 
 export interface FinancialStatementSection {
@@ -152,7 +178,9 @@ export interface FinancialStatementSection {
   title: string;
   latestPeriod: string | null;
   periodType: string | null;
+  periodCount: number;
   rowCount: number;
+  periods: FinancialStatementPeriod[];
   rows: FinancialStatementRow[];
 }
 
@@ -1240,7 +1268,7 @@ export class MarketApiService {
       );
   }
 
-  getSymbolFinancials(symbol: string, limitPerSection = 12): Observable<FinancialOverviewResponse | null> {
+  getSymbolFinancials(symbol: string, limitPerSection = 40): Observable<FinancialOverviewResponse | null> {
     return this.withCache(
       `live:symbol-financials:${symbol.toUpperCase()}:${limitPerSection}`,
       300000,

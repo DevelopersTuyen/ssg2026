@@ -434,6 +434,8 @@ const VI_ADDITIONAL_TRANSLATIONS: Record<string, string> = {
   'marketWatch.empty.financialReport': 'Chưa có dữ liệu báo cáo tài chính cho mã này.',
   'marketWatch.empty.financialGroup': 'Nhóm số liệu này chưa có dữ liệu.',
   'marketWatch.rows': 'dòng',
+  'marketWatch.showMoreRows': 'Xem thêm chỉ tiêu',
+  'marketWatch.showLessRows': 'Thu gọn chỉ tiêu',
   'marketWatch.summary.indexes': 'Index',
   'marketWatch.summary.stocks': 'Cổ phiếu',
   'marketWatch.summary.flow': 'Dòng tiền',

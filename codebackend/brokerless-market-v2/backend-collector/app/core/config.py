@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     intraday_rotate_batches: bool = Field(default=True, alias="INTRADAY_ROTATE_BATCHES")
     financial_source: str = Field(default="", alias="FINANCIAL_SOURCE")
     financial_use_all_symbols: bool = Field(default=True, alias="FINANCIAL_USE_ALL_SYMBOLS")
-    financial_symbols_per_run: int = Field(default=1, alias="FINANCIAL_SYMBOLS_PER_RUN")
+    financial_symbols_per_run: int = Field(default=20, alias="FINANCIAL_SYMBOLS_PER_RUN")
     financial_rotate_batches: bool = Field(default=True, alias="FINANCIAL_ROTATE_BATCHES")
     financial_periods: str = Field(default="quarter,year", alias="FINANCIAL_PERIODS")
     cafef_financial_timeout_seconds: int = Field(default=20, alias="CAFEF_FINANCIAL_TIMEOUT_SECONDS")

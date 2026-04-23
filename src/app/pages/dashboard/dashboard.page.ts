@@ -8,6 +8,8 @@ import {
   AiForecastCard,
   ExchangeTab,
   FinancialOverviewResponse,
+  FinancialStatementRow,
+  FinancialStatementSection,
   LiveHourlyTradingItem,
   LiveIndexCardItem,
   LiveIndexSeriesItem,
@@ -135,6 +137,7 @@ interface CommandSnapshotVm {
 export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly pageLoadKey = 'dashboard';
   readonly newsPageSize = 5;
+  readonly financialPreviewRowCount = 12;
 
   selectedExchange: ExchangeTab = 'HSX';
   selectedCommandScope: CommandScope = 'ALL';
@@ -193,6 +196,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
   private lastIndexCapturedAt: string | null = null;
   private lastStockCapturedAt: string | null = null;
   private financialRequestedSymbol = '';
+  private financialExpandedSections: Record<string, boolean> = {};
 
   private marketChart: any;
   private symbolChart: any;
@@ -780,6 +784,36 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     return this.financialOverview?.syncStatus || null;
   }
 
+  visibleFinancialRows(section: FinancialStatementSection): FinancialStatementRow[] {
+    if (this.isFinancialSectionExpanded(section.type)) {
+      return section.rows;
+    }
+    return section.rows.slice(0, this.financialPreviewRowCount);
+  }
+
+  hasFinancialRowToggle(section: FinancialStatementSection): boolean {
+    return section.rows.length > this.financialPreviewRowCount;
+  }
+
+  isFinancialSectionExpanded(sectionType: string): boolean {
+    return !!this.financialExpandedSections[sectionType];
+  }
+
+  toggleFinancialSection(sectionType: string): void {
+    this.financialExpandedSections = {
+      ...this.financialExpandedSections,
+      [sectionType]: !this.financialExpandedSections[sectionType],
+    };
+  }
+
+  formatFinancialCell(value: { displayValue: string; valueText: string | null }): string {
+    return value?.displayValue || value?.valueText || '--';
+  }
+
+  private resetFinancialSectionExpansion(): void {
+    this.financialExpandedSections = {};
+  }
+
   changeExchange(exchange: ExchangeTab): void {
     if (this.selectedExchange === exchange) return;
     this.selectedExchange = exchange;
@@ -810,12 +844,14 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     this.financialModalOpen = false;
     this.financialOverview = null;
     this.financialRequestedSymbol = '';
+    this.resetFinancialSectionExpansion();
     this.loadSelectedSymbol();
     this.ensureFinancialOverview(symbol, true);
   }
 
   closeSymbolModal(): void {
     this.symbolModalOpen = false;
+    this.resetFinancialSectionExpansion();
   }
 
   openFinancialModal(): void {
@@ -829,6 +865,10 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
 
   closeFinancialModal(): void {
     this.financialModalOpen = false;
+  }
+
+  trackByFinancialRow(_: number, row: FinancialStatementRow): string {
+    return row.metricKey;
   }
 
   onSearchKeywordChange(value: string): void {
@@ -1271,13 +1311,14 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     this.financialSub?.unsubscribe();
     this.financialRequestedSymbol = symbol;
     this.financialLoading = true;
-    this.financialSub = this.api.getSymbolFinancials(symbol, 12).subscribe({
+    this.financialSub = this.api.getSymbolFinancials(symbol, 40).subscribe({
       next: (data) => {
         if (this.financialRequestedSymbol !== symbol) {
           return;
         }
         this.financialOverview = data;
         this.financialLoading = false;
+        this.resetFinancialSectionExpansion();
       },
       error: () => {
         if (this.financialRequestedSymbol !== symbol) {
@@ -1285,6 +1326,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
         }
         this.financialOverview = null;
         this.financialLoading = false;
+        this.resetFinancialSectionExpansion();
       },
     });
   }

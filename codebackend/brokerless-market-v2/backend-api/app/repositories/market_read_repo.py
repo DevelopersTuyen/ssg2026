@@ -1299,7 +1299,7 @@ class MarketReadRepository:
         self,
         symbol: str,
         *,
-        limit_per_section: int = 12,
+        limit_per_section: int = 40,
     ) -> dict[str, Any]:
         normalized_symbol = symbol.upper()
         symbol_row = await self.session.get(MarketSymbol, normalized_symbol)
@@ -1318,50 +1318,64 @@ class MarketReadRepository:
                     desc(table.statement_date).nullslast(),
                     desc(table.updated_at),
                 )
-                .limit(limit_per_section)
             )
-            rows = result.scalars().all()
-            if not rows:
+            raw_rows = result.scalars().all()
+            if not raw_rows:
                 sections.append(
                     {
                         "type": statement_type,
                         "title": FINANCIAL_TITLES.get(statement_type, statement_type),
                         "latestPeriod": None,
                         "periodType": None,
+                        "periodCount": 0,
                         "rowCount": 0,
+                        "periods": [],
                         "rows": [],
                     }
                 )
                 continue
 
-            latest_row = rows[0]
-            latest_updated_at = max(
-                latest_updated_at or latest_row.updated_at,
-                latest_row.updated_at,
+            section_payload = self._build_financial_section_payload(
+                raw_rows,
+                limit_per_section=limit_per_section,
             )
+            if not section_payload:
+                sections.append(
+                    {
+                        "type": statement_type,
+                        "title": FINANCIAL_TITLES.get(statement_type, statement_type),
+                        "latestPeriod": None,
+                        "periodType": None,
+                        "periodCount": 0,
+                        "rowCount": 0,
+                        "periods": [],
+                        "rows": [],
+                    }
+                )
+                continue
+
+            latest_row = section_payload["latestRow"]
+            section_updated_at = max(
+                (row.updated_at for row in raw_rows if getattr(row, "updated_at", None)),
+                default=None,
+            )
+            section_latest_updated_at = section_updated_at or getattr(latest_row, "updated_at", None)
+            if section_latest_updated_at:
+                latest_updated_at = (
+                    max(latest_updated_at, section_latest_updated_at)
+                    if latest_updated_at
+                    else section_latest_updated_at
+                )
             sections.append(
                 {
                     "type": statement_type,
                     "title": FINANCIAL_TITLES.get(statement_type, statement_type),
-                    "latestPeriod": latest_row.report_period,
-                    "periodType": latest_row.period_type,
-                    "rowCount": len(rows),
-                    "rows": [
-                        {
-                            "metricKey": row.metric_key,
-                            "metricLabel": row.metric_label,
-                            "reportPeriod": row.report_period,
-                            "periodType": row.period_type,
-                            "fiscalYear": row.fiscal_year,
-                            "fiscalQuarter": row.fiscal_quarter,
-                            "statementDate": row.statement_date.isoformat() if row.statement_date else None,
-                            "valueNumber": row.value_number,
-                            "valueText": row.value_text,
-                            "updatedAt": row.updated_at.isoformat() if row.updated_at else None,
-                            "rawJson": None,
-                        }
-                        for row in rows
-                    ],
+                    "latestPeriod": section_payload["latestPeriod"],
+                    "periodType": section_payload["periodType"],
+                    "periodCount": len(section_payload["periods"]),
+                    "rowCount": section_payload["rowCount"],
+                    "periods": section_payload["periods"],
+                    "rows": section_payload["rows"],
                 }
             )
 
@@ -1374,6 +1388,177 @@ class MarketReadRepository:
             "highlights": highlights,
             "sections": sections,
             "syncStatus": self._build_financial_sync_status(latest_financial_sync, has_data=bool(latest_updated_at)),
+        }
+
+    @classmethod
+    def _build_financial_section_payload(
+        cls,
+        raw_rows: list[Any],
+        *,
+        limit_per_section: int,
+    ) -> dict[str, Any] | None:
+        if not raw_rows:
+            return None
+
+        latest_row = raw_rows[0]
+        primary_period_type = str(latest_row.period_type or "").strip().lower() or None
+        candidate_rows = [
+            row
+            for row in raw_rows
+            if not primary_period_type or str(getattr(row, "period_type", "") or "").strip().lower() == primary_period_type
+        ]
+        if not candidate_rows:
+            candidate_rows = list(raw_rows)
+            primary_period_type = str(candidate_rows[0].period_type or "").strip().lower() or None
+
+        periods: list[dict[str, Any]] = []
+        selected_period_keys: set[str] = set()
+        for row in candidate_rows:
+            period = cls._serialize_financial_period(row)
+            period_key = period["key"]
+            if period_key in selected_period_keys:
+                continue
+            periods.append(period)
+            selected_period_keys.add(period_key)
+            if len(periods) >= 4:
+                break
+
+        if not periods:
+            return None
+
+        row_map: dict[str, dict[str, Any]] = {}
+        row_order: list[str] = []
+        period_lookup = {period["key"]: period for period in periods}
+
+        for row in candidate_rows:
+            period_key = cls._build_financial_period_key(row)
+            if period_key not in period_lookup:
+                continue
+
+            metric_key = str(getattr(row, "metric_key", None) or getattr(row, "metric_label", None) or period_key)
+            if metric_key not in row_map:
+                row_map[metric_key] = {
+                    "metricKey": metric_key,
+                    "metricLabel": str(getattr(row, "metric_label", None) or getattr(row, "metric_key", None) or metric_key),
+                    "latestRow": row,
+                    "valuesByPeriod": {},
+                }
+                row_order.append(metric_key)
+
+            bucket = row_map[metric_key]
+            if period_key not in bucket["valuesByPeriod"]:
+                bucket["valuesByPeriod"][period_key] = cls._serialize_financial_value(row, period_key=period_key)
+
+        total_metric_count = len(row_order)
+        serialized_rows: list[dict[str, Any]] = []
+
+        for metric_key in row_order[: max(1, int(limit_per_section or 1))]:
+            bucket = row_map[metric_key]
+            latest_metric_row = bucket["latestRow"]
+            latest_value = cls._serialize_financial_value(
+                latest_metric_row,
+                period_key=cls._build_financial_period_key(latest_metric_row),
+            )
+            serialized_rows.append(
+                {
+                    "metricKey": bucket["metricKey"],
+                    "metricLabel": bucket["metricLabel"],
+                    "reportPeriod": latest_value["reportPeriod"],
+                    "periodType": latest_value["periodType"],
+                    "fiscalYear": latest_value["fiscalYear"],
+                    "fiscalQuarter": latest_value["fiscalQuarter"],
+                    "statementDate": latest_value["statementDate"],
+                    "valueNumber": latest_value["valueNumber"],
+                    "valueText": latest_value["valueText"],
+                    "displayValue": latest_value["displayValue"],
+                    "updatedAt": latest_value["updatedAt"],
+                    "rawJson": None,
+                    "values": [
+                        bucket["valuesByPeriod"].get(period["key"])
+                        or cls._build_empty_financial_value(period)
+                        for period in periods
+                    ],
+                }
+            )
+
+        return {
+            "latestRow": candidate_rows[0],
+            "latestPeriod": periods[0]["reportPeriod"],
+            "periodType": periods[0]["periodType"],
+            "rowCount": total_metric_count,
+            "periods": periods,
+            "rows": serialized_rows,
+        }
+
+    @staticmethod
+    def _build_financial_period_key(row: Any) -> str:
+        period_type = str(getattr(row, "period_type", None) or "").strip().lower()
+        fiscal_year = getattr(row, "fiscal_year", None)
+        fiscal_quarter = getattr(row, "fiscal_quarter", None)
+        report_period = str(getattr(row, "report_period", None) or "").strip()
+        statement_date = getattr(row, "statement_date", None)
+        statement_date_key = statement_date.isoformat() if statement_date else ""
+        return "|".join(
+            [
+                period_type or "--",
+                str(fiscal_year or "--"),
+                str(fiscal_quarter or "--"),
+                report_period or "--",
+                statement_date_key or "--",
+            ]
+        )
+
+    @classmethod
+    def _serialize_financial_period(cls, row: Any) -> dict[str, Any]:
+        period_key = cls._build_financial_period_key(row)
+        report_period = getattr(row, "report_period", None)
+        return {
+            "key": period_key,
+            "label": report_period or "--",
+            "reportPeriod": report_period,
+            "periodType": getattr(row, "period_type", None),
+            "fiscalYear": getattr(row, "fiscal_year", None),
+            "fiscalQuarter": getattr(row, "fiscal_quarter", None),
+            "statementDate": row.statement_date.isoformat() if getattr(row, "statement_date", None) else None,
+        }
+
+    @classmethod
+    def _serialize_financial_value(
+        cls,
+        row: Any,
+        *,
+        period_key: str,
+    ) -> dict[str, Any]:
+        value_number = getattr(row, "value_number", None)
+        value_text = getattr(row, "value_text", None)
+        return {
+            "periodKey": period_key,
+            "reportPeriod": getattr(row, "report_period", None),
+            "periodType": getattr(row, "period_type", None),
+            "fiscalYear": getattr(row, "fiscal_year", None),
+            "fiscalQuarter": getattr(row, "fiscal_quarter", None),
+            "statementDate": row.statement_date.isoformat() if getattr(row, "statement_date", None) else None,
+            "valueNumber": value_number,
+            "valueText": value_text,
+            "displayValue": cls._format_financial_display_value(value_number, value_text),
+            "updatedAt": row.updated_at.isoformat() if getattr(row, "updated_at", None) else None,
+            "hasValue": value_number not in (None, "") or bool(str(value_text or "").strip()),
+        }
+
+    @staticmethod
+    def _build_empty_financial_value(period: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "periodKey": period["key"],
+            "reportPeriod": period.get("reportPeriod"),
+            "periodType": period.get("periodType"),
+            "fiscalYear": period.get("fiscalYear"),
+            "fiscalQuarter": period.get("fiscalQuarter"),
+            "statementDate": period.get("statementDate"),
+            "valueNumber": None,
+            "valueText": None,
+            "displayValue": "--",
+            "updatedAt": None,
+            "hasValue": False,
         }
 
     @staticmethod
@@ -1439,6 +1624,14 @@ class MarketReadRepository:
             )
 
         return highlights[:6]
+
+    @staticmethod
+    def _format_financial_display_value(value_number: float | int | None, value_text: Any) -> str:
+        if value_number not in (None, ""):
+            return MarketReadRepository._format_financial_value(value_number)
+
+        cleaned_text = str(value_text or "").strip()
+        return cleaned_text or "--"
 
     @staticmethod
     def _format_financial_value(value: float | int | None) -> str:

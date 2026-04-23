@@ -6,6 +6,8 @@ import { PageLoadStateService } from 'src/app/core/services/page-load-state.serv
 import {
   ExchangeTab,
   FinancialOverviewResponse,
+  FinancialStatementRow,
+  FinancialStatementSection,
   LiveHourlyTradingItem,
   LiveIndexCardItem,
   LiveIndexOptionItem,
@@ -74,6 +76,7 @@ type FlowRange = 'day' | 'week' | 'tenDays';
 })
 export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly pageLoadKey = 'market-watch';
+  readonly financialPreviewRowCount = 12;
   readonly exchangeOptions: ExchangeTab[] = ['HSX', 'HNX', 'UPCOM'];
   readonly stockPageSize = 12;
   selectedExchange: ExchangeTab = 'HSX';
@@ -113,6 +116,7 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   private lastIndexCapturedAt: string | null = null;
   private lastStockCapturedAt: string | null = null;
   private financialRequestedSymbol = '';
+  private financialExpandedSections: Record<string, boolean> = {};
 
   private hourlyChart: any;
   private flowCharts: any[] = [];
@@ -212,6 +216,7 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
       this.financialModalOpen = false;
       this.financialOverview = null;
       this.financialRequestedSymbol = '';
+      this.resetFinancialSectionExpansion();
     }
 
     if (symbolChanged || !this.selectedQuote) {
@@ -226,6 +231,7 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
 
   closeSymbolModal(): void {
     this.symbolModalOpen = false;
+    this.resetFinancialSectionExpansion();
   }
 
   openFinancialModal(): void {
@@ -239,6 +245,10 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
 
   closeFinancialModal(): void {
     this.financialModalOpen = false;
+  }
+
+  trackByFinancialRow(_: number, row: FinancialStatementRow): string {
+    return row.metricKey;
   }
 
   trackByIndex(_: number, item: IndexCardVm): string {
@@ -621,13 +631,14 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     this.financialSub?.unsubscribe();
     this.financialRequestedSymbol = symbol;
     this.financialLoading = true;
-    this.financialSub = this.api.getSymbolFinancials(symbol, 12).subscribe({
+    this.financialSub = this.api.getSymbolFinancials(symbol, 40).subscribe({
       next: (data) => {
         if (this.financialRequestedSymbol !== symbol) {
           return;
         }
         this.financialOverview = data;
         this.financialLoading = false;
+        this.resetFinancialSectionExpansion();
       },
       error: () => {
         if (this.financialRequestedSymbol !== symbol) {
@@ -635,6 +646,7 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
         }
         this.financialOverview = null;
         this.financialLoading = false;
+        this.resetFinancialSectionExpansion();
       },
     });
   }
@@ -1525,6 +1537,36 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
 
   get financialSyncStatus() {
     return this.financialOverview?.syncStatus || null;
+  }
+
+  visibleFinancialRows(section: FinancialStatementSection): FinancialStatementRow[] {
+    if (this.isFinancialSectionExpanded(section.type)) {
+      return section.rows;
+    }
+    return section.rows.slice(0, this.financialPreviewRowCount);
+  }
+
+  hasFinancialRowToggle(section: FinancialStatementSection): boolean {
+    return section.rows.length > this.financialPreviewRowCount;
+  }
+
+  isFinancialSectionExpanded(sectionType: string): boolean {
+    return !!this.financialExpandedSections[sectionType];
+  }
+
+  toggleFinancialSection(sectionType: string): void {
+    this.financialExpandedSections = {
+      ...this.financialExpandedSections,
+      [sectionType]: !this.financialExpandedSections[sectionType],
+    };
+  }
+
+  formatFinancialCell(value: { displayValue: string; valueText: string | null }): string {
+    return value?.displayValue || value?.valueText || '--';
+  }
+
+  private resetFinancialSectionExpansion(): void {
+    this.financialExpandedSections = {};
   }
 
   private indexDisplayName(exchange: string, symbol: string): string {

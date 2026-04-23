@@ -205,7 +205,7 @@ async def get_symbol_hourly(
 @router.get("/symbols/{symbol}/financials")
 async def get_symbol_financials(
     symbol: str,
-    limit_per_section: int = Query(default=12, ge=6, le=100),
+    limit_per_section: int = Query(default=40, ge=6, le=200),
     repo: MarketReadRepository = Depends(get_repo),
 ):
     return await repo.get_symbol_financial_bundle(symbol=symbol, limit_per_section=limit_per_section)

@@ -418,17 +418,38 @@
           </div>
         </div>
 
-        <div class="financial-table" *ngIf="section.rows.length; else emptyFinancialRows">
-          <div class="financial-row header">
-            <span>{{ 'marketWatch.metric.metric' | translate }}</span>
-            <span>{{ 'marketWatch.metric.value' | translate }}</span>
-            <span>{{ 'marketWatch.metric.period' | translate }}</span>
+        <div class="financial-table-wrap" *ngIf="section.rows.length; else emptyFinancialRows">
+          <div class="financial-table-scroll">
+            <table class="financial-table">
+              <thead>
+                <tr>
+                  <th>{{ 'marketWatch.metric.metric' | translate }}</th>
+                  <th *ngFor="let period of section.periods">{{ period.label || '--' }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of visibleFinancialRows(section); trackBy: trackByFinancialRow">
+                  <td class="financial-metric-cell">{{ row.metricLabel }}</td>
+                  <td class="financial-value-cell" *ngFor="let value of row.values">
+                    {{ formatFinancialCell(value) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div class="financial-row" *ngFor="let row of section.rows | slice:0:10">
-            <span>{{ row.metricLabel }}</span>
-            <span>{{ row.valueNumber !== null && row.valueNumber !== undefined ? row.valueNumber : (row.valueText || '--') }}</span>
-            <span>{{ row.reportPeriod || '--' }}</span>
-          </div>
+
+          <button
+            type="button"
+            class="financial-toggle"
+            *ngIf="hasFinancialRowToggle(section)"
+            (click)="toggleFinancialSection(section.type)"
+          >
+            {{
+              isFinancialSectionExpanded(section.type)
+                ? ('marketWatch.showLessRows' | translate)
+                : ('marketWatch.showMoreRows' | translate)
+            }}
+          </button>
         </div>
 
         <ng-template #emptyFinancialRows>

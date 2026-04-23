@@ -429,6 +429,8 @@ export const EN_ADDITIONAL_TRANSLATIONS: Record<string, string> = {
   'marketWatch.empty.financialReport': 'No financial report data is available for this symbol.',
   'marketWatch.empty.financialGroup': 'This metric group has no data.',
   'marketWatch.rows': 'rows',
+  'marketWatch.showMoreRows': 'Show more rows',
+  'marketWatch.showLessRows': 'Show fewer rows',
   'marketWatch.summary.indexes': 'Indices',
   'marketWatch.summary.stocks': 'Stocks',
   'marketWatch.summary.flow': 'Flow',

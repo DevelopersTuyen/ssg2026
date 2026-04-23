@@ -429,6 +429,8 @@ export const JA_ADDITIONAL_TRANSLATIONS: Record<string, string> = {
   'marketWatch.empty.financialReport': 'この銘柄の財務データはありません。',
   'marketWatch.empty.financialGroup': 'この指標 group にデータはありません。',
   'marketWatch.rows': '行',
+  'marketWatch.showMoreRows': '行をもっと表示',
+  'marketWatch.showLessRows': '行を減らす',
   'marketWatch.summary.indexes': '指数',
   'marketWatch.summary.stocks': '銘柄',
   'marketWatch.summary.flow': 'フロー',
