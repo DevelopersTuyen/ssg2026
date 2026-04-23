@@ -20,9 +20,13 @@ async def get_service():
 @router.get("/overview", response_model=ApiEnvelope)
 async def get_ai_local_overview(
     exchange: str = Query(default="HSX"),
+    include_financial_analysis: bool = Query(default=False),
     service: AiLocalService = Depends(get_service),
 ):
-    data = await service.get_overview(exchange=exchange)
+    data = await service.get_overview(
+        exchange=exchange,
+        include_financial_analysis=include_financial_analysis,
+    )
     return ApiEnvelope(data=data)
 
 

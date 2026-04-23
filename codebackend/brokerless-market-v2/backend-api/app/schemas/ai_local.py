@@ -48,12 +48,23 @@ class AiLocalFinancialReport(BaseModel):
     note: str = ""
 
 
+class AiLocalSymbolOutlook(BaseModel):
+    symbol: str
+    exchange: str | None = None
+    direction: str = "neutral"
+    confidence: int = 60
+    horizon: str = ""
+    summary: str
+    basis: list[str] = Field(default_factory=list)
+
+
 class AiLocalOverviewResponse(BaseModel):
     exchange: str
     provider: str
     model: str
     connected: bool = False
     model_available: bool = False
+    include_financial_analysis: bool = False
     used_fallback: bool = False
     generated_at: datetime
     summary_items: list[AiStatusItem]
@@ -64,6 +75,7 @@ class AiLocalOverviewResponse(BaseModel):
     focus_symbols: list[str]
     news_items: list[AiLocalNewsItem]
     financial_reports: list[AiLocalFinancialReport]
+    symbol_outlooks: list[AiLocalSymbolOutlook]
     analysis_sections: list[AiLocalAnalysisSection]
     cafef_storage: AiLocalStorageStatus
     assistant_greeting: str

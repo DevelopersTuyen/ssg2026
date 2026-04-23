@@ -8,6 +8,7 @@ import {
   MarketSettingsData,
 } from './market-api.service';
 import { AppI18nService } from '../i18n/app-i18n.service';
+import { ThemeService } from './theme.service';
 
 const AUTH_STORAGE_KEY = 'market_watch_auth_session';
 const SETTINGS_STORAGE_KEY = 'market_watch_settings_cache';
@@ -21,11 +22,13 @@ export class AuthService {
 
   constructor(
     private api: MarketApiService,
-    private i18n: AppI18nService
+    private i18n: AppI18nService,
+    private theme: ThemeService
   ) {
     if (this.settings?.language) {
       this.i18n.setLanguage(this.settings.language);
     }
+    this.theme.applyTheme(this.settings?.theme || 'light');
   }
 
   get token(): string | null {
@@ -129,6 +132,7 @@ export class AuthService {
   cacheSettings(settings: MarketSettingsData | null): void {
     this.settings = settings;
     this.i18n.setLanguage(settings?.language);
+    this.theme.applyTheme(settings?.theme || 'light');
 
     if (!settings) {
       localStorage.removeItem(SETTINGS_STORAGE_KEY);
@@ -160,6 +164,7 @@ export class AuthService {
   private clearSession(): void {
     this.session = null;
     this.settings = null;
+    this.theme.applyTheme('light');
     localStorage.removeItem(AUTH_STORAGE_KEY);
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(SETTINGS_STORAGE_KEY);

@@ -1,4 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
+import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
+import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 import {
   AiActivityItem,
   AiAgentChatHistoryItem,
@@ -30,7 +34,11 @@ interface ChatMessage {
   styleUrls: ['./ai-agent.page.scss'],
   standalone: false,
 })
-export class AiAgentPage implements OnInit {
+export class AiAgentPage implements OnInit, OnDestroy {
+  private readonly pageLoadKey = 'ai-agent';
+  private backgroundSub?: Subscription;
+  private activeView = false;
+
   selectedTab: AiTab = 'dashboard';
   selectedExchange: ExchangeTab = 'HSX';
   currentPrompt = '';
@@ -39,31 +47,15 @@ export class AiAgentPage implements OnInit {
   sendingPrompt = false;
   overviewError = '';
 
-  readonly tabs: AiTabItem[] = [
-    { key: 'dashboard', label: 'Tong quan AI' },
-    { key: 'chat', label: 'Chat AI' },
-    { key: 'tasks', label: 'Tac vu tu dong' },
-    { key: 'skills', label: 'Ky nang AI' },
-    { key: 'history', label: 'Lich su' },
-  ];
-
   summaryItems: AiStatusItem[] = [
     { label: 'Model', value: 'gemini-2.5-flash', tone: 'default' },
-    { label: 'Trang thai', value: 'Dang cho backend', tone: 'warning' },
-    { label: 'Watchlist dang theo doi', value: '0 ma', tone: 'default' },
-    { label: 'Lan chay gan nhat', value: '--:--', tone: 'default' },
-    { label: 'Canh bao AI hom nay', value: '0 tin hieu', tone: 'default' },
-    { label: 'Tom tat da tao', value: '0 ban', tone: 'default' },
+    { label: 'Status', value: 'Waiting for backend', tone: 'warning' },
+    { label: 'Watchlist in scope', value: '0 symbols', tone: 'default' },
+    { label: 'Last run', value: '--:--', tone: 'default' },
+    { label: 'AI alerts today', value: '0 signals', tone: 'default' },
+    { label: 'Summaries created', value: '0 items', tone: 'default' },
   ];
-
-  quickPrompts: string[] = [
-    'Tom tat thi truong hom nay',
-    'Ma nao trong watchlist dang yeu hon VN-Index?',
-    'Giai thich vi sao ma dan dau tang manh',
-    'Tom tat tin tuc nhom ngan hang',
-    'Loc ma co volume dot bien',
-    'So sanh hai ma toi dang quan tam',
-  ];
+  backendQuickPrompts: string[] = [];
 
   forecastCards: AiForecastCard[] = [];
   recentActivities: AiActivityItem[] = [];
@@ -74,16 +66,63 @@ export class AiAgentPage implements OnInit {
   chatMessages: ChatMessage[] = [
     {
       role: 'assistant',
-      content:
-        'Xin chao. AI Agent dang cho backend va Gemini de phan tich du lieu thi truong cho ban.',
+      content: 'AI Agent is waiting for backend and Gemini to analyze your market data.',
       time: '--:--',
     },
   ];
 
-  constructor(private api: MarketApiService) {}
+  constructor(
+    private api: MarketApiService,
+    private i18n: AppI18nService,
+    private backgroundRefresh: BackgroundRefreshService,
+    private pageLoadState: PageLoadStateService
+  ) {}
+
+  get tabs(): AiTabItem[] {
+    return [
+      { key: 'dashboard', label: this.t('aiAgent.tab.overview') },
+      { key: 'chat', label: this.t('aiAgent.tab.chat') },
+      { key: 'tasks', label: this.t('aiAgent.tab.tasks') },
+      { key: 'skills', label: this.t('aiAgent.tab.skills') },
+      { key: 'history', label: this.t('aiAgent.tab.history') },
+    ];
+  }
+
+  get quickPrompts(): string[] {
+    return this.backendQuickPrompts.length
+      ? this.backendQuickPrompts
+      : [
+      this.t('aiAgent.prompt.marketToday'),
+      this.t('aiAgent.prompt.watchlistWeak'),
+      this.t('aiAgent.prompt.topGainer'),
+      this.t('aiAgent.prompt.bankNews'),
+      this.t('aiAgent.prompt.volumeSpike'),
+      this.t('aiAgent.prompt.compare'),
+    ];
+  }
 
   ngOnInit(): void {
+    this.pageLoadState.registerPage(this.pageLoadKey, 'tabs.aiAgent');
+    this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
+      if (!this.activeView) return;
+      if (domains.some((item) => ['quotes', 'intraday', 'news', 'financial'].includes(item))) {
+        this.loadOverview(true);
+      }
+    });
     this.loadOverview();
+  }
+
+  ionViewDidEnter(): void {
+    this.activeView = true;
+    this.pageLoadState.setActivePage(this.pageLoadKey);
+  }
+
+  ionViewDidLeave(): void {
+    this.activeView = false;
+  }
+
+  ngOnDestroy(): void {
+    this.backgroundSub?.unsubscribe();
   }
 
   selectTab(tab: AiTab): void {
@@ -137,7 +176,7 @@ export class AiAgentPage implements OnInit {
               role: 'assistant',
               content:
                 message?.content ||
-                'Backend AI hien chua phan hoi. Kiem tra API hoac cau hinh GEMINI_API_KEY.',
+                this.t('aiAgent.error.noReply'),
               time: message?.time || this.formatNow(),
             },
           ];
@@ -149,7 +188,7 @@ export class AiAgentPage implements OnInit {
             ...this.chatMessages,
             {
               role: 'assistant',
-              content: 'Khong the gui prompt toi backend AI o thoi diem nay.',
+              content: this.t('aiAgent.error.send'),
               time: this.formatNow(),
             },
           ];
@@ -198,8 +237,13 @@ export class AiAgentPage implements OnInit {
     return 'neutral';
   }
 
-  private loadOverview(): void {
-    this.loadingOverview = true;
+  private loadOverview(silent = false): void {
+    if (!silent) {
+      this.loadingOverview = true;
+      this.pageLoadState.start(this.pageLoadKey);
+    } else {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
     this.overviewError = '';
 
     this.api.getAiAgentOverview(this.selectedExchange).subscribe({
@@ -207,24 +251,26 @@ export class AiAgentPage implements OnInit {
         const data = res.data;
 
         if (!data) {
-          this.overviewError = 'Chua lay duoc du lieu AI tu backend.';
+          this.overviewError = this.t('aiAgent.error.noOverview');
           this.loadingOverview = false;
           return;
         }
 
         this.applyOverview(data);
         this.loadingOverview = false;
+        this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
-        this.overviewError = 'Khong ket noi duoc toi backend AI.';
+        this.overviewError = this.t('aiAgent.error.connect');
         this.loadingOverview = false;
+        this.pageLoadState.fail(this.pageLoadKey, this.overviewError);
       },
     });
   }
 
   private applyOverview(data: AiAgentOverviewResponse): void {
     this.summaryItems = data.summary_items || this.summaryItems;
-    this.quickPrompts = data.quick_prompts || this.quickPrompts;
+    this.backendQuickPrompts = data.quick_prompts || this.backendQuickPrompts;
     this.forecastCards = data.forecast_cards || [];
     this.recentActivities = data.recent_activities || [];
     this.tasks = data.tasks || [];
@@ -256,5 +302,9 @@ export class AiAgentPage implements OnInit {
     const hh = `${now.getHours()}`.padStart(2, '0');
     const mm = `${now.getMinutes()}`.padStart(2, '0');
     return `${hh}:${mm}`;
+  }
+
+  private t(key: string): string {
+    return this.i18n.translate(key);
   }
 }

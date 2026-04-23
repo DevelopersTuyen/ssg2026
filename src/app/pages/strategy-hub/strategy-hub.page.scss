@@ -52,9 +52,33 @@
   border: 1px solid rgba(17, 24, 39, 0.12);
   border-radius: 14px;
   background: #fff;
+  color: #10223d;
   padding: 10px 12px;
   font: inherit;
   width: 100%;
+}
+
+.hero-select,
+.toolbar-select,
+.form-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #475569 50%),
+    linear-gradient(135deg, #475569 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+}
+
+.hero-select option,
+.toolbar-select option,
+.form-select option {
+  color: #10223d;
+  background: #fff;
 }
 
 .hero-select {
@@ -114,6 +138,75 @@
   gap: 16px;
 }
 
+.applied-state {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.applied-state-card {
+  background: #eef6ff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 14px 16px;
+}
+
+.applied-state-card span {
+  display: block;
+  color: #5b6b7f;
+}
+
+.applied-state-card strong {
+  display: block;
+  margin-top: 6px;
+  color: #10223d;
+  font-size: 1rem;
+}
+
+.applied-state-card small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.engine-summary-card {
+  margin-top: 12px;
+}
+
+.applied-formula-card {
+  grid-column: 1 / -1;
+}
+
+.formula-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.formula-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #12345a;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.engine-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.detail-badges {
+  margin-bottom: 16px;
+}
+
 .overview-card,
 .driver-card {
   background: #fff;
@@ -163,6 +256,10 @@
   gap: 18px;
 }
 
+.journal-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .panel {
   background: #fff;
   border-radius: 22px;
@@ -173,6 +270,19 @@
 .page-panel {
   display: grid;
   gap: 18px;
+}
+
+.journal-entry-panel,
+.journal-history-panel {
+  width: 100%;
+}
+
+.journal-entry-panel .form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.journal-entry-panel .form-item.full {
+  grid-column: 1 / -1;
 }
 
 .panel-span-2 {
@@ -222,9 +332,105 @@
 .journal-list,
 .version-list,
 .profile-list,
-.rule-list {
+.rule-list,
+.formula-metrics {
   display: grid;
   gap: 10px;
+}
+
+.formula-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin-top: 14px;
+}
+
+.decision-summary {
+  margin-top: 16px;
+}
+
+.decision-summary h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #10223d;
+}
+
+.decision-list {
+  display: grid;
+  gap: 10px;
+}
+
+.decision-item {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.decision-item.pass {
+  border-color: rgba(22, 101, 52, 0.18);
+  background: #f0fdf4;
+}
+
+.decision-item.fail {
+  border-color: rgba(153, 27, 27, 0.16);
+  background: #fef2f2;
+}
+
+.decision-item.warn {
+  border-color: rgba(180, 83, 9, 0.16);
+  background: #fff7ed;
+}
+
+.decision-label-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.decision-label-row strong,
+.decision-label-row span {
+  color: #10223d;
+  font-size: 13px;
+}
+
+.decision-label-row span {
+  font-weight: 700;
+}
+
+.decision-item p {
+  margin: 8px 0 0;
+  color: #516072;
+}
+
+.formula-metric {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.formula-metric.highlight {
+  background: linear-gradient(135deg, #e8f1ff 0%, #f5f9ff 100%);
+  border-color: rgba(16, 34, 61, 0.14);
+}
+
+.formula-metric span {
+  display: block;
+  color: #5b6b7f;
+  font-size: 0.88rem;
+}
+
+.formula-metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.2rem;
+  color: #10223d;
+}
+
+.formula-metric small {
+  display: block;
+  margin-top: 6px;
+  color: #6b7280;
 }
 
 .score-row,
@@ -239,6 +445,22 @@
   background: #f8fbff;
   padding: 12px 14px;
   text-align: left;
+}
+
+.score-row {
+  cursor: pointer;
+}
+
+.score-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.score-row-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 12px;
 }
 
 .score-row strong,
@@ -315,6 +537,11 @@
   overflow-x: auto;
 }
 
+.table-action-cell {
+  width: 70px;
+  text-align: center;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -354,6 +581,96 @@
   padding: 12px 14px;
   border-radius: 14px;
   background: #f8fafc;
+}
+
+.journal-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.journal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-journal-btn,
+.icon-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.quick-journal-btn ion-icon,
+.icon-action-btn ion-icon {
+  font-size: 1rem;
+}
+
+.icon-action-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 12px;
+  background: #eaf2ff;
+  color: #113f67;
+  padding: 0;
+}
+
+.icon-action-btn:hover {
+  background: #dbeafe;
+}
+
+.journal-suggestion-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fbff 0%, #edf5ff 100%);
+  border: 1px solid rgba(17, 63, 103, 0.1);
+  margin-bottom: 16px;
+}
+
+.journal-suggestion-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.journal-suggestion-head strong {
+  display: block;
+  color: #10223d;
+}
+
+.journal-suggestion-head small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+}
+
+.journal-suggestion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.journal-suggestion-reasons {
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+  display: grid;
+  gap: 6px;
+}
+
+.btn-compact {
+  padding: 8px 12px;
+  min-height: auto;
+}
+
+.btn-danger {
+  border-color: rgba(185, 28, 28, 0.18);
+  color: #b91c1c;
 }
 
 .rule-item strong.pass {
@@ -709,6 +1026,149 @@
 .result-summary,
 .empty-state {
   color: #6b7280;
+}
+
+.detail-section-grid {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.detail-card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: #f8fbff;
+  padding: 16px;
+}
+
+.detail-card.execution-card {
+  background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+}
+
+.detail-card-head {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.detail-card-head h4 {
+  margin: 0;
+  font-size: 13px;
+  color: #10223d;
+}
+
+.detail-card-head small {
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.detail-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.detail-metric-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detail-metric {
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.detail-metric span {
+  display: block;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.detail-metric strong {
+  color: #10223d;
+  font-size: 1rem;
+}
+
+.signal-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.signal-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.signal-pill.bullish {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.signal-pill.bearish {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.signal-pill.neutral {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.signal-list {
+  display: grid;
+  gap: 10px;
+}
+
+.signal-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.signal-row strong {
+  color: #10223d;
+}
+
+.signal-row p {
+  margin: 4px 0 0;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.execution-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: #334155;
+  display: grid;
+  gap: 6px;
+}
+
+.journal-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  color: #64748b;
+}
+
+.journal-psychology {
+  margin: 8px 0 0;
+  color: #475569;
+  font-style: italic;
 }
 
 @media (max-width: 1200px) {

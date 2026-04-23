@@ -5,6 +5,7 @@ from datetime import date, datetime
 from math import ceil
 from typing import Any
 
+from app.clients.cafef_financial_client import CafeFFinancialClient
 from app.clients.vnstock_client import VnstockClient
 from app.core.config import settings
 from app.core.db import SessionLocal
@@ -25,6 +26,7 @@ STATEMENT_METHODS = [
 class FinancialStatementCollector:
     def __init__(self) -> None:
         self.client = VnstockClient()
+        self.cafef_client = CafeFFinancialClient()
 
     async def _resolve_financial_symbols(self, repo: MarketRepository) -> list[str]:
         symbols: list[str] = []
@@ -251,6 +253,49 @@ class FinancialStatementCollector:
         except Exception:
             return None
 
+    def _normalize_fallback_payload(
+        self,
+        *,
+        symbol: str,
+        exchange: str | None,
+        statement_type: str,
+        period_type: str,
+        row: dict[str, Any],
+        captured_at: datetime,
+        source: str,
+    ) -> dict[str, Any]:
+        return {
+            "symbol": symbol,
+            "exchange": exchange,
+            "source": source,
+            "period_type": str(row.get("periodType") or period_type),
+            "report_period": str(row.get("reportPeriod") or f"{period_type}_latest")[:50],
+            "fiscal_year": self._extract_int(row, ["fiscal_year", "year", "report_year"]),
+            "fiscal_quarter": self._extract_int(row, ["fiscal_quarter", "quarter"]),
+            "statement_date": self._extract_date(row, ["statement_date", "published_at", "date"]),
+            "metric_key": (
+                self._extract_first_text(row, ["metricCode", "metric_key", "code"])
+                or f"{statement_type}_{self._slugify(str(row.get('metricName') or 'item'))}"
+            )[:120],
+            "metric_label": (
+                self._extract_first_text(row, ["metricName", "metric_label", "name", "title"])
+                or statement_type
+            )[:255],
+            "value_number": self._to_float(row.get("value")),
+            "value_text": self._extract_value_text(
+                {
+                    "description": row.get("description"),
+                    "content": row.get("content"),
+                    "summary": row.get("summary"),
+                    "note": row.get("note"),
+                },
+                self._to_float(row.get("value")),
+            ),
+            "raw_json": row.get("raw"),
+            "captured_at": captured_at,
+            "updated_at": captured_at,
+        }
+
     async def run(self) -> None:
         started_at = datetime.now()
         source = str(settings.financial_source or settings.vnstock_source or "vnstock").strip() or "vnstock"
@@ -283,43 +328,88 @@ class FinancialStatementCollector:
                 for symbol in batch_symbols:
                     for period_type in periods:
                         for statement_type in STATEMENT_METHODS:
-                            try:
-                                result = self.client.get_financial_statement(
+                            if source.upper() == "CAFEF":
+                                result = self.cafef_client.get_financial_statement(
                                     symbol=symbol,
                                     statement_type=statement_type,
                                     period=period_type,
-                                    source=source,
                                 )
-                            except BaseException as exc:
-                                errors.append(f"{symbol}:{statement_type}:{period_type} {exc}")
-                                logger.warning(
-                                    "financial fetch failed | symbol=%s | statement=%s | period=%s | err=%s",
-                                    symbol,
-                                    statement_type,
-                                    period_type,
-                                    exc,
+                            else:
+                                try:
+                                    result = self.client.get_financial_statement(
+                                        symbol=symbol,
+                                        statement_type=statement_type,
+                                        period=period_type,
+                                        source=source,
+                                    )
+                                except BaseException as exc:
+                                    errors.append(f"{symbol}:{statement_type}:{period_type} {exc}")
+                                    logger.warning(
+                                        "financial fetch failed | symbol=%s | statement=%s | period=%s | err=%s",
+                                        symbol,
+                                        statement_type,
+                                        period_type,
+                                        exc,
+                                    )
+                                    continue
+
+                            if result.errors:
+                                errors.extend(
+                                    f"{symbol}:{statement_type}:{period_type} {error}"
+                                    for error in result.errors[:4]
                                 )
-                                continue
+
+                            if not result.rows:
+                                cafef_result = self.cafef_client.get_financial_statement(
+                                    symbol=symbol,
+                                    statement_type=statement_type,
+                                    period=period_type,
+                                )
+                                if cafef_result.errors:
+                                    errors.extend(
+                                        f"{symbol}:{statement_type}:{period_type} {error}"
+                                        for error in cafef_result.errors[:4]
+                                    )
+                                if cafef_result.rows:
+                                    result = cafef_result
 
                             if not result.rows:
                                 continue
 
+                            actual_source = str(result.source or source).upper()
+                            selected_source = actual_source
                             for row_index, row in enumerate(result.rows):
-                                payload = self._normalize_financial_payload(
-                                    symbol=symbol,
-                                    exchange=exchange_map.get(symbol),
-                                    statement_type=statement_type,
-                                    period_type=period_type,
-                                    row=row,
-                                    row_index=row_index,
-                                    captured_at=started_at,
-                                    source=source,
-                                )
+                                if actual_source == "CAFEF":
+                                    payload = self._normalize_fallback_payload(
+                                        symbol=symbol,
+                                        exchange=exchange_map.get(symbol),
+                                        statement_type=statement_type,
+                                        period_type=period_type,
+                                        row=row,
+                                        captured_at=started_at,
+                                        source=actual_source,
+                                    )
+                                else:
+                                    payload = self._normalize_financial_payload(
+                                        symbol=symbol,
+                                        exchange=exchange_map.get(symbol),
+                                        statement_type=statement_type,
+                                        period_type=period_type,
+                                        row=row,
+                                        row_index=row_index,
+                                        captured_at=started_at,
+                                        source=actual_source,
+                                    )
                                 await repo.upsert_financial_record(statement_type, payload)
                                 total_saved += 1
                                 statement_counts[statement_type] += 1
 
-                status = "success" if not errors else "partial"
+                if total_saved == 0 and errors:
+                    status = "error"
+                elif errors:
+                    status = "partial"
+                else:
+                    status = "success"
                 total_request_units = len(batch_symbols) * len(periods) * len(STATEMENT_METHODS)
                 summary_parts = [
                     f"saved financial rows: {total_saved}",

@@ -21,6 +21,7 @@ from app.schemas.ai_agent import (
     AiTaskItem,
 )
 from app.services.gemini_service import GeminiService, GeminiServiceError
+from app.services.settings_service import DEFAULT_MARKET_SETTINGS
 
 logger = get_logger(__name__)
 
@@ -106,40 +107,51 @@ class AiAgentService:
         self.repo = repo
         self.gemini = gemini or GeminiService()
 
-    async def get_overview(self, exchange: str = "HSX") -> dict[str, Any]:
+    async def get_overview(self, exchange: str = "HSX", user_settings: dict[str, Any] | None = None) -> dict[str, Any]:
         exchange = self._normalize_exchange(exchange)
-        cache_key = f"ai-agent:overview:{exchange}:{settings.gemini_model}"
+        runtime = self._resolve_runtime_settings(user_settings)
+        cache_key = (
+            f"ai-agent:overview:{exchange}:{runtime['aiModel']}:{int(runtime['aiEnabled'])}:"
+            f"{int(runtime['aiSummaryAuto'])}:{int(runtime['aiWatchlistMonitor'])}:{int(runtime['aiNewsDigest'])}:"
+            f"{runtime['aiTaskSchedule']}:{runtime['aiTone']}"
+        )
         cached = await cache_service.get_json(cache_key)
         if cached is not None:
             return cached
 
         context = await self._build_market_context(exchange=exchange, prompt="", focus_symbols=[])
-        forecast_cards, used_fallback = await self._generate_forecast_cards(context)
+        forecast_cards, used_fallback = await self._generate_forecast_cards(context, runtime)
         recent_activities = self._build_recent_activities(context)
         history = self._build_history(context)
         generated_at = datetime.now()
+        provider = "gemini"
+        if not runtime["aiEnabled"]:
+            provider = "disabled"
+        elif used_fallback:
+            provider = "fallback"
 
         response = AiOverviewResponse(
             exchange=exchange,
-            provider="gemini" if not used_fallback else "fallback",
-            model=settings.gemini_model,
-            used_fallback=used_fallback,
+            provider=provider,
+            model=runtime["aiModel"],
+            used_fallback=used_fallback or not runtime["aiEnabled"],
             generated_at=generated_at,
-            summary_items=self._build_summary_items(context, forecast_cards, used_fallback),
+            summary_items=self._build_summary_items(context, forecast_cards, used_fallback, runtime),
             quick_prompts=self.QUICK_PROMPTS,
             forecast_cards=forecast_cards,
             recent_activities=recent_activities,
-            tasks=self.TASKS,
-            skills=self.SKILLS,
+            tasks=self._build_tasks(runtime),
+            skills=self._build_skills(runtime),
             history=history,
-            assistant_greeting=self.ASSISTANT_GREETING,
+            assistant_greeting=self._build_assistant_greeting(runtime),
         )
         data = response.model_dump(mode="json")
         await cache_service.set_json(cache_key, data, ttl=settings.ai_agent_overview_ttl_seconds)
         return data
 
-    async def chat(self, body: AiChatRequest) -> dict[str, Any]:
+    async def chat(self, body: AiChatRequest, user_settings: dict[str, Any] | None = None) -> dict[str, Any]:
         exchange = self._normalize_exchange(body.exchange)
+        runtime = self._resolve_runtime_settings(user_settings)
         context = await self._build_market_context(
             exchange=exchange,
             prompt=body.prompt,
@@ -151,13 +163,19 @@ class AiAgentService:
             prompt=body.prompt,
             context=context,
             history=[item.model_dump(mode="json") for item in body.history[-6:]],
+            runtime=runtime,
         )
+        provider = "gemini"
+        if not runtime["aiEnabled"]:
+            provider = "disabled"
+        elif used_fallback:
+            provider = "fallback"
 
         response = AiChatResponse(
             exchange=exchange,
-            provider="gemini" if not used_fallback else "fallback",
-            model=settings.gemini_model,
-            used_fallback=used_fallback,
+            provider=provider,
+            model=runtime["aiModel"],
+            used_fallback=used_fallback or not runtime["aiEnabled"],
             generated_at=generated_at,
             focus_symbols=[item["symbol"] for item in context["focus_symbols"]],
             message=AiChatMessage(
@@ -304,7 +322,15 @@ class AiAgentService:
             )
         return results
 
-    async def _generate_forecast_cards(self, context: dict[str, Any]) -> tuple[list[AiForecastCard], bool]:
+    async def _generate_forecast_cards(
+        self,
+        context: dict[str, Any],
+        runtime: dict[str, Any],
+    ) -> tuple[list[AiForecastCard], bool]:
+        if not runtime["aiEnabled"]:
+            return self._build_disabled_forecast_cards(), True
+        if not runtime["aiSummaryAuto"]:
+            return self._build_manual_forecast_cards(), True
         prompt_context = self._build_prompt_context(context)
         prompt = (
             "Bạn là AI analyst cho dashboard chứng khoán Việt Nam.\n"
@@ -326,6 +352,7 @@ class AiAgentService:
                 temperature=0.25,
                 max_output_tokens=700,
                 response_mime_type="application/json",
+                model=runtime["aiModel"],
             )
             payload = self._load_json(raw)
             cards = payload.get("forecast_cards") if isinstance(payload, dict) else payload
@@ -345,7 +372,10 @@ class AiAgentService:
         prompt: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        runtime: dict[str, Any],
     ) -> tuple[str, bool]:
+        if not runtime["aiEnabled"]:
+            return self._build_disabled_chat_answer(runtime), True
         llm_prompt = (
             "Bạn là AI Agent của hệ thống market watch chứng khoán Việt Nam.\n"
             "Quy tắc trả lời:\n"
@@ -365,11 +395,12 @@ class AiAgentService:
                 history=history,
                 temperature=0.35,
                 max_output_tokens=900,
+                model=runtime["aiModel"],
             )
             return answer.strip(), False
         except GeminiServiceError as exc:
             logger.warning("ai chat fallback: %s", exc)
-            return self._build_fallback_chat_answer(prompt, context), True
+            return self._build_fallback_chat_answer(prompt, context, runtime), True
 
     def _build_prompt_context(self, context: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -390,18 +421,26 @@ class AiAgentService:
         context: dict[str, Any],
         forecast_cards: list[AiForecastCard],
         used_fallback: bool,
+        runtime: dict[str, Any],
     ) -> list[AiStatusItem]:
         last_run_dt = self._resolve_last_run(context)
         signal_count = self._count_signals(context)
         watchlist_count = len(context.get("watchlist") or [])
+        cooldown_seconds = self.gemini.get_cooldown_remaining(runtime["aiModel"])
+        status_tone = "positive" if not used_fallback else "warning"
         status_label = "Đang hoạt động" if not used_fallback else "Fallback từ dữ liệu hệ thống"
-
+        if not runtime["aiEnabled"]:
+            status_label = "AI disabled in settings"
+            status_tone = "warning"
+        elif cooldown_seconds > 0:
+            status_label = f"Gemini cooling down {cooldown_seconds}s"
+            status_tone = "warning"
         return [
-            AiStatusItem(label="Model", value=settings.gemini_model),
+            AiStatusItem(label="Model", value=runtime["aiModel"]),
             AiStatusItem(
                 label="Trạng thái",
                 value=status_label,
-                tone="positive" if not used_fallback else "warning",
+                tone=status_tone,
             ),
             AiStatusItem(label="Watchlist đang theo dõi", value=f"{watchlist_count} mã"),
             AiStatusItem(label="Lần chạy gần nhất", value=self._clock(last_run_dt)),
@@ -492,6 +531,126 @@ class AiAgentService:
             )
         ]
 
+    def _build_tasks(self, runtime: dict[str, Any]) -> list[AiTaskItem]:
+        schedule_parts = [item.strip() for item in str(runtime.get("aiTaskSchedule") or "").split(",") if item.strip()]
+        opening_schedule = schedule_parts[0] if schedule_parts else "08:30"
+        midday_schedule = schedule_parts[1] if len(schedule_parts) > 1 else opening_schedule
+        closing_schedule = schedule_parts[2] if len(schedule_parts) > 2 else midday_schedule
+        running_status = "Sẵn sàng" if runtime["aiEnabled"] else "Tạm dừng"
+
+        return [
+            AiTaskItem(
+                name="Báo cáo đầu phiên",
+                schedule=f"{opening_schedule} mỗi ngày",
+                status=running_status if runtime["aiSummaryAuto"] else "Tắt",
+                target="Toàn thị trường",
+            ),
+            AiTaskItem(
+                name="Giám sát watchlist",
+                schedule="Liên tục",
+                status=running_status if runtime["aiWatchlistMonitor"] else "Tắt",
+                target="Watchlist hiện tại",
+            ),
+            AiTaskItem(
+                name="Digest tin tức giữa phiên",
+                schedule=f"{midday_schedule} mỗi ngày",
+                status=running_status if runtime["aiNewsDigest"] else "Tắt",
+                target="Nhóm cổ phiếu nổi bật",
+            ),
+            AiTaskItem(
+                name="Tóm tắt cuối phiên",
+                schedule=f"{closing_schedule} mỗi ngày",
+                status=running_status if runtime["aiSummaryAuto"] else "Tắt",
+                target="HSX / HNX / UPCOM",
+            ),
+        ]
+
+    def _build_skills(self, runtime: dict[str, Any]) -> list[AiSkillItem]:
+        results: list[AiSkillItem] = []
+        for item in self.SKILLS:
+            title = item.title.lower()
+            if "watchlist" in title and not runtime["aiWatchlistMonitor"]:
+                continue
+            if ("tin" in title or "dữ liệu hệ thống" in title) and not runtime["aiNewsDigest"]:
+                continue
+            if "biến động mã" in title and not runtime["aiExplainMove"]:
+                continue
+            results.append(item)
+        return results
+
+    def _build_assistant_greeting(self, runtime: dict[str, Any]) -> str:
+        if not runtime["aiEnabled"]:
+            return "AI Agent đang tắt theo cài đặt. Bạn có thể bật lại trong Market Settings > AI."
+        return (
+            "Xin chào. Tôi là AI Agent của Market Watch. "
+            f"Tôi đang chạy với model {runtime['aiModel']} và giọng điệu {runtime['aiTone']}."
+        )
+
+    def _build_disabled_forecast_cards(self) -> list[AiForecastCard]:
+        return [
+            AiForecastCard(
+                title="AI Agent đang tắt",
+                summary="Cài đặt AI trong Market Settings đang ở trạng thái tắt nên hệ thống không gọi Gemini.",
+                direction="neutral",
+                confidence=100,
+            ),
+            AiForecastCard(
+                title="Dữ liệu thị trường vẫn sẵn sàng",
+                summary="Dashboard, Alert và Watchlist vẫn có thể hoạt động từ dữ liệu backend mà không cần sinh ngôn ngữ.",
+                direction="neutral",
+                confidence=85,
+            ),
+            AiForecastCard(
+                title="Cần bật AI để có forecast",
+                summary="Bật lại AI Agent trong Market Settings > AI nếu bạn muốn sinh tóm tắt và forecast tự động.",
+                direction="neutral",
+                confidence=85,
+            ),
+        ]
+
+    def _build_manual_forecast_cards(self) -> list[AiForecastCard]:
+        return [
+            AiForecastCard(
+                title="Tự động tóm tắt đang tắt",
+                summary="Cấu hình AI Summary Auto hiện đang tắt, nên AI Agent không tự sinh forecast overview.",
+                direction="neutral",
+                confidence=100,
+            ),
+            AiForecastCard(
+                title="Chat vẫn hoạt động",
+                summary="Bạn vẫn có thể gửi prompt thủ công trong tab chat để phân tích theo ngữ cảnh hiện tại.",
+                direction="neutral",
+                confidence=80,
+            ),
+            AiForecastCard(
+                title="Lịch AI được giữ nguyên",
+                summary="Watchlist monitor, explain moves hoặc news digest vẫn tuân theo các toggle khác trong settings.",
+                direction="neutral",
+                confidence=75,
+            ),
+        ]
+
+    def _build_disabled_chat_answer(self, runtime: dict[str, Any]) -> str:
+        return (
+            "AI Agent hiện đang tắt theo cài đặt trong Market Settings > AI, "
+            f"nên không gọi model {runtime['aiModel']} cho phần chat này."
+        )
+
+    def _resolve_runtime_settings(self, user_settings: dict[str, Any] | None) -> dict[str, Any]:
+        payload = dict(DEFAULT_MARKET_SETTINGS)
+        if isinstance(user_settings, dict):
+            payload.update(user_settings)
+        return {
+            "aiEnabled": bool(payload.get("aiEnabled", True)),
+            "aiModel": str(payload.get("aiModel") or settings.gemini_model),
+            "aiSummaryAuto": bool(payload.get("aiSummaryAuto", True)),
+            "aiWatchlistMonitor": bool(payload.get("aiWatchlistMonitor", True)),
+            "aiExplainMove": bool(payload.get("aiExplainMove", True)),
+            "aiNewsDigest": bool(payload.get("aiNewsDigest", True)),
+            "aiTaskSchedule": str(payload.get("aiTaskSchedule") or DEFAULT_MARKET_SETTINGS["aiTaskSchedule"]),
+            "aiTone": str(payload.get("aiTone") or DEFAULT_MARKET_SETTINGS["aiTone"]),
+        }
+
     def _build_fallback_forecast_cards(self, context: dict[str, Any]) -> list[AiForecastCard]:
         cards: list[AiForecastCard] = []
         selected_index = context.get("selected_index") or {}
@@ -571,7 +730,7 @@ class AiAgentService:
             )
         return cards[:3]
 
-    def _build_fallback_chat_answer(self, prompt: str, context: dict[str, Any]) -> str:
+    def _build_fallback_chat_answer(self, prompt: str, context: dict[str, Any], runtime: dict[str, Any]) -> str:
         selected_index = context.get("selected_index") or {}
         focus_symbols = context.get("focus_symbols") or []
         actives = context.get("actives") or []

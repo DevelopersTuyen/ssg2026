@@ -2,16 +2,16 @@
   <div class="alerts-shell">
     <section class="hero-card">
       <div class="hero-copy">
-        <div class="eyebrow">AI MARKET ALERTS</div>
-        <h1>Trung tam canh bao va du bao ngan han</h1>
-        <p>{{ data?.headline || 'Tong hop tin CafeF, du lieu gia trong DB va watchlist de tao canh bao uu tien.' }}</p>
+        <div class="eyebrow">{{ 'marketAlerts.eyebrow' | translate }}</div>
+        <h1>{{ 'marketAlerts.title' | translate }}</h1>
+        <p>{{ data?.headline || ('marketAlerts.subtitle' | translate) }}</p>
 
         <div class="hero-meta">
           <span class="provider-chip" [class.fallback]="data?.used_fallback">
             {{ data?.provider || 'loading' }}
           </span>
-          <span>Exchange {{ exchange }}</span>
-          <span>Cap nhat {{ formatGeneratedAt(data?.generated_at) }}</span>
+          <span>{{ 'marketAlerts.exchange' | translate }} {{ exchange }}</span>
+          <span>{{ 'marketAlerts.updated' | translate }} {{ formatGeneratedAt(data?.generated_at) }}</span>
         </div>
       </div>
 
@@ -27,9 +27,11 @@
           </button>
         </div>
 
-        <button type="button" class="refresh-btn" (click)="refresh()">Lam moi</button>
+        <button type="button" class="refresh-btn" (click)="refresh()">{{ 'common.reload' | translate }}</button>
       </div>
     </section>
+
+    <app-page-load-indicator pageId="market-alerts"></app-page-load-indicator>
 
     <section class="summary-grid" *ngIf="summaryCards.length">
       <article
@@ -47,7 +49,7 @@
 
     <section class="top-grid" *ngIf="data">
       <article class="outlook-card">
-        <div class="section-kicker">Market Outlook</div>
+        <div class="section-kicker">{{ 'marketAlerts.outlook' | translate }}</div>
         <h2>{{ data.market_outlook.title }}</h2>
         <p>{{ data.market_outlook.summary }}</p>
 
@@ -55,14 +57,14 @@
           <span class="direction-pill" [class.up]="data.market_outlook.direction === 'up'" [class.down]="data.market_outlook.direction === 'down'">
             {{ data.market_outlook.direction }}
           </span>
-          <span>Confidence {{ data.market_outlook.confidence }}%</span>
+          <span>{{ 'marketAlerts.confidence' | translate }} {{ data.market_outlook.confidence }}%</span>
           <span>{{ data.model }}</span>
         </div>
       </article>
 
       <article class="watchlist-card">
-        <div class="section-kicker">Watchlist Priority</div>
-        <h2>{{ data.watchlist_alert_count }} canh bao lien quan watchlist</h2>
+        <div class="section-kicker">{{ 'marketAlerts.watchlistPriority' | translate }}</div>
+        <h2>{{ data.watchlist_alert_count }} {{ 'marketAlerts.watchlistAlertCount' | translate }}</h2>
         <p>{{ data.watchlist_headline }}</p>
 
         <div class="watchlist-tags">
@@ -71,7 +73,7 @@
       </article>
 
       <article class="news-card" *ngIf="newsItems.length">
-        <div class="section-kicker">CafeF Pulse</div>
+        <div class="section-kicker">{{ 'marketAlerts.cafefPulse' | translate }}</div>
         <div class="news-list">
           <a
             class="news-item"
@@ -108,7 +110,7 @@
           <ion-icon name="search-outline"></ion-icon>
           <input
             type="text"
-            placeholder="Tim theo ma, tin, du bao..."
+            [placeholder]="'marketAlerts.searchPlaceholder' | translate"
             [(ngModel)]="keyword"
           />
         </div>
@@ -116,15 +118,15 @@
         <div class="toolbar-actions">
           <label class="toggle-line">
             <input type="checkbox" [(ngModel)]="watchlistOnly" />
-            <span>Chi hien watchlist</span>
+            <span>{{ 'marketAlerts.watchlistOnly' | translate }}</span>
           </label>
 
           <div class="confidence-box">
-            <span>Confidence {{ minConfidence }}%+</span>
+            <span>{{ 'marketAlerts.confidence' | translate }} {{ minConfidence }}%+</span>
             <input type="range" min="55" max="95" step="5" [(ngModel)]="minConfidence" />
           </div>
 
-          <button type="button" class="ghost-btn" (click)="clearFilters()">Xoa loc</button>
+          <button type="button" class="ghost-btn" (click)="clearFilters()">{{ 'marketAlerts.clearFilters' | translate }}</button>
         </div>
       </div>
 
@@ -187,21 +189,21 @@
 
           <div class="metrics-grid">
             <div class="metric">
-              <span>Gia</span>
+                <span>{{ 'marketAlerts.price' | translate }}</span>
               <strong>{{ formatNumber(item.price) }}</strong>
             </div>
             <div class="metric">
-              <span>Bien dong</span>
+                <span>{{ 'marketAlerts.change' | translate }}</span>
               <strong [class.up]="item.direction === 'up'" [class.down]="item.direction === 'down'">
                 {{ formatPercent(item.change_percent) }}
               </strong>
             </div>
             <div class="metric">
-              <span>Volume</span>
+                <span>{{ 'marketAlerts.volume' | translate }}</span>
               <strong>{{ formatCompact(item.volume) }}</strong>
             </div>
             <div class="metric">
-              <span>Gia tri</span>
+                <span>{{ 'marketAlerts.value' | translate }}</span>
               <strong>{{ formatCompact(item.trading_value) }}</strong>
             </div>
           </div>
@@ -212,7 +214,7 @@
               <span>{{ item.time }}</span>
             </div>
             <a *ngIf="item.source_url" [href]="item.source_url" target="_blank" rel="noreferrer noopener">
-              Mo bai viet
+              {{ 'marketAlerts.openArticle' | translate }}
             </a>
           </div>
         </article>
@@ -220,15 +222,15 @@
 
       <ng-template #emptyState>
         <div class="empty-state">
-          <div class="empty-title">Khong co canh bao phu hop</div>
+          <div class="empty-title">{{ 'marketAlerts.emptyTitle' | translate }}</div>
           <div class="empty-text">
-            Dieu chinh scope, keyword hoac confidence de xem them du lieu.
+            {{ 'marketAlerts.emptyText' | translate }}
           </div>
         </div>
       </ng-template>
 
       <div class="empty-state" *ngIf="loading">
-        <div class="empty-title">Dang tai du lieu canh bao...</div>
+        <div class="empty-title">{{ 'marketAlerts.loading' | translate }}</div>
       </div>
 
       <div class="empty-state error" *ngIf="error && !loading">
@@ -239,32 +241,31 @@
     <section class="panel-card settings-card" *ngIf="selectedTab === 'settings'">
       <div class="settings-grid">
         <div class="setting-block">
-          <div class="setting-title">Nguon hien thi</div>
+          <div class="setting-title">{{ 'marketAlerts.settings.displaySource' | translate }}</div>
           <label class="toggle-line">
             <input type="checkbox" [(ngModel)]="showNewsRail" />
-            <span>Hien thanh tin CafeF lien quan</span>
+            <span>{{ 'marketAlerts.settings.showNewsRail' | translate }}</span>
           </label>
           <label class="toggle-line">
             <input type="checkbox" [(ngModel)]="autoRefresh" (ngModelChange)="applyAutoRefresh()" />
-            <span>Tu dong lam moi moi 60 giay</span>
+            <span>{{ 'marketAlerts.settings.autoRefresh' | translate }}</span>
           </label>
         </div>
 
         <div class="setting-block">
-          <div class="setting-title">Nguong uu tien</div>
-          <p>Confidence toi thieu hien tai: <strong>{{ minConfidence }}%</strong></p>
+          <div class="setting-title">{{ 'marketAlerts.settings.priorityThreshold' | translate }}</div>
+          <p>{{ 'marketAlerts.settings.currentConfidence' | translate }} <strong>{{ minConfidence }}%</strong></p>
           <input type="range" min="55" max="95" step="5" [(ngModel)]="minConfidence" />
-          <p>Bo loc nay chi anh huong giao dien, khong doi logic backend.</p>
+          <p>{{ 'marketAlerts.settings.thresholdNote' | translate }}</p>
         </div>
 
         <div class="setting-block">
-          <div class="setting-title">Giai thich du lieu</div>
+          <div class="setting-title">{{ 'marketAlerts.settings.dataExplain' | translate }}</div>
           <p>
-            Man hinh nay dang ket hop 3 lop du lieu: tin CafeF, du lieu gia va thanh khoan da dong bo ve DB,
-            va Gemini de viet du bao ngan han tren tung alert.
+            {{ 'marketAlerts.settings.explainLine1' | translate }}
           </p>
           <p>
-            Khi Gemini khong san sang, backend se tu dong fallback sang heuristic de khong lam trang trong.
+            {{ 'marketAlerts.settings.explainLine2' | translate }}
           </p>
         </div>
       </div>

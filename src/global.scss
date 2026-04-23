@@ -33,5 +33,425 @@
  */
 
 /* @import "@ionic/angular/css/palettes/dark.always.css"; */
-/* @import "@ionic/angular/css/palettes/dark.class.css"; */
-@import "@ionic/angular/css/palettes/dark.system.css";
+@import "@ionic/angular/css/palettes/dark.class.css";
+/* @import "@ionic/angular/css/palettes/dark.system.css"; */
+
+html {
+  font-size: 13px;
+  --ion-font-family: "Roboto", sans-serif;
+  --app-section-kicker-size: 11px;
+  --app-section-title-size: 13px;
+  --app-section-subtitle-size: 13px;
+  --app-section-head-gap: 8px;
+  --app-section-head-margin: 10px;
+}
+
+body,
+ion-app,
+ion-content,
+.ion-page {
+  font-size: 13px;
+  font-family: "Roboto", sans-serif;
+}
+
+:is(
+  .dashboard-shell,
+  .market-shell,
+  .settings-shell,
+  .perm-shell,
+  .ai-shell,
+  .alerts-shell,
+  .strategy-shell,
+  .guide-shell
+) :is(
+  .page-head,
+  .panel-head,
+  .panel-header,
+  .section-head,
+  .settings-section-head,
+  .strategy-section-headline,
+  .financial-section-head
+) {
+  gap: var(--app-section-head-gap) !important;
+  margin-bottom: var(--app-section-head-margin) !important;
+  align-items: flex-start !important;
+}
+
+:is(
+  .dashboard-shell,
+  .market-shell,
+  .settings-shell,
+  .perm-shell,
+  .ai-shell,
+  .alerts-shell,
+  .strategy-shell,
+  .guide-shell
+) :is(
+  .page-title,
+  .panel-title,
+  .command-title
+) {
+  font-size: var(--app-section-title-size) !important;
+  line-height: 1.4 !important;
+  font-weight: 700 !important;
+  margin: 0 !important;
+}
+
+:is(
+  .dashboard-shell,
+  .market-shell,
+  .settings-shell,
+  .perm-shell,
+  .ai-shell,
+  .alerts-shell,
+  .strategy-shell,
+  .guide-shell
+) :is(
+  .page-subtitle,
+  .panel-subtitle,
+  .command-subtitle,
+  .settings-section-head p,
+  .strategy-section-headline p
+) {
+  font-size: var(--app-section-subtitle-size) !important;
+  line-height: 1.45 !important;
+  margin-top: 2px !important;
+}
+
+:is(
+  .dashboard-shell,
+  .market-shell,
+  .settings-shell,
+  .perm-shell,
+  .ai-shell,
+  .alerts-shell,
+  .strategy-shell,
+  .guide-shell
+) :is(
+  .panel-kicker,
+  .hero-kicker,
+  .page-kicker,
+  .command-kicker
+) {
+  font-size: var(--app-section-kicker-size) !important;
+  line-height: 1.3 !important;
+  margin-bottom: 4px !important;
+}
+
+:is(
+  .dashboard-shell,
+  .market-shell,
+  .settings-shell,
+  .perm-shell,
+  .ai-shell,
+  .alerts-shell,
+  .strategy-shell,
+  .guide-shell
+) :is(
+  .section-chip,
+  .command-chip,
+  .status-label,
+  .last-updated
+) {
+  font-size: 12px !important;
+}
+
+html[data-theme-mode='dark'],
+body[data-theme-mode='dark'] {
+  background: #07111b;
+  color: #e5eefb;
+}
+
+html[data-theme-mode='dark'] ion-app,
+html[data-theme-mode='dark'] ion-content,
+html[data-theme-mode='dark'] .ion-page,
+html[data-theme-mode='dark'] .app-root {
+  --background: #07111b !important;
+  background: #07111b !important;
+  color: #e5eefb !important;
+}
+
+html[data-theme-mode='dark'] {
+  --app-dark-text-primary: #f8fbff;
+  --app-dark-text-secondary: #cad7e6;
+  --app-dark-text-muted: #98abc3;
+  --app-dark-text-soft: #879bb5;
+  --app-dark-border: #253549;
+  --app-dark-surface: #111c2b;
+  --app-dark-surface-2: #0f1724;
+
+  color-scheme: dark;
+
+  .dashboard-shell,
+  .market-shell,
+  .settings-shell,
+  .perm-shell,
+  .ai-shell,
+  .alerts-shell,
+  .strategy-shell,
+  .az-card,
+  .login-panel,
+  .settings-card,
+  .perm-card {
+    background: var(--app-dark-surface-2) !important;
+    border-color: #223044 !important;
+    color: var(--app-dark-text-secondary) !important;
+  }
+
+  .panel,
+  .overview-card,
+  .summary-card,
+  .sync-status-card,
+  .settings-panel,
+  .config-card,
+  .create-panel,
+  .driver-card,
+  .dataset-card,
+  .analysis-card,
+  .forecast-card,
+  .news-card,
+  .watchlist-card,
+  .outlook-card,
+  .hero-stat,
+  .hero-stat-primary,
+  .focus-mini-card,
+  .command-card,
+  .command-signal-card,
+  .command-story-card,
+  .command-mini-panel,
+  .chart-card,
+  .detail-chart-card,
+  .symbol-chart-box,
+  .financial-section-card,
+  .stock-row,
+  .index-card,
+  .table-shell,
+  .score-row,
+  .settings-tab,
+  .strategy-tab,
+  .settings-nav-button,
+  .sync-status-badge,
+  .toggle-list,
+  .toggle-row,
+  .theme-preview-card {
+    background: var(--app-dark-surface) !important;
+    border-color: var(--app-dark-border) !important;
+    color: var(--app-dark-text-secondary) !important;
+  }
+
+  .hero-panel,
+  .hero-card,
+  .control-panel,
+  .segment-panel,
+  .strategy-hero-inline,
+  .data-sync-hero {
+    background: linear-gradient(135deg, #101b2a 0%, #162234 100%) !important;
+    border-color: var(--app-dark-border) !important;
+    color: var(--app-dark-text-secondary) !important;
+  }
+
+  .dashboard-shell,
+  .market-shell,
+  .settings-shell,
+  .perm-shell,
+  .ai-shell,
+  .alerts-shell,
+  .strategy-shell,
+  .az-card,
+  .login-panel,
+  .settings-card,
+  .perm-card {
+    color: var(--app-dark-text-secondary) !important;
+  }
+
+  .panel-title,
+  .panel-subtitle,
+  .page-title,
+  .page-subtitle,
+  .hero-title,
+  .hero-desc,
+  .hero-subtitle,
+  .section-title,
+  .summary-label,
+  .summary-helper,
+  .sync-status-line,
+  .sync-status-time,
+  .sync-status-message,
+  .status-helper,
+  .status-label,
+  .spotlight-caption,
+  .form-item label,
+  .settings-breadcrumb,
+  .settings-breadcrumb .sep,
+  .panel-kicker,
+  .hero-kicker,
+  .page-kicker,
+  .last-updated,
+  .empty-note,
+  .news-page-status,
+  .stock-page-status {
+    color: var(--app-dark-text-muted) !important;
+  }
+
+  .summary-value,
+  .sync-status-head strong,
+  .spotlight-price,
+  .hero-stat strong,
+  .page-head strong,
+  .forecast-top strong,
+  .theme-preview-copy strong,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--app-dark-text-primary) !important;
+  }
+
+  .dashboard-shell :is(h1, h2, h3, h4, h5, h6, strong, b),
+  .market-shell :is(h1, h2, h3, h4, h5, h6, strong, b),
+  .settings-shell :is(h1, h2, h3, h4, h5, h6, strong, b),
+  .perm-shell :is(h1, h2, h3, h4, h5, h6, strong, b),
+  .ai-shell :is(h1, h2, h3, h4, h5, h6, strong, b),
+  .alerts-shell :is(h1, h2, h3, h4, h5, h6, strong, b),
+  .strategy-shell :is(h1, h2, h3, h4, h5, h6, strong, b),
+  .az-card :is(h1, h2, h3, h4, h5, h6, strong, b),
+  .login-panel :is(h1, h2, h3, h4, h5, h6, strong, b) {
+    color: var(--app-dark-text-primary) !important;
+  }
+
+  .dashboard-shell :is(p, span, small, label, li, td, th, a),
+  .market-shell :is(p, span, small, label, li, td, th, a),
+  .settings-shell :is(p, span, small, label, li, td, th, a),
+  .perm-shell :is(p, span, small, label, li, td, th, a),
+  .ai-shell :is(p, span, small, label, li, td, th, a),
+  .alerts-shell :is(p, span, small, label, li, td, th, a),
+  .strategy-shell :is(p, span, small, label, li, td, th, a),
+  .az-card :is(p, span, small, label, li, td, th, a),
+  .login-panel :is(p, span, small, label, li, td, th, a) {
+    color: var(--app-dark-text-secondary) !important;
+  }
+
+  .dashboard-shell :is(.helper, .caption, .muted, .metric-label, .metric-helper, .metric-caption),
+  .market-shell :is(.helper, .caption, .muted, .metric-label, .metric-helper, .metric-caption),
+  .settings-shell :is(.helper, .caption, .muted, .metric-label, .metric-helper, .metric-caption),
+  .perm-shell :is(.helper, .caption, .muted, .metric-label, .metric-helper, .metric-caption),
+  .ai-shell :is(.helper, .caption, .muted, .metric-label, .metric-helper, .metric-caption),
+  .alerts-shell :is(.helper, .caption, .muted, .metric-label, .metric-helper, .metric-caption),
+  .strategy-shell :is(.helper, .caption, .muted, .metric-label, .metric-helper, .metric-caption) {
+    color: var(--app-dark-text-soft) !important;
+  }
+
+  .dashboard-shell a,
+  .market-shell a,
+  .settings-shell a,
+  .perm-shell a,
+  .ai-shell a,
+  .alerts-shell a,
+  .strategy-shell a {
+    color: #9ac8ff !important;
+  }
+
+  .dashboard-shell .empty-state,
+  .market-shell .empty-state,
+  .settings-shell .empty-state,
+  .perm-shell .empty-state,
+  .ai-shell .empty-state,
+  .alerts-shell .empty-state,
+  .strategy-shell .empty-state {
+    color: var(--app-dark-text-muted) !important;
+  }
+
+  .form-control,
+  .form-select,
+  input,
+  select,
+  textarea {
+    background: #0b1522 !important;
+    color: var(--app-dark-text-primary) !important;
+    border-color: #2a3b52 !important;
+  }
+
+  .form-control::placeholder,
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--app-dark-text-soft) !important;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: var(--app-dark-text-primary) !important;
+    -webkit-box-shadow: 0 0 0 1000px #0b1522 inset !important;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
+  .btn,
+  button:not(.btn-save):not(.btn-logout) {
+    border-color: #2a3b52;
+  }
+
+  ion-item,
+  ion-label,
+  ion-note,
+  ion-card,
+  ion-card-title,
+  ion-card-subtitle,
+  ion-list,
+  ion-list-header,
+  ion-toolbar,
+  ion-title {
+    color: var(--app-dark-text-secondary) !important;
+    --color: var(--app-dark-text-secondary) !important;
+  }
+
+  ion-text {
+    color: var(--app-dark-text-secondary) !important;
+  }
+
+  .table-shell th,
+  .table-shell td,
+  table th,
+  table td {
+    color: var(--app-dark-text-secondary) !important;
+    border-color: #26384f !important;
+  }
+
+  .settings-tab.active,
+  .strategy-tab.active {
+    background: #162538 !important;
+    color: var(--app-dark-text-primary) !important;
+    border-color: #2cc8ba !important;
+  }
+
+  .status-pill.loading {
+    background: #16253a !important;
+    color: #8bb8ff !important;
+  }
+
+  .status-pill.success {
+    background: #11261d !important;
+    color: #7de2ad !important;
+  }
+
+  .status-pill.error {
+    background: #35171b !important;
+    color: #ffb4be !important;
+  }
+
+  .modal-backdrop {
+    background: rgba(2, 6, 15, 0.78) !important;
+  }
+
+  .detail-modal,
+  .financial-modal,
+  .modal-card,
+  .modal-panel {
+    background: #0f1724 !important;
+    border-color: #253549 !important;
+    color: #e5eefb !important;
+  }
+}

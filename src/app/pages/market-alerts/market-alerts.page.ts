@@ -1,4 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
+import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
+import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 import {
   ExchangeTab,
   MarketAlertItem,
@@ -29,6 +33,7 @@ interface AlertScopeItem {
   standalone: false,
 })
 export class MarketAlertsPage implements OnInit, OnDestroy {
+  private readonly pageLoadKey = 'market-alerts';
   selectedTab: AlertTab = 'notifications';
   selectedScope: AlertScope = 'all';
   exchange: ExchangeTab = 'HSX';
@@ -42,27 +47,53 @@ export class MarketAlertsPage implements OnInit, OnDestroy {
 
   data: MarketAlertsOverviewResponse | null = null;
 
-  readonly tabs: AlertTabItem[] = [
-    { key: 'notifications', label: 'Canh bao AI' },
-    { key: 'settings', label: 'Bo loc hien thi' },
-  ];
-
   readonly exchanges: ExchangeTab[] = ['HSX', 'HNX', 'UPCOM'];
 
   private refreshHandle: ReturnType<typeof window.setInterval> | null = null;
+  private backgroundSub?: Subscription;
+  private activeView = false;
 
-  constructor(private api: MarketApiService) {}
+  constructor(
+    private api: MarketApiService,
+    private i18n: AppI18nService,
+    private backgroundRefresh: BackgroundRefreshService,
+    private pageLoadState: PageLoadStateService
+  ) {}
 
   ngOnInit(): void {
+    this.pageLoadState.registerPage(this.pageLoadKey, 'marketAlerts.title');
+    this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
+      if (!this.activeView) return;
+      if (domains.some((item) => ['quotes', 'intraday', 'news', 'financial'].includes(item))) {
+        this.loadOverview(false, true);
+      }
+    });
     this.loadOverview();
+  }
+
+  ionViewDidEnter(): void {
+    this.activeView = true;
+    this.pageLoadState.setActivePage(this.pageLoadKey);
+  }
+
+  ionViewDidLeave(): void {
+    this.activeView = false;
   }
 
   ngOnDestroy(): void {
     this.stopAutoRefresh();
+    this.backgroundSub?.unsubscribe();
   }
 
   get summaryCards(): MarketAlertSummaryCard[] {
     return this.data?.summary_cards || [];
+  }
+
+  get tabs(): AlertTabItem[] {
+    return [
+      { key: 'notifications', label: this.t('marketAlerts.tab.notifications') },
+      { key: 'settings', label: this.t('marketAlerts.tab.settings') },
+    ];
   }
 
   get newsItems(): MarketAlertNewsItem[] {
@@ -75,10 +106,10 @@ export class MarketAlertsPage implements OnInit, OnDestroy {
   get scopeTabs(): AlertScopeItem[] {
     const alerts = this.data?.alerts || [];
     return [
-      { key: 'all', label: 'Tat ca', count: alerts.length },
-      { key: 'market', label: 'Thi truong', count: alerts.filter((item) => item.scope === 'market').length },
-      { key: 'watchlist', label: 'Watchlist', count: alerts.filter((item) => item.watchlist).length },
-      { key: 'news', label: 'Tin CafeF', count: alerts.filter((item) => item.scope === 'news').length },
+      { key: 'all', label: this.t('marketAlerts.scope.all'), count: alerts.length },
+      { key: 'market', label: this.t('marketAlerts.scope.market'), count: alerts.filter((item) => item.scope === 'market').length },
+      { key: 'watchlist', label: 'Danh sách theo dõi', count: alerts.filter((item) => item.watchlist).length },
+      { key: 'news', label: this.t('marketAlerts.scope.news'), count: alerts.filter((item) => item.scope === 'news').length },
     ];
   }
 
@@ -141,25 +172,32 @@ export class MarketAlertsPage implements OnInit, OnDestroy {
     this.loadOverview();
   }
 
-  loadOverview(force = false): void {
+  loadOverview(force = false, silent = false): void {
     if (this.loading && !force) {
       return;
     }
 
-    this.loading = true;
+    if (!silent) {
+      this.loading = true;
+      this.pageLoadState.start(this.pageLoadKey);
+    } else {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
     this.error = '';
 
     this.api.getMarketAlertsOverview(this.exchange).subscribe({
       next: (response) => {
         this.data = response.data;
         if (!response.data) {
-          this.error = 'Backend market-alerts chua tra du lieu.';
+          this.error = this.t('marketAlerts.error.noData');
         }
         this.loading = false;
+        this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
-        this.error = 'Khong the tai du lieu canh bao.';
+        this.error = this.t('marketAlerts.error.load');
         this.loading = false;
+        this.pageLoadState.fail(this.pageLoadKey, this.error);
       },
     });
   }
@@ -171,7 +209,7 @@ export class MarketAlertsPage implements OnInit, OnDestroy {
   applyAutoRefresh(): void {
     if (this.autoRefresh) {
       this.stopAutoRefresh();
-      this.refreshHandle = window.setInterval(() => this.loadOverview(true), 60000);
+      this.refreshHandle = window.setInterval(() => this.loadOverview(true), 120000);
       return;
     }
     this.stopAutoRefresh();
@@ -248,5 +286,9 @@ export class MarketAlertsPage implements OnInit, OnDestroy {
       window.clearInterval(this.refreshHandle);
       this.refreshHandle = null;
     }
+  }
+
+  private t(key: string): string {
+    return this.i18n.translate(key);
   }
 }

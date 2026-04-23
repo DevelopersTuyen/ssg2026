@@ -1,0 +1,30 @@
+<ng-container *ngIf="state$ | async as state">
+  <section class="page-load-strip" *ngIf="shouldShow(state)">
+    <div class="page-load-top">
+      <div class="page-load-meta">
+        <strong>{{ state.titleKey | translate }}</strong>
+        <span class="page-load-badge" [class.loading]="state.status === 'loading'" [class.background]="state.status === 'background'" [class.updated]="state.status === 'updated'" [class.error]="state.status === 'error'">
+          {{ badgeText(state) }}
+        </span>
+      </div>
+
+      <div class="page-load-progress">{{ state.progress }}%</div>
+    </div>
+
+    <div class="page-load-track">
+      <div
+        class="page-load-bar"
+        [class.loading]="state.status === 'loading'"
+        [class.background]="state.status === 'background'"
+        [class.updated]="state.status === 'updated'"
+        [class.error]="state.status === 'error'"
+        [style.width.%]="state.progress"
+      ></div>
+    </div>
+
+    <div class="page-load-bottom">
+      <span *ngIf="state.lastUpdatedAt">Cập nhật gần nhất: {{ lastUpdatedText(state) }}</span>
+      <span *ngIf="state.status === 'error' && state.errorMessage">{{ state.errorMessage }}</span>
+    </div>
+  </section>
+</ng-container>

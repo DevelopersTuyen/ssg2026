@@ -5,11 +5,12 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 
 import { AiLocalPageRoutingModule } from './ai-local-routing.module';
+import { SharedModule } from '../../shared/shared.module';
 
 import { AiLocalPage } from './ai-local.page';
 
 @NgModule({
-  imports: [CommonModule, FormsModule, IonicModule, AiLocalPageRoutingModule],
+  imports: [CommonModule, FormsModule, IonicModule, SharedModule, AiLocalPageRoutingModule],
   declarations: [AiLocalPage],
 })
 export class AiLocalPageModule {}

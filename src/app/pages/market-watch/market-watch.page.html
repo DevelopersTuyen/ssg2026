@@ -2,52 +2,51 @@
   <div class="market-shell">
     <section class="hero-panel">
       <div class="hero-copy">
-        <div class="hero-kicker">MARKET WATCH</div>
-        <h1 class="hero-title">Theo doi chi so, dong tien va co phieu tu mot workspace ro rang.</h1>
-        <p class="hero-subtitle">
-          Chon san, chon chi so can tap trung, doi bo loc co phieu va xem ngay bieu do giao dich trong ngay
-          cung chi tiet tung ma.
-        </p>
+        <div class="hero-kicker">{{ 'marketWatch.title' | translate }}</div>
+        <h1 class="hero-title">{{ 'marketWatch.heroTitle' | translate }}</h1>
+        <p class="hero-subtitle">{{ 'marketWatch.heroSubtitle' | translate }}</p>
       </div>
 
       <div class="hero-status">
-        <div class="status-label">Cap nhat gan nhat</div>
+        <div class="status-label">{{ 'marketWatch.updated' | translate }}</div>
         <div class="status-value">{{ lastUpdatedText }}</div>
-        <div class="status-helper">Du lieu duoc dong bo lien tuc tu backend thi truong.</div>
+        <div class="status-helper">{{ 'marketWatch.updatedHelp' | translate }}</div>
       </div>
     </section>
 
+    <app-page-load-indicator pageId="market-watch"></app-page-load-indicator>
+
     <section class="control-panel">
       <label class="control-field">
-        <span>San giao dich</span>
+        <span>{{ 'marketWatch.exchange' | translate }}</span>
         <select [ngModel]="selectedExchange" (ngModelChange)="changeExchange($event)">
           <option *ngFor="let exchange of exchangeOptions" [ngValue]="exchange">{{ exchange }}</option>
         </select>
       </label>
 
       <label class="control-field">
-        <span>Chi so tap trung</span>
+        <span>{{ 'marketWatch.focusIndex' | translate }}</span>
         <select [ngModel]="selectedIndexView" (ngModelChange)="changeIndexView($event)">
-          <option value="ALL">Tat ca chi so cua {{ selectedExchange }}</option>
+          <option value="ALL">{{ 'marketWatch.allIndexes' | translate }} {{ selectedExchange }}</option>
           <option *ngFor="let item of exchangeIndexOptions" [value]="item.symbol">{{ item.symbol }}</option>
         </select>
       </label>
 
       <label class="control-field">
-        <span>Bo loc co phieu</span>
+        <span>{{ 'marketWatch.stockFilter' | translate }}</span>
         <select [ngModel]="selectedSort" (ngModelChange)="changeSort($event)">
-          <option value="all">Tat ca ma</option>
-          <option value="actives">Actives</option>
-          <option value="gainers">Gainers</option>
-          <option value="losers">Losers</option>
+          <option value="all">{{ 'marketWatch.sort.all' | translate }}</option>
+          <option value="actives">{{ 'marketWatch.sort.actives' | translate }}</option>
+          <option value="gainers">{{ 'marketWatch.sort.gainers' | translate }}</option>
+          <option value="losers">{{ 'marketWatch.sort.losers' | translate }}</option>
         </select>
       </label>
 
       <label class="control-field">
-        <span>Chi so dong tien</span>
+        <span>{{ 'marketWatch.flowMetric' | translate }}</span>
         <select [ngModel]="selectedMetric" (ngModelChange)="changeMetric($event)">
-          <option value="volume">Khoi luong</option>
-          <option value="tradingValue">Gia tri</option>
+          <option value="volume">{{ 'marketWatch.metric.volume' | translate }}</option>
+          <option value="tradingValue">{{ 'marketWatch.metric.value' | translate }}</option>
         </select>
       </label>
     </section>
@@ -64,8 +63,8 @@
       <article class="panel spotlight-panel" *ngIf="focusIndexCard as focus">
         <div class="spotlight-head">
           <div>
-            <div class="panel-kicker">Index Spotlight</div>
-            <div class="panel-title">Chi tiet chi so dang tap trung</div>
+            <div class="panel-kicker">{{ 'marketWatch.indexSpotlight' | translate }}</div>
+            <div class="panel-title">{{ 'marketWatch.indexDetail' | translate }}</div>
             <div class="panel-subtitle">
               {{ focus.displayName }} tren {{ focus.exchange }} · {{ focus.mode === 'intraday' ? 'Intraday' : 'Daily fallback' }}
             </div>
@@ -77,7 +76,7 @@
 
         <div class="spotlight-main">
           <div class="spotlight-price">{{ focus.valueText }}</div>
-          <div class="spotlight-caption">Muc diem hien tai</div>
+          <div class="spotlight-caption">{{ 'marketWatch.currentLevel' | translate }}</div>
         </div>
 
         <div class="spotlight-metrics">
@@ -90,7 +89,7 @@
             <strong>{{ focus.lowText }}</strong>
           </div>
           <div class="spotlight-metric">
-            <span>Khoi luong</span>
+              <span>{{ 'marketWatch.metric.volume' | translate }}</span>
             <strong>{{ focus.volumeText }}</strong>
           </div>
           <div class="spotlight-metric">
@@ -98,41 +97,41 @@
             <strong>{{ focus.tradingValueText }}</strong>
           </div>
           <div class="spotlight-metric">
-            <span>Cap nhat</span>
+              <span>{{ 'marketWatch.updated' | translate }}</span>
             <strong>{{ focus.updatedText }}</strong>
           </div>
           <div class="spotlight-metric">
-            <span>Chart mode</span>
+              <span>{{ 'marketWatch.chartMode' | translate }}</span>
             <strong>{{ focus.mode }}</strong>
           </div>
         </div>
       </article>
 
       <article class="panel pulse-panel">
-        <div class="panel-kicker">Market Pulse</div>
-        <div class="panel-title">Tong quan nhanh theo san dang chon</div>
+        <div class="panel-kicker">{{ 'marketWatch.marketPulse' | translate }}</div>
+        <div class="panel-title">{{ 'marketWatch.marketPulseTitle' | translate }}</div>
 
         <div class="pulse-list">
           <div class="pulse-row">
-            <span>San dang xem</span>
+            <span>{{ 'marketWatch.currentExchange' | translate }}</span>
             <strong>{{ selectedExchange }}</strong>
           </div>
           <div class="pulse-row">
-            <span>Khoi luong cong don</span>
+            <span>{{ 'marketWatch.accVolume' | translate }}</span>
             <strong>{{ totalHourlyVolumeText }}</strong>
           </div>
           <div class="pulse-row">
-            <span>Gia tri cong don</span>
+            <span>{{ 'marketWatch.accValue' | translate }}</span>
             <strong>{{ totalHourlyValueText }}</strong>
           </div>
           <div class="pulse-row">
-            <span>Ma dang xem</span>
+            <span>{{ 'marketWatch.focusSymbol' | translate }}</span>
             <strong>{{ selectedSymbolDisplay }}</strong>
           </div>
         </div>
 
         <div class="pulse-note">
-          Bo loc hien tai dang giup ban di tu chi so -> dong tien -> co phieu chi tiet ma khong can roi man hinh.
+          {{ 'marketWatch.pulseNote' | translate }}
         </div>
       </article>
     </section>
@@ -140,15 +139,13 @@
     <section class="panel index-section">
       <div class="section-head">
         <div>
-          <div class="panel-kicker">Index Board</div>
-          <div class="panel-title">Danh sach chi so</div>
-          <div class="panel-subtitle">
-            Hien thi {{ filteredIndexCards.length }} chi so cua san {{ selectedExchange }} theo bo loc da chon.
-          </div>
+          <div class="panel-kicker">{{ 'marketWatch.indexBoard' | translate }}</div>
+          <div class="panel-title">{{ 'marketWatch.indexList' | translate }}</div>
+          <div class="panel-subtitle">{{ 'marketWatch.indexListSubtitle' | translate }} {{ filteredIndexCards.length }} / {{ selectedExchange }}</div>
         </div>
 
         <div class="section-chip">
-          {{ selectedIndexView === 'ALL' ? ('Tat ca ' + selectedExchange) : selectedIndexView }}
+          {{ selectedIndexView === 'ALL' ? (('marketWatch.allIndexes' | translate) + ' ' + selectedExchange) : selectedIndexView }}
         </div>
       </div>
 
@@ -160,7 +157,7 @@
               <div class="index-exchange">{{ item.exchange }}</div>
             </div>
             <div class="index-badge" [class.down]="!item.up">
-              {{ item.up ? 'Tang' : 'Giam' }}
+              {{ item.up ? ('marketWatch.up' | translate) : ('marketWatch.down' | translate) }}
             </div>
           </div>
 
@@ -173,7 +170,7 @@
 
           <div class="index-mini-chart">
             <div [id]="item.chartId"></div>
-            <div class="empty-state small" *ngIf="!item.seriesPoints.length">Chua co du lieu bieu do.</div>
+            <div class="empty-state small" *ngIf="!item.seriesPoints.length">{{ 'marketWatch.empty.chart' | translate }}</div>
           </div>
 
           <div class="index-metrics">
@@ -204,12 +201,12 @@
       <section class="panel panel-large">
         <div class="section-head">
           <div>
-            <div class="panel-kicker">Flow Chart</div>
-            <div class="panel-title">Bieu do dong tien theo giai doan</div>
-            <div class="panel-subtitle">
-              Theo doi dong thoi 3 khung du lieu: ngay, tuan va 10 ngay theo
-              {{ selectedMetric === 'volume' ? 'khoi luong' : 'gia tri' }}.
-            </div>
+          <div class="panel-kicker">{{ 'marketWatch.flowChart' | translate }}</div>
+          <div class="panel-title">{{ 'marketWatch.flowChartTitle' | translate }}</div>
+          <div class="panel-subtitle">
+            {{ 'marketWatch.flowChartSubtitle' | translate }}
+            {{ selectedMetric === 'volume' ? ('marketWatch.metric.volume' | translate) : ('marketWatch.metric.value' | translate) }}.
+          </div>
           </div>
 
           <div class="section-chip">{{ selectedExchange }}</div>
@@ -217,31 +214,31 @@
 
         <div class="flow-chart-grid">
           <article class="flow-chart-panel">
-            <div class="flow-chart-title">Ngay</div>
+            <div class="flow-chart-title">{{ 'marketWatch.day' | translate }}</div>
             <div class="chart-card flow-chart-card">
               <div id="chart-hourly-trading-day"></div>
               <div class="empty-state" *ngIf="!hasFlowChartData('day') && !boardLoading">
-                Chua co du lieu cho khung ngay.
+                {{ 'marketWatch.empty.day' | translate }}
               </div>
             </div>
           </article>
 
           <article class="flow-chart-panel">
-            <div class="flow-chart-title">Tuan</div>
+            <div class="flow-chart-title">{{ 'marketWatch.week' | translate }}</div>
             <div class="chart-card flow-chart-card">
               <div id="chart-hourly-trading-week"></div>
               <div class="empty-state" *ngIf="!hasFlowChartData('week') && !boardLoading">
-                Chua co du lieu cho khung tuan.
+                {{ 'marketWatch.empty.week' | translate }}
               </div>
             </div>
           </article>
 
           <article class="flow-chart-panel">
-            <div class="flow-chart-title">10 ngay</div>
+            <div class="flow-chart-title">{{ 'marketWatch.tenDays' | translate }}</div>
             <div class="chart-card flow-chart-card">
               <div id="chart-hourly-trading-ten-days"></div>
               <div class="empty-state" *ngIf="!hasFlowChartData('tenDays') && !boardLoading">
-                Chua co du lieu cho khung 10 ngay.
+                {{ 'marketWatch.empty.tenDays' | translate }}
               </div>
             </div>
           </article>
@@ -251,8 +248,8 @@
       <section class="panel panel-side">
         <div class="section-head">
         <div>
-          <div class="panel-kicker">Stock Board</div>
-          <div class="panel-title">Danh sach co phieu theo san</div>
+          <div class="panel-kicker">{{ 'marketWatch.stockBoard' | translate }}</div>
+          <div class="panel-title">{{ 'marketWatch.stockList' | translate }}</div>
           <div class="panel-subtitle">{{ stockBoardSubtitle }}</div>
         </div>
 
@@ -261,18 +258,18 @@
 
         <div class="stock-toolbar">
           <label class="stock-search-field">
-            <span>Tim ma / ten</span>
+            <span>{{ 'marketWatch.searchLabel' | translate }}</span>
             <input
               type="text"
               [ngModel]="stockSearchKeyword"
               (ngModelChange)="onStockKeywordChange($event)"
-              placeholder="Vi du: FPT, VCB, ngan hang..."
+              [placeholder]="'marketWatch.searchPlaceholder' | translate"
             />
           </label>
 
           <div class="stock-stats">
-            <div class="stock-stat-pill">Tong: {{ totalStockCount }} ma</div>
-            <div class="stock-stat-pill">Trang nay: {{ topStocks.length }} ma</div>
+            <div class="stock-stat-pill">{{ 'marketWatch.totalSymbols' | translate }}: {{ totalStockCount }} {{ 'marketWatch.symbolUnit' | translate }}</div>
+            <div class="stock-stat-pill">{{ 'marketWatch.pageSymbols' | translate }}: {{ topStocks.length }} {{ 'marketWatch.symbolUnit' | translate }}</div>
           </div>
         </div>
 
@@ -325,7 +322,7 @@
           </div>
 
           <div class="empty-state small" *ngIf="!topStocks.length && !boardLoading">
-            Khong tim thay ma phu hop trong du lieu backend hien co.
+            {{ 'marketWatch.empty.stockSearch' | translate }}
           </div>
         </div>
       </section>
@@ -337,24 +334,24 @@
   <section class="symbol-modal" *ngIf="symbolModalOpen">
     <div class="symbol-modal-head">
       <div>
-        <div class="panel-title">Chi tiet ma {{ selectedSymbolDisplay }}</div>
-        <div class="panel-subtitle">Quote, bien dong va bieu do chi tiet cho ma dang duoc chon tu market watch.</div>
+        <div class="panel-title">{{ 'marketWatch.symbolDetailTitle' | translate }} {{ selectedSymbolDisplay }}</div>
+        <div class="panel-subtitle">{{ 'marketWatch.symbolDetailSubtitle' | translate }}</div>
       </div>
       <div class="symbol-modal-actions">
-        <button type="button" class="symbol-financial-btn" (click)="openFinancialModal()">Xem bao cao tai chinh</button>
-        <button type="button" class="symbol-modal-close" (click)="closeSymbolModal()">Dong</button>
+        <button type="button" class="symbol-financial-btn" (click)="openFinancialModal()">{{ 'marketWatch.viewFinancials' | translate }}</button>
+        <button type="button" class="symbol-modal-close" (click)="closeSymbolModal()">{{ 'common.close' | translate }}</button>
       </div>
     </div>
 
     <div class="detail-grid">
       <div class="detail-summary">
         <div class="summary-box">
-          <div class="summary-label">Gia hien tai</div>
+          <div class="summary-label">{{ 'marketWatch.metric.currentPrice' | translate }}</div>
           <div class="summary-value">{{ selectedPriceText }}</div>
         </div>
 
         <div class="summary-box">
-          <div class="summary-label">Thay doi</div>
+          <div class="summary-label">{{ 'marketWatch.metric.change' | translate }}</div>
           <div class="summary-value" [class.down]="!selectedQuoteUp">{{ selectedChangeText }}</div>
         </div>
 
@@ -364,12 +361,12 @@
         </div>
 
         <div class="summary-box">
-          <div class="summary-label">Khoi luong</div>
+          <div class="summary-label">{{ 'marketWatch.metric.volume' | translate }}</div>
           <div class="summary-value">{{ selectedVolumeText }}</div>
         </div>
 
         <div class="summary-box">
-          <div class="summary-label">Gia tri giao dich</div>
+          <div class="summary-label">{{ 'marketWatch.metric.tradingValue' | translate }}</div>
           <div class="summary-value">{{ selectedTradingValueText }}</div>
         </div>
       </div>
@@ -377,7 +374,7 @@
       <div class="detail-chart-card symbol-chart-box">
         <div id="chart-symbol-detail"></div>
         <div class="empty-state" *ngIf="!selectedHourly.length && !symbolLoading">
-          Chua co du lieu chi tiet theo ma.
+          {{ 'marketWatch.empty.symbolDetail' | translate }}
         </div>
       </div>
     </div>
@@ -387,14 +384,20 @@
   <section class="symbol-modal financial-modal" *ngIf="financialModalOpen">
     <div class="symbol-modal-head">
       <div>
-        <div class="panel-title">Bao cao tai chinh {{ selectedSymbolDisplay }}</div>
-        <div class="panel-subtitle">Doc du lieu tu vnstock collector da luu trong database local.</div>
+        <div class="panel-title">{{ 'marketWatch.financialReportTitle' | translate }} {{ selectedSymbolDisplay }}</div>
+        <div class="panel-subtitle">{{ 'marketWatch.financialReportSubtitle' | translate }}</div>
       </div>
-      <button type="button" class="symbol-modal-close" (click)="closeFinancialModal()">Dong</button>
+      <button type="button" class="symbol-modal-close" (click)="closeFinancialModal()">{{ 'common.close' | translate }}</button>
     </div>
 
-    <div class="empty-state" *ngIf="financialLoading">Dang tai bao cao tai chinh...</div>
-    <div class="empty-state" *ngIf="!financialLoading && !financialOverview">Chua co du lieu bao cao tai chinh cho ma nay.</div>
+    <div class="empty-state" *ngIf="financialLoading">{{ 'marketWatch.loadingFinancials' | translate }}</div>
+    <div class="empty-state" *ngIf="!financialLoading && !financialOverview">{{ 'marketWatch.empty.financialReport' | translate }}</div>
+    <div class="empty-state" *ngIf="!financialLoading && financialOverview && !financialSyncStatus?.hasData">
+      <div>Chưa có dữ liệu báo cáo tài chính trong DB cho mã này.</div>
+      <div *ngIf="financialSyncStatus?.source">Nguồn gần nhất: {{ financialSyncStatus?.source }}</div>
+      <div *ngIf="financialSyncStatus?.message">{{ financialSyncStatus?.message }}</div>
+      <div *ngIf="financialSyncStatus?.errors?.length">Lỗi gần nhất: {{ financialSyncStatus?.errors?.[0] }}</div>
+    </div>
 
     <div class="detail-summary" *ngIf="!financialLoading && financialOverview">
       <div class="summary-box" *ngFor="let item of financialHighlights">
@@ -410,16 +413,16 @@
           <div>
             <div class="financial-section-title">{{ section.title }}</div>
             <div class="financial-section-meta">
-              {{ section.latestPeriod || '--' }} / {{ section.periodType || '--' }} / {{ section.rowCount }} dong
+              {{ section.latestPeriod || '--' }} / {{ section.periodType || '--' }} / {{ section.rowCount }} {{ 'marketWatch.rows' | translate }}
             </div>
           </div>
         </div>
 
         <div class="financial-table" *ngIf="section.rows.length; else emptyFinancialRows">
           <div class="financial-row header">
-            <span>Chi tieu</span>
-            <span>Gia tri</span>
-            <span>Ky</span>
+            <span>{{ 'marketWatch.metric.metric' | translate }}</span>
+            <span>{{ 'marketWatch.metric.value' | translate }}</span>
+            <span>{{ 'marketWatch.metric.period' | translate }}</span>
           </div>
           <div class="financial-row" *ngFor="let row of section.rows | slice:0:10">
             <span>{{ row.metricLabel }}</span>
@@ -429,7 +432,7 @@
         </div>
 
         <ng-template #emptyFinancialRows>
-          <div class="empty-state small">Chua co du lieu cho nhom nay.</div>
+          <div class="empty-state small">{{ 'marketWatch.empty.financialGroup' | translate }}</div>
         </ng-template>
       </article>
     </div>

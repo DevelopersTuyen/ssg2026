@@ -582,6 +582,28 @@ class StrategyStockScoreSnapshot(Base):
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
 
 
+class StrategySignalSnapshot(Base):
+    __tablename__ = "strategy_signal_snapshots"
+    __table_args__ = (
+        Index("ix_strategy_signal_profile_symbol_date", "profile_id", "symbol", "trading_date"),
+        Index("ix_strategy_signal_category_detected", "category", "detected", "computed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    company_code: Mapped[str] = mapped_column(String(30), index=True)
+    profile_id: Mapped[int] = mapped_column(Integer, index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    exchange: Mapped[str | None] = mapped_column(String(20), index=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    category: Mapped[str] = mapped_column(String(50), index=True)
+    signal_code: Mapped[str] = mapped_column(String(100), index=True)
+    signal_label: Mapped[str] = mapped_column(String(255))
+    detected: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    signal_score: Mapped[float | None] = mapped_column(Float)
+    detail_json: Mapped[dict | list | None] = mapped_column(JSON)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
+
 class StrategyTradeJournalEntry(Base):
     __tablename__ = "strategy_trade_journal_entries"
     __table_args__ = (
@@ -594,12 +616,21 @@ class StrategyTradeJournalEntry(Base):
     company_code: Mapped[str] = mapped_column(String(30), index=True)
     profile_id: Mapped[int | None] = mapped_column(Integer, index=True)
     symbol: Mapped[str] = mapped_column(String(30), index=True)
+    trade_date: Mapped[date | None] = mapped_column(Date, index=True)
+    classification: Mapped[str | None] = mapped_column(String(100), index=True)
     trade_side: Mapped[str] = mapped_column(String(20), index=True)
     entry_price: Mapped[float | None] = mapped_column(Float)
     exit_price: Mapped[float | None] = mapped_column(Float)
     stop_loss_price: Mapped[float | None] = mapped_column(Float)
+    take_profit_price: Mapped[float | None] = mapped_column(Float)
+    quantity: Mapped[float | None] = mapped_column(Float)
     position_size: Mapped[float | None] = mapped_column(Float)
+    total_capital: Mapped[float | None] = mapped_column(Float)
+    strategy_name: Mapped[str | None] = mapped_column(String(255))
+    psychology: Mapped[str | None] = mapped_column(Text)
     checklist_result_json: Mapped[dict | list | None] = mapped_column(JSON)
+    signal_snapshot_json: Mapped[dict | list | None] = mapped_column(JSON)
+    result_snapshot_json: Mapped[dict | list | None] = mapped_column(JSON)
     notes: Mapped[str | None] = mapped_column(Text)
     mistake_tags_json: Mapped[dict | list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)

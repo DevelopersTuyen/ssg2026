@@ -63,6 +63,7 @@ class AiChatRequest(BaseModel):
     exchange: str = Field(default="HSX", min_length=2, max_length=20)
     focus_symbols: list[str] = Field(default_factory=list, max_length=5)
     history: list[AiChatHistoryItem] = Field(default_factory=list, max_length=12)
+    include_financial_analysis: bool = False
 
 
 class AiChatMessage(BaseModel):

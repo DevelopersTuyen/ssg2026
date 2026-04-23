@@ -71,6 +71,10 @@ const routes: Routes = [
         loadChildren: () => import('../pages/role-permissions/role-permissions.module').then( m => m.RolePermissionsPageModule)
       },
       {
+        path: 'user-guide',
+        loadChildren: () => import('../pages/user-guide/user-guide.module').then(m => m.UserGuidePageModule)
+      },
+      {
         path: '',
         redirectTo: '/tabs/dashboard',
         pathMatch: 'full'

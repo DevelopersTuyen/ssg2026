@@ -1,5 +1,8 @@
 import { AfterViewInit, Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription, forkJoin, interval, of, startWith, switchMap } from 'rxjs';
+import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
+import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
+import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 import {
   ExchangeTab,
   FinancialOverviewResponse,
@@ -70,6 +73,7 @@ type FlowRange = 'day' | 'week' | 'tenDays';
   standalone: false,
 })
 export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
+  private readonly pageLoadKey = 'market-watch';
   readonly exchangeOptions: ExchangeTab[] = ['HSX', 'HNX', 'UPCOM'];
   readonly stockPageSize = 12;
   selectedExchange: ExchangeTab = 'HSX';
@@ -99,19 +103,44 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   lastUpdatedText = '--';
 
   private boardSub?: Subscription;
+  private stockSub?: Subscription;
   private symbolSub?: Subscription;
   private pollSub?: Subscription;
+  private backgroundSub?: Subscription;
+  private financialSub?: Subscription;
   private renderTimer: any;
+  private activeView = false;
+  private lastIndexCapturedAt: string | null = null;
+  private lastStockCapturedAt: string | null = null;
+  private financialRequestedSymbol = '';
 
   private hourlyChart: any;
   private flowCharts: any[] = [];
   private symbolChart: any;
   private miniIndexCharts: any[] = [];
 
-  constructor(private api: MarketApiService) {}
+  constructor(
+    private api: MarketApiService,
+    private i18n: AppI18nService,
+    private backgroundRefresh: BackgroundRefreshService,
+    private pageLoadState: PageLoadStateService
+  ) {}
 
   ngOnInit(): void {
-    this.startPolling();
+    this.pageLoadState.registerPage(this.pageLoadKey, 'marketWatch.title');
+    this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
+      if (!this.activeView) return;
+      if (domains.some((item) => ['quotes', 'intraday', 'indexDaily'].includes(item))) {
+        this.loadIndexBoard(true);
+      }
+      if (domains.some((item) => ['quotes', 'seedSymbols'].includes(item))) {
+        this.loadStockBoard(false, true);
+      }
+      if (domains.some((item) => ['quotes', 'intraday'].includes(item)) && this.selectedSymbol) {
+        this.loadSelectedSymbol(true);
+      }
+    });
+    this.refreshBoard(true);
   }
 
   ngAfterViewInit(): void {
@@ -119,13 +148,25 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ionViewDidEnter(): void {
+    this.activeView = true;
+    this.pageLoadState.setActivePage(this.pageLoadKey);
+    if (!this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 12000)) {
+      this.refreshBoard(false, true);
+    }
     this.scheduleRender(150);
+  }
+
+  ionViewDidLeave(): void {
+    this.activeView = false;
   }
 
   ngOnDestroy(): void {
     this.boardSub?.unsubscribe();
+    this.stockSub?.unsubscribe();
     this.symbolSub?.unsubscribe();
-    this.pollSub?.unsubscribe();
+    this.stopPolling();
+    this.backgroundSub?.unsubscribe();
+    this.financialSub?.unsubscribe();
 
     if (this.renderTimer) {
       clearTimeout(this.renderTimer);
@@ -170,13 +211,16 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     if (symbolChanged) {
       this.financialModalOpen = false;
       this.financialOverview = null;
+      this.financialRequestedSymbol = '';
     }
 
     if (symbolChanged || !this.selectedQuote) {
       this.loadSelectedSymbol();
+      this.ensureFinancialOverview(symbol, true);
       return;
     }
 
+    this.ensureFinancialOverview(symbol, true);
     this.scheduleRender(120);
   }
 
@@ -190,7 +234,7 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     if (this.financialOverview?.symbol === this.selectedSymbol) {
       return;
     }
-    this.loadFinancialOverview();
+    this.ensureFinancialOverview(this.selectedSymbol);
   }
 
   closeFinancialModal(): void {
@@ -254,26 +298,32 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     const end = Math.min(this.currentStockPage * this.stockPageSize, this.totalStockCount);
     return [
       {
-        label: 'Chi so hien thi',
+        label: this.t('marketWatch.summary.indexes'),
         value: `${this.filteredIndexCards.length}`,
-        helper: this.selectedIndexView === 'ALL' ? 'Dang xem toan bo danh sach' : `Dang loc ${this.selectedIndexView}`,
+        helper:
+          this.selectedIndexView === 'ALL'
+            ? this.t('marketWatch.helper.viewingAll')
+            : `${this.t('marketWatch.helper.filtering')} ${this.selectedIndexView}`,
       },
       {
-        label: 'Co phieu tren san',
+        label: this.t('marketWatch.summary.stocks'),
         value: `${start}-${end}/${this.totalStockCount}`,
         helper: this.selectedSort === 'all'
-          ? `Dang xem full universe cua ${this.selectedExchange}${this.stockSearchKeyword ? ' va tim kiem dang bat' : ''}`
-          : `Bo loc ${this.stockSortLabel} va tim kiem ${this.stockSearchKeyword ? 'dang bat' : 'tat'}`,
+          ? `${this.t('marketWatch.helper.fullUniverse')} ${this.selectedExchange}${this.stockSearchKeyword ? ` ${this.t('marketWatch.helper.searchOn')}` : ''}`
+          : `${this.t('marketWatch.helper.filter')} ${this.stockSortLabel} ${this.stockSearchKeyword ? this.t('marketWatch.helper.searchOn') : this.t('marketWatch.helper.searchOff')}`,
       },
       {
-        label: 'Dong tien theo gio',
+        label: this.t('marketWatch.summary.flow'),
         value: this.selectedMetric === 'volume' ? this.totalHourlyVolumeText : this.totalHourlyValueText,
-        helper: this.selectedMetric === 'volume' ? 'Tong khoi luong cong don' : 'Tong gia tri giao dich cong don',
+        helper:
+          this.selectedMetric === 'volume'
+            ? this.t('marketWatch.helper.totalVolume')
+            : this.t('marketWatch.helper.totalValue'),
       },
       {
-        label: 'Ma dan dau',
+        label: this.t('marketWatch.summary.leader'),
         value: leader?.symbol || '--',
-        helper: leader ? `${leader.changeText} / ${leader.percentText}` : 'Chua co ma noi bat',
+        helper: leader ? `${leader.changeText} / ${leader.percentText}` : this.t('marketWatch.empty.leader'),
       },
     ];
   }
@@ -291,10 +341,10 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get stockSortLabel(): string {
-    if (this.selectedSort === 'all') return 'Tat ca ma';
-    if (this.selectedSort === 'gainers') return 'Top tang';
-    if (this.selectedSort === 'losers') return 'Top giam';
-    return 'Thanh khoan cao';
+    if (this.selectedSort === 'all') return this.t('marketWatch.sort.all');
+    if (this.selectedSort === 'gainers') return this.t('marketWatch.sort.gainers');
+    if (this.selectedSort === 'losers') return this.t('marketWatch.sort.losers');
+    return this.t('marketWatch.sort.actives');
   }
 
   get stockBoardChipLabel(): string {
@@ -303,10 +353,10 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
 
   get stockBoardSubtitle(): string {
     if (this.selectedSort === 'all') {
-      return `Dang xem toan bo ${this.totalStockCount} ma tren san ${this.selectedExchange}. Chon mot ma de mo chi tiet ngay trong modal.`;
+      return `${this.t('marketWatch.board.fullUniversePrefix')} ${this.totalStockCount} ${this.t('marketWatch.board.fullUniverseSuffix')} ${this.selectedExchange}. ${this.t('marketWatch.board.openModal')}`;
     }
 
-    return `Dang xem ${this.stockSortLabel.toLowerCase()} cua san ${this.selectedExchange}. Chon mot ma de xem chi tiet ngay ben duoi.`;
+    return `${this.t('marketWatch.board.viewing')} ${this.stockSortLabel.toLowerCase()} ${this.t('marketWatch.board.ofExchange')} ${this.selectedExchange}. ${this.t('marketWatch.board.openDetail')}`;
   }
 
   onStockKeywordChange(value: string): void {
@@ -322,19 +372,52 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
 
   private startPolling(): void {
     this.pollSub?.unsubscribe();
-    this.pollSub = interval(30000)
+    this.pollSub = interval(120000)
       .pipe(startWith(0))
       .subscribe(() => this.refreshBoard(false));
   }
 
-  private refreshBoard(forceResetSymbol: boolean): void {
-    this.boardLoading = true;
+  private stopPolling(): void {
+    this.pollSub?.unsubscribe();
+    this.pollSub = undefined;
+  }
+
+  private refreshBoard(forceResetSymbol: boolean, silent = false): void {
+    if (!silent) {
+      this.boardLoading = true;
+      this.pageLoadState.start(this.pageLoadKey);
+    } else {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
+    let hasError = false;
+    let pending = 2;
+    const finish = (failed = false) => {
+      if (failed) {
+        hasError = true;
+      }
+      pending -= 1;
+      const completed = 2 - pending;
+      this.pageLoadState.setProgress(this.pageLoadKey, 20 + completed * 35);
+      if (pending <= 0) {
+        this.boardLoading = false;
+        this.scheduleRender(50);
+        if (hasError) {
+          this.pageLoadState.fail(this.pageLoadKey, 'Một phần dữ liệu thị trường chưa tải xong.');
+        } else {
+          this.pageLoadState.finish(this.pageLoadKey);
+        }
+      }
+    };
+
+    this.loadIndexBoard(true, finish);
+    this.loadStockBoard(forceResetSymbol, true, finish);
+  }
+
+  private loadIndexBoard(silent = false, done?: (failed?: boolean) => void): void {
+    if (silent && !done) {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
     this.boardSub?.unsubscribe();
-    const normalizedKeyword = this.stockSearchKeyword.trim().toUpperCase();
-    const usingKeywordSearch = !!normalizedKeyword;
-    const usingFullUniverse = this.selectedSort === 'all';
-    const requestedPage = (usingKeywordSearch || usingFullUniverse) ? 1 : this.currentStockPage;
-    const requestedPageSize = (usingKeywordSearch || usingFullUniverse) ? 5000 : this.stockPageSize;
 
     this.boardSub = this.api.getLiveIndexCards()
       .pipe(
@@ -358,20 +441,13 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
           return forkJoin({
             indexCards: of(indexCards),
             hourlyTrading: this.api.getHourlyTrading(this.selectedExchange),
-            stocks: this.api.getAllStocks(
-              this.selectedExchange,
-              this.selectedSort,
-              requestedPage,
-              requestedPageSize,
-              this.stockSearchKeyword
-            ),
             indexSeriesResponses: seriesRequests,
             dailyIndexSeriesResponses: dailySeriesRequests,
           });
         })
       )
       .subscribe({
-      next: ({ indexCards, hourlyTrading, stocks, indexSeriesResponses, dailyIndexSeriesResponses }) => {
+      next: ({ indexCards, hourlyTrading, indexSeriesResponses, dailyIndexSeriesResponses }) => {
         const uniqueIndexItems = (indexCards.items || []).filter(
           (item, index, arr) =>
             arr.findIndex((candidate) => candidate.symbol === item.symbol) === index
@@ -391,7 +467,8 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
           }
         });
 
-        this.lastUpdatedText = this.pickLastUpdatedText(indexCards.capturedAt, stocks.capturedAt);
+        this.lastIndexCapturedAt = indexCards.capturedAt || null;
+        this.updateLastUpdatedText();
         this.availableIndices = uniqueIndexItems.map((item) => ({
           symbol: item.symbol,
           exchange: item.exchange,
@@ -410,7 +487,46 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
         this.dailyIndexSeriesMap = dailySeriesMap;
 
         this.hourlyTrading = this.resolveMarketHourlySeries(hourlyTrading.items || []);
+        if (this.selectedSymbol) {
+          this.loadSelectedSymbol(true);
+        }
+        this.scheduleRender(50);
+        if (silent && !done) {
+          this.pageLoadState.finish(this.pageLoadKey);
+        }
+        done?.(false);
+      },
+      error: () => {
+        if (!silent) {
+          this.boardLoading = false;
+        }
+        if (silent && !done) {
+          this.pageLoadState.fail(this.pageLoadKey, 'Không cập nhật được index board.');
+        }
+        done?.(true);
+      },
+    });
+  }
 
+  private loadStockBoard(forceResetSymbol: boolean, silent = false, done?: (failed?: boolean) => void): void {
+    if (silent && !done) {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
+    this.stockSub?.unsubscribe();
+    const normalizedKeyword = this.stockSearchKeyword.trim().toUpperCase();
+    const usingKeywordSearch = !!normalizedKeyword;
+    const usingFullUniverse = this.selectedSort === 'all';
+    const requestedPage = (usingKeywordSearch || usingFullUniverse) ? 1 : this.currentStockPage;
+    const requestedPageSize = (usingKeywordSearch || usingFullUniverse) ? 5000 : this.stockPageSize;
+
+    this.stockSub = this.api.getAllStocks(
+      this.selectedExchange,
+      this.selectedSort,
+      requestedPage,
+      requestedPageSize,
+      this.stockSearchKeyword
+    ).subscribe({
+      next: (stocks) => {
         const nextStocks = (stocks.items || []).map((x) => this.toStockVm(x));
         const universeStocks = usingFullUniverse
           ? [...nextStocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
@@ -427,43 +543,52 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
 
         this.topStocks = pagedStocks;
         this.totalStockCount = (usingKeywordSearch || usingFullUniverse) ? refinedStocks.length : (stocks.total || 0);
+        this.lastStockCapturedAt = stocks.capturedAt || null;
+        this.updateLastUpdatedText();
 
         if (this.currentStockPage > this.totalStockPages && this.totalStockCount > 0) {
           this.currentStockPage = this.totalStockPages;
-          this.refreshBoard(forceResetSymbol);
+          this.loadStockBoard(forceResetSymbol, true, done);
           return;
         }
 
         const strongestByVolume = this.pickStrongestSymbolByVolume(nextStocks);
 
-        if (
-          forceResetSymbol ||
-          !this.selectedSymbol
-        ) {
+        if (forceResetSymbol || !this.selectedSymbol) {
           this.selectedSymbol = this.resolvePreferredSelectedSymbol(strongestByVolume || nextStocks[0]?.symbol || '');
         }
 
         if (this.selectedSymbol) {
-          this.loadSelectedSymbol();
+          this.loadSelectedSymbol(true);
         } else {
           this.selectedQuote = null;
           this.selectedHourly = [];
-          this.scheduleRender(50);
         }
 
-        this.boardLoading = false;
         this.scheduleRender(50);
+        if (silent && !done) {
+          this.pageLoadState.finish(this.pageLoadKey);
+        }
+        done?.(false);
       },
       error: () => {
-        this.boardLoading = false;
+        if (!silent) {
+          this.boardLoading = false;
+        }
+        if (silent && !done) {
+          this.pageLoadState.fail(this.pageLoadKey, 'Không cập nhật được stock board.');
+        }
+        done?.(true);
       },
     });
   }
 
-  private loadSelectedSymbol(): void {
+  private loadSelectedSymbol(silent = false): void {
     if (!this.selectedSymbol) return;
 
-    this.symbolLoading = true;
+    if (!silent) {
+      this.symbolLoading = true;
+    }
     this.symbolSub?.unsubscribe();
 
     this.symbolSub = forkJoin({
@@ -484,16 +609,30 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  private loadFinancialOverview(): void {
-    if (!this.selectedSymbol) return;
+  private updateLastUpdatedText(): void {
+    this.lastUpdatedText = this.pickLastUpdatedText(this.lastIndexCapturedAt, this.lastStockCapturedAt);
+  }
 
+  private ensureFinancialOverview(symbol: string, silent = false): void {
+    if (!symbol) return;
+    if (this.financialOverview?.symbol === symbol) return;
+    if (this.financialLoading && this.financialRequestedSymbol === symbol) return;
+
+    this.financialSub?.unsubscribe();
+    this.financialRequestedSymbol = symbol;
     this.financialLoading = true;
-    this.api.getSymbolFinancials(this.selectedSymbol, 18).subscribe({
+    this.financialSub = this.api.getSymbolFinancials(symbol, 12).subscribe({
       next: (data) => {
+        if (this.financialRequestedSymbol !== symbol) {
+          return;
+        }
         this.financialOverview = data;
         this.financialLoading = false;
       },
       error: () => {
+        if (this.financialRequestedSymbol !== symbol) {
+          return;
+        }
         this.financialOverview = null;
         this.financialLoading = false;
       },
@@ -553,6 +692,10 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
       baseValue,
       mode: this.detectSeriesMode(seriesItems),
     };
+  }
+
+  private t(key: string): string {
+    return this.i18n.translate(key);
   }
 
   private resolveMarketHourlySeries(hourlyItems: LiveHourlyTradingItem[]): LiveHourlyTradingItem[] {
@@ -1378,6 +1521,10 @@ export class MarketWatchPage implements OnInit, AfterViewInit, OnDestroy {
 
   get financialSections() {
     return this.financialOverview?.sections || [];
+  }
+
+  get financialSyncStatus() {
+    return this.financialOverview?.syncStatus || null;
   }
 
   private indexDisplayName(exchange: string, symbol: string): string {

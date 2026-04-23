@@ -8,14 +8,17 @@ from typing import Any
 from app.core.cache import cache_service
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.models.market import StrategySignalSnapshot
 from app.repositories.market_read_repo import MarketReadRepository
 from app.services.cafef_news_service import CafeFNewsArticle, CafeFNewsService
 from app.services.gemini_service import GeminiService, GeminiServiceError
+from sqlalchemy import select
 
 logger = get_logger(__name__)
 
 
 class MarketAlertsService:
+    STRATEGY_SIGNAL_CATEGORIES = ("money_flow", "candlestick", "footprint", "execution", "volume")
     POSITIVE_NEWS_KEYWORDS = (
         "lai",
         "co tuc",
@@ -90,6 +93,10 @@ class MarketAlertsService:
         losers = await self._get_stock_board(exchange, "losers", limit=8)
         watchlist = await self._build_watchlist_snapshot(limit=12)
         news = await self.news_service.fetch_latest_news(limit=12, repo=self.repo)
+        strategy_signals = await self._load_strategy_signal_items(
+            exchange=exchange,
+            watchlist_symbols={item["symbol"] for item in watchlist},
+        )
 
         tracked_symbols = self._collect_tracked_symbols(watchlist, actives, gainers, losers)
         news_items = self._build_news_items(news, tracked_symbols, {item["symbol"] for item in watchlist})
@@ -105,8 +112,73 @@ class MarketAlertsService:
             "gainers": gainers,
             "losers": losers,
             "watchlist": watchlist,
+            "strategy_signals": strategy_signals,
             "news_items": news_items,
         }
+
+    async def _load_strategy_signal_items(
+        self,
+        *,
+        exchange: str,
+        watchlist_symbols: set[str],
+        limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        latest_date_stmt = (
+            select(StrategySignalSnapshot.trading_date)
+            .where(
+                StrategySignalSnapshot.exchange == exchange,
+                StrategySignalSnapshot.category.in_(self.STRATEGY_SIGNAL_CATEGORIES),
+                StrategySignalSnapshot.detected.is_(True),
+            )
+            .order_by(StrategySignalSnapshot.trading_date.desc())
+            .limit(1)
+        )
+        latest_date = (await self.repo.session.execute(latest_date_stmt)).scalar_one_or_none()
+        if latest_date is None:
+            return []
+
+        stmt = (
+            select(StrategySignalSnapshot)
+            .where(
+                StrategySignalSnapshot.exchange == exchange,
+                StrategySignalSnapshot.category.in_(self.STRATEGY_SIGNAL_CATEGORIES),
+                StrategySignalSnapshot.detected.is_(True),
+                StrategySignalSnapshot.trading_date == latest_date,
+            )
+            .order_by(
+                StrategySignalSnapshot.computed_at.desc(),
+                StrategySignalSnapshot.signal_score.desc().nullslast(),
+            )
+            .limit(limit * 3)
+        )
+        rows = (await self.repo.session.execute(stmt)).scalars().all()
+        items: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for row in rows:
+            key = f"{row.symbol}|{row.signal_code}"
+            if key in seen:
+                continue
+            seen.add(key)
+            detail = row.detail_json if isinstance(row.detail_json, dict) else {}
+            signal_score = float(row.signal_score or 0)
+            bias = self._normalize_direction(detail.get("bias"), "neutral")
+            items.append(
+                {
+                    "symbol": row.symbol,
+                    "exchange": row.exchange,
+                    "category": row.category,
+                    "signal_code": row.signal_code,
+                    "signal_label": row.signal_label,
+                    "signal_score": signal_score,
+                    "detail": str(detail.get("detail") or "").strip(),
+                    "bias": bias,
+                    "computed_at": self._iso(row.computed_at),
+                    "watchlist": row.symbol in watchlist_symbols,
+                }
+            )
+            if len(items) >= limit:
+                break
+        return items
 
     async def _get_stock_board(self, exchange: str, sort: str, limit: int) -> list[dict[str, Any]]:
         result = await self.repo.get_market_stocks(
@@ -339,6 +411,33 @@ class MarketAlertsService:
                 )
             )
 
+        for signal in context.get("strategy_signals") or []:
+            severity = "critical" if signal["signal_score"] >= 80 else "warning"
+            title = f"Tín hiệu chiến lược: {signal['signal_label']}"
+            detail = signal.get("detail") or "Engine tiền thông minh đang phát hiện tín hiệu sớm."
+            alerts.append(
+                self._make_alert(
+                    scope="watchlist" if signal["watchlist"] else "market",
+                    severity=severity,
+                    symbol=signal["symbol"],
+                    title=title,
+                    message=detail,
+                    prediction=self._strategy_signal_prediction(signal),
+                    source="Strategy engine",
+                    source_url=None,
+                    time=self._clock(signal.get("computed_at")),
+                    price=None,
+                    change_value=None,
+                    change_percent=None,
+                    volume=None,
+                    trading_value=None,
+                    confidence=max(60, min(92, int(round(signal["signal_score"] or 60)))),
+                    direction=signal.get("bias") or "neutral",
+                    watchlist=signal["watchlist"],
+                    tags=[exchange, "strategy", signal.get("category") or "signal", signal["signal_code"]],
+                )
+            )
+
         for news_item in context.get("news_items") or []:
             related_symbols = news_item.get("related_symbols") or []
             if not related_symbols and len(alerts) > 8:
@@ -465,6 +564,7 @@ class MarketAlertsService:
             "gainers": context.get("gainers"),
             "losers": context.get("losers"),
             "watchlist": context.get("watchlist"),
+            "strategy_signals": context.get("strategy_signals"),
             "news_items": context.get("news_items"),
         }
 
@@ -476,6 +576,7 @@ class MarketAlertsService:
             "gainers": (context.get("gainers") or [])[:3],
             "losers": (context.get("losers") or [])[:3],
             "watchlist": (context.get("watchlist") or [])[:6],
+            "strategy_signals": (context.get("strategy_signals") or [])[:6],
             "news_items": (context.get("news_items") or [])[:4],
         }
 
@@ -541,6 +642,12 @@ class MarketAlertsService:
                 "value": str(len(cafef_hits)),
                 "tone": "positive" if cafef_hits else "default",
                 "helper": "news-linked",
+            },
+            {
+                "label": "Tin hieu chien luoc",
+                "value": str(len(context.get("strategy_signals") or [])),
+                "tone": "warning" if context.get("strategy_signals") else "default",
+                "helper": "strategy engine",
             },
         ]
 
@@ -699,6 +806,25 @@ class MarketAlertsService:
             if keyword in text:
                 score -= 1
         return score
+
+    def _strategy_signal_prediction(self, signal: dict[str, Any]) -> str:
+        code = str(signal.get("signal_code") or "").strip().lower()
+        symbol = signal.get("symbol") or "Mã này"
+        if code == "smart_money_before_news":
+            return f"{symbol} đang có dấu hiệu dòng tiền đi trước tin, nên ưu tiên theo dõi phản ứng giá kế tiếp."
+        if code == "pre_news_accumulation":
+            return f"{symbol} có xu hướng tích lũy trước tin, phù hợp đặt vào danh sách theo dõi sớm."
+        if code == "obv_distribution":
+            return f"{symbol} đang cho thấy khả năng phân phối, cần tránh đuổi theo các nhịp tăng thiếu xác nhận."
+        if code == "weak_news_chase":
+            return f"{symbol} dễ rơi vào trạng thái hưng phấn theo tin nhưng thiếu nền dòng tiền đủ mạnh."
+        if code == "obv_breakout_confirmation":
+            return f"{symbol} có xác nhận OBV đi cùng breakout, có thể ưu tiên kiểm tra thêm volume và vùng giá."
+        if code in {"long_lower_wick", "long_upper_wick", "doji", "marubozu"}:
+            return f"{symbol} vừa xuất hiện mẫu nến đáng chú ý, nên đối chiếu thêm volume và phản ứng giá phiên kế tiếp."
+        if code in {"spring_shakeout", "absorption", "pullback_retest", "breakout_confirmation"}:
+            return f"{symbol} đang cho thấy dấu chân dòng tiền tổ chức, phù hợp đưa vào danh sách theo dõi chủ động."
+        return f"{symbol} vừa phát sinh tín hiệu chiến lược mới từ engine dòng tiền và OBV."
 
     def _severity_from_sentiment(self, sentiment: int, watchlist_hit: bool) -> str:
         if watchlist_hit and sentiment < 0:

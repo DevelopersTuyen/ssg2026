@@ -1,0 +1,205 @@
+<ion-content [fullscreen]="true" class="guide-content">
+  <div class="guide-shell">
+    <section class="guide-hero">
+      <div class="guide-copy">
+        <div class="page-kicker">{{ 'guide.heroKicker' | translate }}</div>
+        <h1>{{ 'guide.heroTitle' | translate }}</h1>
+        <p>{{ 'guide.heroSubtitle' | translate }}</p>
+      </div>
+
+      <div class="hero-actions">
+        <button type="button" class="hero-btn hero-btn-primary" (click)="openRoute('/tabs/market-settings')">
+          {{ 'guide.openSettings' | translate }}
+        </button>
+        <button type="button" class="hero-btn" (click)="openRoute('/tabs/dashboard')">
+          {{ 'guide.openDashboard' | translate }}
+        </button>
+      </div>
+    </section>
+
+    <section class="guide-layout">
+      <aside class="guide-nav">
+        <div class="nav-title">{{ 'guide.navTitle' | translate }}</div>
+        <button type="button" class="nav-link" (click)="scrollToSection('getting-started')">{{ 'guide.navGettingStarted' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('system-links')">{{ 'guide.navLinks' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('formula-guide')">{{ 'guide.navFormulas' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('status-guide')">{{ 'guide.navStates' | translate }}</button>
+        <button type="button" class="nav-link" *ngFor="let section of sections" (click)="scrollToSection(section.id)">
+          {{ section.titleKey | translate }}
+        </button>
+      </aside>
+
+      <div class="guide-main">
+        <section class="guide-panel" id="getting-started">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">{{ 'guide.gettingStartedKicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.gettingStartedTitle' | translate }}</div>
+            </div>
+          </div>
+
+          <ol class="guide-checklist">
+            <li *ngFor="let item of setupChecklist">{{ item | translate }}</li>
+          </ol>
+        </section>
+
+        <section class="guide-panel" id="system-links">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">{{ 'guide.linksKicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.linksTitle' | translate }}</div>
+            </div>
+          </div>
+
+          <div class="link-grid">
+            <article class="link-card" *ngFor="let item of setupLinks">
+              <div class="link-title">{{ item.titleKey | translate }}</div>
+              <div class="link-flow">{{ item.flowKey | translate }}</div>
+              <p>{{ item.descriptionKey | translate }}</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="guide-panel formula-guide-panel" id="formula-guide">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">{{ 'guide.formulas.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.formulas.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.formulas.summary' | translate }}</div>
+            </div>
+            <button type="button" class="panel-action" (click)="openRoute('/tabs/market-settings')">
+              {{ 'guide.formulas.openSettings' | translate }}
+            </button>
+          </div>
+
+          <div class="formula-hero-note">
+            <strong>{{ 'guide.formulas.noteTitle' | translate }}</strong>
+            <p>{{ 'guide.formulas.noteBody' | translate }}</p>
+          </div>
+
+          <div class="formula-workflow">
+            <div class="workflow-step">
+              <span>1</span>
+              <div>
+                <strong>{{ 'guide.formulas.flow1Title' | translate }}</strong>
+                <p>{{ 'guide.formulas.flow1Desc' | translate }}</p>
+              </div>
+            </div>
+            <div class="workflow-step">
+              <span>2</span>
+              <div>
+                <strong>{{ 'guide.formulas.flow2Title' | translate }}</strong>
+                <p>{{ 'guide.formulas.flow2Desc' | translate }}</p>
+              </div>
+            </div>
+            <div class="workflow-step">
+              <span>3</span>
+              <div>
+                <strong>{{ 'guide.formulas.flow3Title' | translate }}</strong>
+                <p>{{ 'guide.formulas.flow3Desc' | translate }}</p>
+              </div>
+            </div>
+            <div class="workflow-step">
+              <span>4</span>
+              <div>
+                <strong>{{ 'guide.formulas.flow4Title' | translate }}</strong>
+                <p>{{ 'guide.formulas.flow4Desc' | translate }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="formula-grid">
+            <article class="formula-card" *ngFor="let block of formulaGuideBlocks">
+              <div class="formula-card-title">{{ block.titleKey | translate }}</div>
+              <p>{{ block.summaryKey | translate }}</p>
+              <ul class="guide-list compact">
+                <li *ngFor="let step of block.stepKeys">{{ step | translate }}</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="section-body formula-results-grid">
+            <div class="section-column">
+              <div class="subheading">{{ 'guide.formulas.afterApplyTitle' | translate }}</div>
+              <ul class="guide-list">
+                <li>{{ 'guide.formulas.afterApply1' | translate }}</li>
+                <li>{{ 'guide.formulas.afterApply2' | translate }}</li>
+                <li>{{ 'guide.formulas.afterApply3' | translate }}</li>
+                <li>{{ 'guide.formulas.afterApply4' | translate }}</li>
+              </ul>
+            </div>
+
+            <div class="section-column">
+              <div class="subheading">{{ 'guide.formulas.beginnerTipsTitle' | translate }}</div>
+              <ul class="guide-list">
+                <li>{{ 'guide.formulas.beginnerTip1' | translate }}</li>
+                <li>{{ 'guide.formulas.beginnerTip2' | translate }}</li>
+                <li>{{ 'guide.formulas.beginnerTip3' | translate }}</li>
+                <li>{{ 'guide.formulas.beginnerTip4' | translate }}</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="guide-panel formula-guide-panel" id="status-guide">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">{{ 'guide.states.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.states.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.states.summary' | translate }}</div>
+            </div>
+          </div>
+
+          <div class="formula-hero-note">
+            <strong>{{ 'guide.states.noteTitle' | translate }}</strong>
+            <p>{{ 'guide.states.noteBody' | translate }}</p>
+          </div>
+
+          <div class="formula-grid">
+            <article class="formula-card" *ngFor="let group of statusGuideGroups">
+              <div class="formula-card-title">{{ group.titleKey | translate }}</div>
+              <p>{{ group.summaryKey | translate }}</p>
+              <ul class="guide-list compact">
+                <li *ngFor="let item of group.itemKeys">{{ item | translate }}</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="guide-panel guide-section" *ngFor="let section of sections" [attr.id]="section.id">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">{{ section.kickerKey | translate }}</div>
+              <div class="panel-title">{{ section.titleKey | translate }}</div>
+              <div class="panel-subtitle">{{ section.summaryKey | translate }}</div>
+            </div>
+            <button
+              *ngIf="section.targetRoute"
+              type="button"
+              class="panel-action"
+              (click)="openRoute(section.targetRoute)"
+            >
+              {{ section.buttonLabelKey ? (section.buttonLabelKey | translate) : '' }}
+            </button>
+          </div>
+
+          <div class="section-body">
+            <div class="section-column">
+              <div class="subheading">{{ 'guide.usageTitle' | translate }}</div>
+              <ul class="guide-list">
+                <li *ngFor="let step of section.stepKeys">{{ step | translate }}</li>
+              </ul>
+            </div>
+
+            <div class="section-column" *ngIf="section.relatedSettings?.length">
+              <div class="subheading">{{ 'guide.settingsTitle' | translate }}</div>
+              <div class="tag-grid">
+                <span class="guide-tag" *ngFor="let item of section.relatedSettings">{{ item }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+</ion-content>

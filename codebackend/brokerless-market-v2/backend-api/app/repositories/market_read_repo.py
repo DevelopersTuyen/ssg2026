@@ -703,26 +703,10 @@ class MarketReadRepository:
         symbol: str,
         trading_date: date | None = None,
     ) -> list[dict[str, Any]]:
-        quote_rows = await self._get_symbol_quote_rows(symbol, latest_only=False)
-        quote_series = self._build_symbol_quote_series(quote_rows)
-        if quote_series and (len(quote_series) >= 3 or trading_date is None):
-            return quote_series
-
         rows = await self.get_intraday_points(symbol=symbol, limit=20000, trading_date=trading_date)
-        latest_intraday_time = rows[-1].point_time if rows else None
-        latest_quote_time = self._quote_timestamp(quote_rows[0]) if quote_rows else None
-        prefer_quote = (
-            bool(quote_rows)
-            and (
-                not rows
-                or latest_intraday_time is None
-                or (latest_quote_time is not None and latest_quote_time.date() > latest_intraday_time.date())
-            )
-        )
-
         buckets: dict[datetime, dict[str, Any]] = {}
 
-        if rows and not prefer_quote:
+        if rows:
             for row in rows:
                 bucket = row.point_time.replace(minute=0, second=0, microsecond=0)
                 item = buckets.get(bucket)
@@ -753,9 +737,13 @@ class MarketReadRepository:
 
             return [buckets[k] for k in sorted(buckets.keys())]
 
+        quote_rows = await self._get_symbol_quote_rows(symbol, latest_only=trading_date is None)
+        if trading_date is not None:
+            quote_rows = [row for row in quote_rows if self._quote_timestamp(row).date() == trading_date]
+
         if not quote_rows:
             return []
-        return quote_series
+        return self._build_symbol_quote_series(quote_rows)
 
     async def get_exchange_intraday_hourly(
         self,
@@ -1298,17 +1286,27 @@ class MarketReadRepository:
         )
         return result.scalars().all()
 
+    async def get_latest_sync_log(self, job_name: str) -> MarketSyncLog | None:
+        result = await self.session.execute(
+            select(MarketSyncLog)
+            .where(MarketSyncLog.job_name == job_name)
+            .order_by(desc(MarketSyncLog.started_at))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def get_symbol_financial_bundle(
         self,
         symbol: str,
         *,
-        limit_per_section: int = 24,
+        limit_per_section: int = 12,
     ) -> dict[str, Any]:
         normalized_symbol = symbol.upper()
         symbol_row = await self.session.get(MarketSymbol, normalized_symbol)
         exchange = getattr(symbol_row, "exchange", None)
         sections: list[dict[str, Any]] = []
         latest_updated_at: datetime | None = None
+        latest_financial_sync = await self.get_latest_sync_log("collect_financial_statements")
 
         for statement_type, table in FINANCIAL_TABLES.items():
             result = await self.session.execute(
@@ -1360,7 +1358,7 @@ class MarketReadRepository:
                             "valueNumber": row.value_number,
                             "valueText": row.value_text,
                             "updatedAt": row.updated_at.isoformat() if row.updated_at else None,
-                            "rawJson": row.raw_json,
+                            "rawJson": None,
                         }
                         for row in rows
                     ],
@@ -1375,6 +1373,29 @@ class MarketReadRepository:
             "updatedAt": latest_updated_at.isoformat() if latest_updated_at else None,
             "highlights": highlights,
             "sections": sections,
+            "syncStatus": self._build_financial_sync_status(latest_financial_sync, has_data=bool(latest_updated_at)),
+        }
+
+    @staticmethod
+    def _build_financial_sync_status(log: MarketSyncLog | None, *, has_data: bool) -> dict[str, Any]:
+        if not log:
+            return {
+                "status": "idle",
+                "hasData": has_data,
+                "message": "Chưa có log đồng bộ báo cáo tài chính.",
+                "finishedAt": None,
+                "source": None,
+                "errors": [],
+            }
+
+        extra = log.extra_json if isinstance(log.extra_json, dict) else {}
+        return {
+            "status": log.status,
+            "hasData": has_data,
+            "message": log.message,
+            "finishedAt": log.finished_at.isoformat() if log.finished_at else None,
+            "source": extra.get("source"),
+            "errors": extra.get("errors", [])[:5] if isinstance(extra.get("errors"), list) else [],
         }
 
     @staticmethod

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import ast
+import time
 from collections import defaultdict
 from copy import deepcopy
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -19,9 +20,14 @@ from app.models.market import (
     StrategyFormulaParameter,
     StrategyProfile,
     StrategyScreenRule,
+    StrategySignalSnapshot,
     StrategyStockScoreSnapshot,
     StrategyTradeJournalEntry,
     StrategyVersion,
+    MarketFinancialBalanceSheet,
+    MarketFinancialIncomeStatement,
+    MarketFinancialRatio,
+    MarketQuoteSnapshot,
 )
 from app.repositories.market_read_repo import MarketReadRepository
 from app.services.auth_service import require_permission
@@ -62,12 +68,12 @@ DEFAULT_STRATEGY_PROFILE: dict[str, Any] = {
             "formula_code": "m_score",
             "label": "M Score",
             "description": "Dong luc va do dong thuan cua breakout.",
-            "expression": "(w_momentum * momentum_score) + (w_confirmation * volume_confirmation_score) + (w_news * news_score) + (w_market * market_trend_score)",
+            "expression": "(w_momentum * momentum_score) + (w_confirmation * volume_confirmation_score) + (w_money_flow * money_flow_score) + (w_market * market_trend_score)",
             "display_order": 3,
             "parameters": [
-                {"param_key": "w_momentum", "label": "Trong so dong luc gia", "value_number": 0.35, "min": 0, "max": 1, "step": 0.05},
-                {"param_key": "w_confirmation", "label": "Trong so xac nhan volume", "value_number": 0.30, "min": 0, "max": 1, "step": 0.05},
-                {"param_key": "w_news", "label": "Trong so xung luc tin", "value_number": 0.15, "min": 0, "max": 1, "step": 0.05},
+                {"param_key": "w_momentum", "label": "Trong so dong luc gia", "value_number": 0.30, "min": 0, "max": 1, "step": 0.05},
+                {"param_key": "w_confirmation", "label": "Trong so xac nhan volume", "value_number": 0.25, "min": 0, "max": 1, "step": 0.05},
+                {"param_key": "w_money_flow", "label": "Trong so dong tien truoc tin", "value_number": 0.25, "min": 0, "max": 1, "step": 0.05},
                 {"param_key": "w_market", "label": "Trong so thi truong", "value_number": 0.20, "min": 0, "max": 1, "step": 0.05},
             ],
         },
@@ -101,40 +107,80 @@ DEFAULT_STRATEGY_PROFILE: dict[str, Any] = {
     "screen_rules": [
         {"layer_code": "qualitative", "rule_code": "leader", "label": "Doanh nghiep dan dau dong tien", "expression": "leadership_score >= min_leadership_score", "severity": "info", "is_required": True, "display_order": 1},
         {"layer_code": "qualitative", "rule_code": "trend", "label": "Nam trong xu huong thuan thi truong", "expression": "market_trend_score >= min_market_trend_score", "severity": "info", "is_required": True, "display_order": 2},
-        {"layer_code": "quantitative", "rule_code": "liquidity", "label": "Thanh khoan du suc chiu lenh", "expression": "liquidity_score >= min_liquidity_score", "severity": "warning", "is_required": True, "display_order": 3},
-        {"layer_code": "quantitative", "rule_code": "score", "label": "Winning Score vuot nguong", "expression": "winning_score >= min_winning_score", "severity": "warning", "is_required": True, "display_order": 4},
-        {"layer_code": "technical", "rule_code": "price_action", "label": "Gia van nam tren diem mo cua nhip hien tai", "expression": "price_vs_open_ratio >= min_price_vs_open_ratio", "severity": "critical", "is_required": True, "display_order": 5},
-        {"layer_code": "technical", "rule_code": "breakout_volume", "label": "Volume xac nhan breakout", "expression": "volume_confirmation_score >= min_breakout_volume_score", "severity": "critical", "is_required": True, "display_order": 6},
+        {"layer_code": "qualitative", "rule_code": "quality_flags", "label": "Co du quality flags co ban", "expression": "quality_flag_count >= min_quality_flag_count", "severity": "info", "is_required": True, "display_order": 3},
+        {"layer_code": "quantitative", "rule_code": "liquidity", "label": "Thanh khoan du suc chiu lenh", "expression": "liquidity_score >= min_liquidity_score", "severity": "warning", "is_required": True, "display_order": 4},
+        {"layer_code": "quantitative", "rule_code": "eps_growth", "label": "EPS growth quy/nam dat nguong", "expression": "eps_growth_year >= min_eps_growth_year and eps_growth_quarter >= min_eps_growth_quarter", "severity": "warning", "is_required": True, "display_order": 5},
+        {"layer_code": "quantitative", "rule_code": "valuation", "label": "P/E nam sat trung binh nhom", "expression": "pe_gap_to_peer <= max_pe_gap_to_peer", "severity": "warning", "is_required": True, "display_order": 6},
+        {"layer_code": "quantitative", "rule_code": "score", "label": "Winning Score vuot nguong", "expression": "winning_score >= min_winning_score", "severity": "warning", "is_required": True, "display_order": 7},
+        {"layer_code": "technical", "rule_code": "ema_gap", "label": "Khoang cach EMA10/20 khong qua xa", "expression": "ema_gap_pct <= max_ema_gap_pct", "severity": "critical", "is_required": True, "display_order": 8},
+        {"layer_code": "technical", "rule_code": "price_action", "label": "Gia van nam tren diem mo cua nhip hien tai", "expression": "price_vs_open_ratio >= min_price_vs_open_ratio", "severity": "critical", "is_required": True, "display_order": 9},
+        {"layer_code": "technical", "rule_code": "breakout_volume", "label": "Volume xac nhan breakout", "expression": "volume_spike_ratio >= min_volume_spike_ratio and breakout_confirmation", "severity": "critical", "is_required": True, "display_order": 10},
+        {"layer_code": "technical", "rule_code": "money_flow_context", "label": "Dong tien truoc tin va boi canh gia dat nguong", "expression": "money_flow_score >= min_money_flow_score and obv_above_ma and price_context_score >= min_price_context_score", "severity": "critical", "is_required": True, "display_order": 11},
     ],
     "screen_rule_parameters": [
         {"rule_code": "leader", "param_key": "min_leadership_score", "label": "Leadership toi thieu", "value_number": 55},
         {"rule_code": "trend", "param_key": "min_market_trend_score", "label": "Xu huong san toi thieu", "value_number": 45},
+        {"rule_code": "quality_flags", "param_key": "min_quality_flag_count", "label": "So quality flags toi thieu", "value_number": 3},
         {"rule_code": "liquidity", "param_key": "min_liquidity_score", "label": "Thanh khoan toi thieu", "value_number": 50},
+        {"rule_code": "eps_growth", "param_key": "min_eps_growth_year", "label": "EPS growth nam toi thieu (%)", "value_number": 25},
+        {"rule_code": "eps_growth", "param_key": "min_eps_growth_quarter", "label": "EPS growth quy toi thieu (%)", "value_number": 25},
+        {"rule_code": "valuation", "param_key": "max_pe_gap_to_peer", "label": "Do lech P/E toi da so voi nhom", "value_number": 0.35},
         {"rule_code": "score", "param_key": "min_winning_score", "label": "Winning Score toi thieu", "value_number": 140},
+        {"rule_code": "ema_gap", "param_key": "max_ema_gap_pct", "label": "Khoang cach EMA toi da (%)", "value_number": 5},
         {"rule_code": "price_action", "param_key": "min_price_vs_open_ratio", "label": "Ti le gia/open toi thieu", "value_number": 1.005},
-        {"rule_code": "breakout_volume", "param_key": "min_breakout_volume_score", "label": "Volume confirmation toi thieu", "value_number": 55},
+        {"rule_code": "breakout_volume", "param_key": "min_volume_spike_ratio", "label": "Volume spike toi thieu (x)", "value_number": 1.5},
+        {"rule_code": "money_flow_context", "param_key": "min_money_flow_score", "label": "Money flow score toi thieu", "value_number": 60},
+        {"rule_code": "money_flow_context", "param_key": "min_price_context_score", "label": "Price context score toi thieu", "value_number": 55},
     ],
     "alert_rules": [
         {"rule_code": "volume_spike_no_price", "label": "Volume tang ma gia khong tang", "expression": "volume_score >= volume_spike_threshold and momentum_score <= weak_price_threshold", "message_template": "{symbol}: volume bat thuong nhung gia khong xac nhan.", "severity": "warning", "cooldown_minutes": 20, "notify_in_app": True, "notify_telegram": False, "display_order": 1},
         {"rule_code": "too_hot_vs_open", "label": "Gia qua nong", "expression": "hotness_score >= overheat_threshold", "message_template": "{symbol}: gia dang qua nong, can tranh mua cam xuc.", "severity": "critical", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": True, "display_order": 2},
         {"rule_code": "margin_safety_low", "label": "Bien an toan thap", "expression": "margin_of_safety < min_margin_of_safety", "message_template": "{symbol}: bien an toan hien duoi nguong cau hinh.", "severity": "warning", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": False, "display_order": 3},
+        {"rule_code": "smart_money_inflow", "label": "Smart Money Inflow", "expression": "smart_money_inflow", "message_template": "{symbol}: volume > 2x MA10 va gia dang vuot khang cu.", "severity": "info", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": False, "display_order": 4},
+        {"rule_code": "surge_trap", "label": "Surge Trap", "expression": "surge_trap", "message_template": "{symbol}: volume qua lon nhung rau tren dai, can tranh mua duoi.", "severity": "critical", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": True, "display_order": 5},
+        {"rule_code": "no_supply", "label": "No Supply", "expression": "no_supply", "message_template": "{symbol}: pullback ve EMA voi volume kho, co the la nhan day cung.", "severity": "info", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": False, "display_order": 6},
+        {"rule_code": "volume_divergence", "label": "Volume Divergence", "expression": "volume_divergence", "message_template": "{symbol}: gia lap dinh nhung volume kem hon dinh truoc.", "severity": "warning", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": False, "display_order": 7},
+        {"rule_code": "pre_news_accumulation", "label": "Tich luy dong tien truoc tin", "expression": "pre_news_accumulation and obv_trend_score >= min_obv_trend_score and news_pressure_score <= max_news_pressure_score", "message_template": "{symbol}: OBV dang di len truoc khi tin tuc bung no, gia van giu nen chat.", "severity": "info", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": False, "display_order": 8},
+        {"rule_code": "obv_breakout_confirmation", "label": "OBV xac nhan breakout", "expression": "obv_breakout_confirmation and price_context_score >= min_price_context_score", "message_template": "{symbol}: OBV dong thuan voi volume va boi canh gia dang sat vung break.", "severity": "info", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": False, "display_order": 9},
+        {"rule_code": "smart_money_before_news", "label": "Smart Money truoc tin", "expression": "smart_money_before_news and money_flow_score >= min_money_flow_score", "message_template": "{symbol}: dong tien lon dang vao truoc khi news pressure tang len.", "severity": "warning", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": True, "display_order": 10},
+        {"rule_code": "obv_distribution", "label": "Phan phoi truoc tin", "expression": "obv_distribution and news_pressure_score <= max_distribution_news_pressure", "message_template": "{symbol}: gia giu duoc nhung OBV dang suy, canh bao phan phoi truoc tin.", "severity": "critical", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": True, "display_order": 11},
+        {"rule_code": "weak_news_chase", "label": "Tin nhieu nhung dong tien khong dong thuan", "expression": "weak_news_chase", "message_template": "{symbol}: news pressure cao nhung dong tien va boi canh gia khong dong thuan.", "severity": "warning", "cooldown_minutes": 30, "notify_in_app": True, "notify_telegram": False, "display_order": 12},
     ],
     "alert_rule_parameters": [
         {"rule_code": "volume_spike_no_price", "param_key": "volume_spike_threshold", "label": "Nguong volume spike", "value_number": 70},
         {"rule_code": "volume_spike_no_price", "param_key": "weak_price_threshold", "label": "Nguong gia yeu", "value_number": 52},
         {"rule_code": "too_hot_vs_open", "param_key": "overheat_threshold", "label": "Nguong qua nong", "value_number": 60},
         {"rule_code": "margin_safety_low", "param_key": "min_margin_of_safety", "label": "Bien an toan toi thieu", "value_number": 0.20},
+        {"rule_code": "pre_news_accumulation", "param_key": "min_obv_trend_score", "label": "OBV trend toi thieu", "value_number": 55},
+        {"rule_code": "pre_news_accumulation", "param_key": "max_news_pressure_score", "label": "News pressure toi da", "value_number": 35},
+        {"rule_code": "obv_breakout_confirmation", "param_key": "min_price_context_score", "label": "Price context toi thieu", "value_number": 55},
+        {"rule_code": "smart_money_before_news", "param_key": "min_money_flow_score", "label": "Money flow score toi thieu", "value_number": 60},
+        {"rule_code": "obv_distribution", "param_key": "max_distribution_news_pressure", "label": "News pressure toi da khi canh bao phan phoi", "value_number": 35},
     ],
     "checklists": [
         {"checklist_type": "pre_buy", "item_code": "business_quality", "label": "Doanh nghiep va dong tien dat chat luong toi thieu", "expression": "Q >= min_q_check", "is_required": True, "display_order": 1},
         {"checklist_type": "pre_buy", "item_code": "winning_score", "label": "Winning Score dat nguong vao lenh", "expression": "winning_score >= min_winning_check", "is_required": True, "display_order": 2},
         {"checklist_type": "pre_buy", "item_code": "margin", "label": "Bien an toan dat nguong", "expression": "margin_of_safety >= min_margin_check", "is_required": True, "display_order": 3},
-        {"checklist_type": "end_of_day", "item_code": "journal", "label": "Da cap nhat trade journal", "expression": "journal_entries_today >= min_journal_entries", "is_required": False, "display_order": 1},
+        {"checklist_type": "pre_buy", "item_code": "eps_growth", "label": "EPS quy va nam deu tang tren 25%", "expression": "eps_growth_year >= min_eps_check and eps_growth_quarter >= min_eps_check", "is_required": True, "display_order": 4},
+        {"checklist_type": "pre_buy", "item_code": "story", "label": "Co cau chuyen doanh nghiep/tin moi ho tro", "expression": "news_score >= min_story_score", "is_required": False, "display_order": 5},
+        {"checklist_type": "pre_buy", "item_code": "ema_trend", "label": "Gia nam tren EMA10 va EMA20, do lech nho", "expression": "close_above_ema10 and close_above_ema20 and ema_gap_pct <= max_ema_gap_check", "is_required": True, "display_order": 6},
+        {"checklist_type": "pre_buy", "item_code": "volume_burst", "label": "Khoi luong bung no tren 50% trung binh 20 phien", "expression": "volume_spike_ratio >= min_volume_burst_ratio", "is_required": True, "display_order": 7},
+        {"checklist_type": "pre_buy", "item_code": "base_pattern", "label": "Mo hinh nen chat hoac breakout dang xac nhan", "expression": "breakout_confirmation or absorption or spring_shakeout", "is_required": False, "display_order": 8},
+        {"checklist_type": "pre_buy", "item_code": "stop_loss", "label": "Stop-loss nam trong vung -5% den -8%", "expression": "stop_loss_pct >= min_stop_loss_pct and stop_loss_pct <= max_stop_loss_pct", "is_required": True, "display_order": 9},
+        {"checklist_type": "pre_buy", "item_code": "flow_before_news", "label": "Dong tien truoc tin duoc xac nhan boi OBV va boi canh gia", "expression": "money_flow_score >= min_money_flow_check and (pre_news_accumulation or smart_money_before_news)", "is_required": False, "display_order": 10},
+        {"checklist_type": "end_of_day", "item_code": "journal", "label": "Da cap nhat trade journal", "expression": "journal_entries_today >= min_journal_entries", "is_required": False, "display_order": 10},
     ],
     "checklist_parameters": [
         {"item_code": "business_quality", "param_key": "min_q_check", "label": "Q toi thieu", "value_number": 55},
         {"item_code": "winning_score", "param_key": "min_winning_check", "label": "Winning Score toi thieu", "value_number": 140},
         {"item_code": "margin", "param_key": "min_margin_check", "label": "Margin toi thieu", "value_number": 0.20},
+        {"item_code": "eps_growth", "param_key": "min_eps_check", "label": "EPS growth toi thieu (%)", "value_number": 25},
+        {"item_code": "story", "param_key": "min_story_score", "label": "News/story score toi thieu", "value_number": 20},
+        {"item_code": "ema_trend", "param_key": "max_ema_gap_check", "label": "EMA gap toi da (%)", "value_number": 5},
+        {"item_code": "volume_burst", "param_key": "min_volume_burst_ratio", "label": "Volume burst toi thieu (x)", "value_number": 1.5},
+        {"item_code": "stop_loss", "param_key": "min_stop_loss_pct", "label": "Stop-loss toi thieu (%)", "value_number": 5},
+        {"item_code": "stop_loss", "param_key": "max_stop_loss_pct", "label": "Stop-loss toi da (%)", "value_number": 8},
+        {"item_code": "flow_before_news", "param_key": "min_money_flow_check", "label": "Money flow score toi thieu", "value_number": 60},
         {"item_code": "journal", "param_key": "min_journal_entries", "label": "Nhat ky toi thieu", "value_number": 1},
     ],
 }
@@ -248,10 +294,27 @@ def _float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _coerce_date_value(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)).date()
+    except ValueError:
+        return None
+
+
 class StrategyService:
+    _shared_scored_universe_cache: dict[tuple[Any, ...], tuple[float, list[dict[str, Any]]]] = {}
+    _shared_cache_ttl_seconds = 30.0
+
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.repo = MarketReadRepository(session)
+        self._scored_universe_cache: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
 
     async def list_profiles(self, actor: AppUser) -> list[dict[str, Any]]:
         require_permission(actor, "strategy-hub.view")
@@ -265,25 +328,24 @@ class StrategyService:
     async def get_overview(self, actor: AppUser, profile_id: int | None = None) -> dict[str, Any]:
         require_permission(actor, "strategy-hub.view")
         profile = await self._get_profile(actor.company_code, profile_id)
-        rankings = await self.get_rankings(actor, profile.id, page=1, page_size=12)
-        screener = await self.run_screener(actor, profile.id, page=1, page_size=12)
-        journal = await self.list_journal(actor, limit=5)
+        profiles = await self.list_profiles(actor)
+        rankings = await self.get_rankings(actor, profile.id, page=1, page_size=8)
         risk = await self.get_risk_overview(actor, profile.id)
-        config = await self.get_profile_config(actor, profile.id)
+        config_summary = await self._get_profile_config_summary(profile.id)
+        rankings["items"] = [self._to_overview_score_item(item) for item in rankings.get("items", [])]
+        risk = {
+            "profile": risk.get("profile"),
+            "summaryCards": risk.get("summaryCards") or [],
+            "highRiskItems": [],
+        }
         return {
-            "profiles": await self.list_profiles(actor),
+            "profiles": profiles,
             "activeProfile": self._serialize_profile(profile),
-            "configSummary": {
-                "formulaCount": len(config["formulas"]),
-                "screenRuleCount": len(config["screenRules"]),
-                "alertRuleCount": len(config["alertRules"]),
-                "checklistCount": len(config["checklists"]),
-                "versionCount": len(config["versions"]),
-            },
+            "configSummary": config_summary,
             "rankings": rankings,
-            "screener": screener,
+            "screener": None,
             "risk": risk,
-            "journal": journal,
+            "journal": [],
         }
 
     async def get_profile_config(self, actor: AppUser, profile_id: int) -> dict[str, Any]:
@@ -301,6 +363,45 @@ class StrategyService:
             "alertRules": alert_rules,
             "checklists": checklists,
             "versions": versions,
+        }
+
+    async def _get_profile_config_summary(self, profile_id: int) -> dict[str, int]:
+        formula_count = await self.session.scalar(
+            select(func.count()).select_from(StrategyFormulaDefinition).where(StrategyFormulaDefinition.profile_id == profile_id)
+        )
+        screen_rule_count = await self.session.scalar(
+            select(func.count()).select_from(StrategyScreenRule).where(StrategyScreenRule.profile_id == profile_id)
+        )
+        alert_rule_count = await self.session.scalar(
+            select(func.count()).select_from(StrategyAlertRule).where(StrategyAlertRule.profile_id == profile_id)
+        )
+        checklist_count = await self.session.scalar(
+            select(func.count()).select_from(StrategyChecklistItem).where(StrategyChecklistItem.profile_id == profile_id)
+        )
+        version_count = await self.session.scalar(
+            select(func.count()).select_from(StrategyVersion).where(StrategyVersion.profile_id == profile_id)
+        )
+        return {
+            "formulaCount": int(formula_count or 0),
+            "screenRuleCount": int(screen_rule_count or 0),
+            "alertRuleCount": int(alert_rule_count or 0),
+            "checklistCount": int(checklist_count or 0),
+            "versionCount": int(version_count or 0),
+        }
+
+    @staticmethod
+    def _to_overview_score_item(item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "symbol": item.get("symbol"),
+            "name": item.get("name"),
+            "exchange": item.get("exchange"),
+            "price": item.get("price"),
+            "changePercent": item.get("changePercent"),
+            "winningScore": item.get("winningScore"),
+            "riskScore": item.get("riskScore"),
+            "passedLayer1": item.get("passedLayer1"),
+            "passedLayer2": item.get("passedLayer2"),
+            "passedLayer3": item.get("passedLayer3"),
         }
 
     async def save_profile_config(self, actor: AppUser, profile_id: int, payload: dict[str, Any]) -> dict[str, Any]:
@@ -324,6 +425,7 @@ class StrategyService:
 
         after = await self.get_profile_config(actor, profile.id)
         await self._add_audit_log(profile.id, "profile", str(profile.id), "update", before, after, actor.username)
+        self._invalidate_shared_scored_universe_cache(actor.company_code, profile.id)
         return after
 
     async def activate_profile(self, actor: AppUser, profile_id: int) -> dict[str, Any]:
@@ -406,7 +508,14 @@ class StrategyService:
         require_permission(actor, "scoring.view")
         profile = await self._get_profile(actor.company_code, profile_id)
         bundle = await self._build_profile_bundle(profile.id)
-        universe = await self._score_universe(actor, bundle, exchange=exchange, keyword=keyword, watchlist_only=watchlist_only)
+        universe = await self._get_scored_universe_cached(
+            actor,
+            profile.id,
+            bundle,
+            exchange=exchange,
+            keyword=keyword,
+            watchlist_only=watchlist_only,
+        )
         return self._paginate(universe, page, page_size)
 
     async def run_screener(
@@ -422,7 +531,14 @@ class StrategyService:
         require_permission(actor, "screener.view")
         profile = await self._get_profile(actor.company_code, profile_id)
         bundle = await self._build_profile_bundle(profile.id)
-        universe = await self._score_universe(actor, bundle, exchange=exchange, keyword=keyword, watchlist_only=watchlist_only)
+        universe = await self._get_scored_universe_cached(
+            actor,
+            profile.id,
+            bundle,
+            exchange=exchange,
+            keyword=keyword,
+            watchlist_only=watchlist_only,
+        )
         passed_items = [item for item in universe if item["passedAllLayers"]]
         response = self._paginate(passed_items, page, page_size)
         response["summary"] = {
@@ -436,7 +552,7 @@ class StrategyService:
         require_permission(actor, "scoring.view")
         profile = await self._get_profile(actor.company_code, profile_id)
         bundle = await self._build_profile_bundle(profile.id)
-        universe = await self._score_universe(actor, bundle, keyword=symbol.upper())
+        universe = await self._get_scored_universe_cached(actor, profile.id, bundle, keyword=symbol.upper())
         item = next((row for row in universe if row["symbol"] == symbol.upper()), None)
         if item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Symbol not found in scored universe")
@@ -446,7 +562,7 @@ class StrategyService:
         require_permission(actor, "risk.view")
         profile = await self._get_profile(actor.company_code, profile_id)
         bundle = await self._build_profile_bundle(profile.id)
-        universe = await self._score_universe(actor, bundle, watchlist_only=False)
+        universe = await self._get_scored_universe_cached(actor, profile.id, bundle, watchlist_only=False)
         top_risk = sorted(universe, key=lambda x: (-x["riskScore"], x["symbol"]))[:8]
         watchlist_items = [item for item in universe if item["isWatchlist"]]
         avg_watchlist_score = round(sum(item["winningScore"] for item in watchlist_items) / len(watchlist_items), 2) if watchlist_items else 0
@@ -478,12 +594,21 @@ class StrategyService:
             company_code=actor.company_code,
             profile_id=int(payload.get("profile_id") or 0) or None,
             symbol=str(payload.get("symbol") or "").upper(),
+            trade_date=_coerce_date_value(payload.get("trade_date")) or now.date(),
+            classification=str(payload.get("classification") or "").strip() or None,
             trade_side=str(payload.get("trade_side") or "buy").lower(),
             entry_price=_float(payload.get("entry_price"), None),
             exit_price=_float(payload.get("exit_price"), None),
             stop_loss_price=_float(payload.get("stop_loss_price"), None),
+            take_profit_price=_float(payload.get("take_profit_price"), None),
+            quantity=_float(payload.get("quantity"), None),
             position_size=_float(payload.get("position_size"), None),
+            total_capital=_float(payload.get("total_capital"), None),
+            strategy_name=str(payload.get("strategy_name") or "").strip() or None,
+            psychology=str(payload.get("psychology") or "").strip() or None,
             checklist_result_json=payload.get("checklist_result_json") or {},
+            signal_snapshot_json=payload.get("signal_snapshot_json") or {},
+            result_snapshot_json=payload.get("result_snapshot_json") or {},
             notes=str(payload.get("notes") or ""),
             mistake_tags_json=payload.get("mistake_tags_json") or [],
             created_at=now,
@@ -492,6 +617,41 @@ class StrategyService:
         self.session.add(item)
         await self.session.flush()
         return self._serialize_journal(item)
+
+    async def update_journal_entry(self, actor: AppUser, entry_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        require_permission(actor, "journal.create")
+        item = await self._get_journal_entry(actor.company_code, entry_id)
+        now = datetime.now()
+        item.profile_id = int(payload.get("profile_id") or 0) or None
+        item.symbol = str(payload.get("symbol") or item.symbol or "").upper()
+        item.trade_date = _coerce_date_value(payload.get("trade_date")) or item.trade_date or now.date()
+        item.classification = str(payload.get("classification") or "").strip() or None
+        item.trade_side = str(payload.get("trade_side") or item.trade_side or "buy").lower()
+        item.entry_price = _float(payload.get("entry_price"), None)
+        item.exit_price = _float(payload.get("exit_price"), None)
+        item.stop_loss_price = _float(payload.get("stop_loss_price"), None)
+        item.take_profit_price = _float(payload.get("take_profit_price"), None)
+        item.quantity = _float(payload.get("quantity"), None)
+        item.position_size = _float(payload.get("position_size"), None)
+        item.total_capital = _float(payload.get("total_capital"), None)
+        item.strategy_name = str(payload.get("strategy_name") or "").strip() or None
+        item.psychology = str(payload.get("psychology") or "").strip() or None
+        item.checklist_result_json = payload.get("checklist_result_json") or {}
+        item.signal_snapshot_json = payload.get("signal_snapshot_json") or {}
+        item.result_snapshot_json = payload.get("result_snapshot_json") or {}
+        item.notes = str(payload.get("notes") or "")
+        item.mistake_tags_json = payload.get("mistake_tags_json") or []
+        item.updated_at = now
+        await self.session.flush()
+        return self._serialize_journal(item)
+
+    async def delete_journal_entry(self, actor: AppUser, entry_id: int) -> dict[str, Any]:
+        require_permission(actor, "journal.create")
+        item = await self._get_journal_entry(actor.company_code, entry_id)
+        data = self._serialize_journal(item)
+        await self.session.delete(item)
+        await self.session.flush()
+        return data
 
     async def _build_profile_bundle(self, profile_id: int) -> dict[str, Any]:
         formulas = await self._list_formulas(profile_id)
@@ -504,6 +664,49 @@ class StrategyService:
             "alertRules": alert_rules,
             "checklists": checklists,
         }
+
+    async def _get_scored_universe_cached(
+        self,
+        actor: AppUser,
+        profile_id: int,
+        bundle: dict[str, Any],
+        *,
+        exchange: str | None = None,
+        keyword: str | None = None,
+        watchlist_only: bool = False,
+    ) -> list[dict[str, Any]]:
+        cache_key = (
+            actor.company_code,
+            profile_id,
+            (exchange or "ALL").upper(),
+            (keyword or "").strip().upper(),
+            bool(watchlist_only),
+        )
+        cached = self._scored_universe_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        shared_cached = self._shared_scored_universe_cache.get(cache_key)
+        if shared_cached is not None:
+            cached_at, shared_universe = shared_cached
+            if time.monotonic() - cached_at <= self._shared_cache_ttl_seconds:
+                self._scored_universe_cache[cache_key] = shared_universe
+                return shared_universe
+            self._shared_scored_universe_cache.pop(cache_key, None)
+        universe = await self._score_universe(actor, bundle, exchange=exchange, keyword=keyword, watchlist_only=watchlist_only)
+        self._scored_universe_cache[cache_key] = universe
+        self._shared_scored_universe_cache[cache_key] = (time.monotonic(), universe)
+        return universe
+
+    @classmethod
+    def _invalidate_shared_scored_universe_cache(cls, company_code: str, profile_id: int | None = None) -> None:
+        for key in list(cls._shared_scored_universe_cache.keys()):
+            key_company = key[0] if len(key) > 0 else None
+            key_profile = key[1] if len(key) > 1 else None
+            if key_company != company_code:
+                continue
+            if profile_id is not None and key_profile != profile_id:
+                continue
+            cls._shared_scored_universe_cache.pop(key, None)
 
     async def _score_universe(
         self,
@@ -519,9 +722,38 @@ class StrategyService:
         if not universe:
             return []
 
+        peer_pe: dict[str, list[float]] = defaultdict(list)
+        peer_pb: dict[str, list[float]] = defaultdict(list)
+        for item in universe:
+            exchange_code = str(item.get("exchange") or "").upper()
+            pe_current = item["metrics"].get("pe_current")
+            pb_current = item["metrics"].get("pb_current")
+            if pe_current not in (None, 0):
+                peer_pe[exchange_code].append(_float(pe_current))
+            if pb_current not in (None, 0):
+                peer_pb[exchange_code].append(_float(pb_current))
+
         scored: list[dict[str, Any]] = []
         for item in universe:
             metrics = item["metrics"]
+            exchange_code = str(item.get("exchange") or "").upper()
+            peer_pe_avg = (sum(peer_pe[exchange_code]) / len(peer_pe[exchange_code])) if peer_pe.get(exchange_code) else None
+            peer_pb_avg = (sum(peer_pb[exchange_code]) / len(peer_pb[exchange_code])) if peer_pb.get(exchange_code) else None
+            current_pe = _float(metrics.get("pe_current"), None)
+            current_pb = _float(metrics.get("pb_current"), None)
+            metrics["industry_pe_average"] = peer_pe_avg
+            metrics["industry_pb_average"] = peer_pb_avg
+            metrics["industry_average_source"] = "exchange-proxy"
+            metrics["pe_gap_to_peer"] = (
+                abs(current_pe - peer_pe_avg) / max(abs(peer_pe_avg), 0.0001)
+                if current_pe not in (None, 0) and peer_pe_avg not in (None, 0)
+                else 1
+            )
+            metrics["pb_gap_to_peer"] = (
+                abs(current_pb - peer_pb_avg) / max(abs(peer_pb_avg), 0.0001)
+                if current_pb not in (None, 0) and peer_pb_avg not in (None, 0)
+                else 1
+            )
             formulas = {formula["formulaCode"]: formula for formula in bundle["formulas"] if formula.get("isEnabled")}
 
             q_score = self._evaluate_formula(formulas.get("q_score"), metrics)
@@ -554,6 +786,11 @@ class StrategyService:
                 "ruleResults": layer_results,
                 "alerts": alert_results,
                 "checklists": checklist_results,
+                "fundamentalMetrics": item.get("fundamentalMetrics"),
+                "volumeIntelligence": item.get("volumeIntelligence"),
+                "candlestickSignals": item.get("candlestickSignals", {}).get("items", []),
+                "footprintSignals": item.get("footprintSignals", {}).get("items", []),
+                "executionPlan": item.get("executionPlan", {}).get("summary", {}),
             }
 
             scored.append({
@@ -572,6 +809,11 @@ class StrategyService:
                 "mScore": round(m_score or 0, 2),
                 "pScore": round(p_score or 0, 2),
                 "winningScore": round(winning_score or 0, 2),
+                "fundamentalMetrics": item.get("fundamentalMetrics"),
+                "volumeIntelligence": item.get("volumeIntelligence"),
+                "candlestickSignals": item.get("candlestickSignals", {}).get("items", []),
+                "footprintSignals": item.get("footprintSignals", {}).get("items", []),
+                "executionPlan": item.get("executionPlan", {}).get("summary", {}),
                 "metrics": metrics,
                 "layerResults": layer_results,
                 "alertResults": alert_results,
@@ -597,6 +839,7 @@ class StrategyService:
         for idx, item in enumerate(scored, 1):
             item["rank"] = idx
         await self._upsert_snapshots(actor.company_code, bundle, scored, trading_date)
+        await self._upsert_signal_snapshots(actor.company_code, bundle, scored, trading_date)
         return scored
 
     async def _build_universe(
@@ -606,19 +849,51 @@ class StrategyService:
         keyword: str | None = None,
         watchlist_only: bool = False,
     ) -> list[dict[str, Any]]:
+        normalized_keyword = str(keyword or "").strip().upper() or None
         exchanges = [exchange.upper()] if exchange and exchange.upper() in {"HSX", "HNX", "UPCOM"} else ["HSX", "HNX", "UPCOM"]
+        if normalized_keyword and exchange is None:
+            symbol_matches = await self.repo.search_symbols(normalized_keyword, limit=120)
+            matched_exchanges = sorted(
+                {
+                    str(item.exchange or "").upper()
+                    for item in symbol_matches
+                    if str(item.exchange or "").upper() in {"HSX", "HNX", "UPCOM"}
+                }
+            )
+            if matched_exchanges:
+                exchanges = matched_exchanges
+
+        per_exchange_limit = 120 if normalized_keyword else 8000
+        stock_sort = "all" if normalized_keyword else "actives"
         items: list[dict[str, Any]] = []
         for ex in exchanges:
-            data = await self.repo.get_market_stocks(exchange=ex, sort="actives", page=1, page_size=8000, keyword=keyword)
+            data = await self.repo.get_market_stocks(
+                exchange=ex,
+                sort=stock_sort,
+                page=1,
+                page_size=per_exchange_limit,
+                keyword=normalized_keyword,
+            )
             items.extend(data.get("items") or [])
 
         if not items:
             return []
 
+        if normalized_keyword:
+            deduped_items: dict[str, dict[str, Any]] = {}
+            for row in items:
+                symbol = str(row.get("symbol") or "").upper()
+                if symbol and symbol not in deduped_items:
+                    deduped_items[symbol] = row
+            items = list(deduped_items.values())
+
         watchlist_rows = await self.repo.get_active_watchlist_items()
         watchlist_set = {item.symbol.upper() for item in watchlist_rows}
         if watchlist_only:
             items = [item for item in items if str(item.get("symbol") or "").upper() in watchlist_set]
+
+        if not items:
+            return []
 
         news_rows = await self.repo.get_latest_news_articles(limit=50)
         news_blob = " ".join(f"{item.title} {item.summary or ''}".upper() for item in news_rows)
@@ -633,6 +908,10 @@ class StrategyService:
             str(item.get("exchange") or "").upper(): _clamp(50 + (_float(item.get("change_percent")) * 10))
             for item in index_cards
         }
+
+        symbols = [str(row.get("symbol") or "").upper() for row in items if row.get("symbol")]
+        daily_history_map = await self._load_daily_quote_history(symbols)
+        financial_context_map = await self._load_financial_context(symbols)
 
         trading_value_sorted = sorted((_float(item.get("trading_value")) for item in items), reverse=True)
         volume_sorted = sorted((_float(item.get("volume")) for item in items), reverse=True)
@@ -650,28 +929,71 @@ class StrategyService:
             trading_value = _float(row.get("trading_value"))
             volume = _float(row.get("volume"))
             exchange_code = str(row.get("exchange") or "").upper()
+            symbol = str(row.get("symbol") or "").upper()
             liquidity_score = percentile(trading_value, trading_value_sorted)
             volume_score = percentile(volume, volume_sorted)
             market_trend_score = market_trend_lookup.get(exchange_code, 50)
             momentum_score = _clamp(50 + (change_percent * 10))
             stability_score = _clamp(100 - (abs(change_percent) * 15))
             leadership_score = _clamp((liquidity_score * 0.45) + (momentum_score * 0.35) + (market_trend_score * 0.20))
-            watchlist_bonus = 100 if str(row.get("symbol") or "").upper() in watchlist_set else 0
-            news_score = min(100, news_mentions.get(str(row.get("symbol") or "").upper(), 0) * 25)
+            watchlist_bonus = 100 if symbol in watchlist_set else 0
+            news_score = min(100, news_mentions.get(symbol, 0) * 25)
             volume_confirmation_score = _clamp((volume_score * 0.6) + (liquidity_score * 0.25) + (news_score * 0.15))
             price_risk_score = _clamp(20 + max(change_percent, 0) * 12)
             hotness_score = _clamp(max(change_percent - 3, 0) * 18)
             volatility_score = _clamp(abs(change_percent) * 10)
             price_vs_open_ratio = 1 + (change_percent / 100)
+            daily_history = daily_history_map.get(symbol, [])
+            financial_context = financial_context_map.get(symbol, {})
+
+            fundamental = self._build_fundamental_metrics(
+                symbol=symbol,
+                exchange=exchange_code,
+                current_price=price,
+                financial_context=financial_context,
+            )
+            volume_intelligence = self._build_volume_intelligence(
+                history=daily_history,
+                current_price=price,
+                current_volume=volume,
+            )
+            candlestick_signals = self._build_candlestick_signals(daily_history)
+            footprint_signals = self._build_footprint_signals(
+                history=daily_history,
+                volume_intelligence=volume_intelligence,
+                candlestick_signals=candlestick_signals,
+            )
+            money_flow_intelligence = self._build_money_flow_intelligence(
+                history=daily_history,
+                current_price=price,
+                current_volume=volume,
+                news_mentions=news_mentions.get(symbol, 0),
+                volume_intelligence=volume_intelligence,
+                footprint_signals=footprint_signals,
+            )
+            execution_plan = self._build_execution_plan(
+                current_price=price,
+                fundamental=fundamental,
+                volume_intelligence=volume_intelligence,
+                candlestick_signals=candlestick_signals,
+                footprint_signals=footprint_signals,
+                money_flow_intelligence=money_flow_intelligence,
+            )
 
             scored_input.append({
-                "symbol": str(row.get("symbol") or "").upper(),
+                "symbol": symbol,
                 "name": row.get("name"),
                 "exchange": exchange_code,
                 "price": price,
                 "changePercent": change_percent,
                 "tradingValue": trading_value,
                 "volume": volume,
+                "fundamentalMetrics": fundamental["summary"],
+                "volumeIntelligence": volume_intelligence["summary"],
+                "moneyFlowIntelligence": money_flow_intelligence["summary"],
+                "candlestickSignals": candlestick_signals,
+                "footprintSignals": footprint_signals,
+                "executionPlan": execution_plan,
                 "metrics": {
                     "price": price,
                     "current_price": price,
@@ -686,16 +1008,842 @@ class StrategyService:
                     "leadership_score": leadership_score,
                     "watchlist_bonus": watchlist_bonus,
                     "news_score": news_score,
-                    "news_mentions": news_mentions.get(str(row.get("symbol") or "").upper(), 0),
+                    "news_mentions": news_mentions.get(symbol, 0),
                     "volume_confirmation_score": volume_confirmation_score,
                     "price_risk_score": price_risk_score,
                     "hotness_score": hotness_score,
                     "volatility_score": volatility_score,
                     "price_vs_open_ratio": price_vs_open_ratio,
+                    "pe_current": fundamental["metrics"]["pe_current"],
+                    "pb_current": fundamental["metrics"]["pb_current"],
+                    "bv_current": fundamental["metrics"]["bv_current"],
+                    "eps_current": fundamental["metrics"]["eps_current"],
+                    "eps_growth_year": fundamental["metrics"]["eps_growth_year"],
+                    "eps_growth_quarter": fundamental["metrics"]["eps_growth_quarter"],
+                    "roe_current": fundamental["metrics"]["roe_current"],
+                    "dar_current": fundamental["metrics"]["dar_current"],
+                    "gross_margin_current": fundamental["metrics"]["gross_margin_current"],
+                    "gross_margin_change": fundamental["metrics"]["gross_margin_change"],
+                    "quality_flag_count": fundamental["metrics"]["quality_flag_count"],
+                    "ma10_volume": volume_intelligence["metrics"]["ma10_volume"],
+                    "ma20_volume": volume_intelligence["metrics"]["ma20_volume"],
+                    "volume_spike_ratio": volume_intelligence["metrics"]["volume_spike_ratio"],
+                    "ema10": volume_intelligence["metrics"]["ema10"],
+                    "ema20": volume_intelligence["metrics"]["ema20"],
+                    "ema_gap_pct": volume_intelligence["metrics"]["ema_gap_pct"],
+                    "close_above_ema10": volume_intelligence["metrics"]["close_above_ema10"],
+                    "close_above_ema20": volume_intelligence["metrics"]["close_above_ema20"],
+                    "smart_money_inflow": volume_intelligence["metrics"]["smart_money_inflow"],
+                    "surge_trap": volume_intelligence["metrics"]["surge_trap"],
+                    "no_supply": volume_intelligence["metrics"]["no_supply"],
+                    "volume_divergence": volume_intelligence["metrics"]["volume_divergence"],
+                    "breakout_confirmation": footprint_signals["metrics"]["breakout_confirmation"],
+                    "spring_shakeout": footprint_signals["metrics"]["spring_shakeout"],
+                    "absorption": footprint_signals["metrics"]["absorption"],
+                    "pullback_retest": footprint_signals["metrics"]["pullback_retest"],
+                    "obv_value": money_flow_intelligence["metrics"]["obv_value"],
+                    "obv_ma10": money_flow_intelligence["metrics"]["obv_ma10"],
+                    "obv_slope_pct": money_flow_intelligence["metrics"]["obv_slope_pct"],
+                    "obv_trend_score": money_flow_intelligence["metrics"]["obv_trend_score"],
+                    "obv_above_ma": money_flow_intelligence["metrics"]["obv_above_ma"],
+                    "price_context_score": money_flow_intelligence["metrics"]["price_context_score"],
+                    "near_breakout_zone": money_flow_intelligence["metrics"]["near_breakout_zone"],
+                    "base_tightness_pct": money_flow_intelligence["metrics"]["base_tightness_pct"],
+                    "base_is_tight": money_flow_intelligence["metrics"]["base_is_tight"],
+                    "news_pressure_score": money_flow_intelligence["metrics"]["news_pressure_score"],
+                    "pre_news_accumulation": money_flow_intelligence["metrics"]["pre_news_accumulation"],
+                    "obv_breakout_confirmation": money_flow_intelligence["metrics"]["obv_breakout_confirmation"],
+                    "smart_money_before_news": money_flow_intelligence["metrics"]["smart_money_before_news"],
+                    "obv_distribution": money_flow_intelligence["metrics"]["obv_distribution"],
+                    "weak_news_chase": money_flow_intelligence["metrics"]["weak_news_chase"],
+                    "money_flow_score": money_flow_intelligence["metrics"]["money_flow_score"],
+                    "bullish_pattern_score": candlestick_signals["metrics"]["bullish_pattern_score"],
+                    "bearish_pattern_score": candlestick_signals["metrics"]["bearish_pattern_score"],
+                    "stop_loss_pct": execution_plan["metrics"]["stop_loss_pct"],
                     "journal_entries_today": 0,
                 },
             })
         return scored_input
+
+    async def _load_daily_quote_history(self, symbols: list[str], days: int = 35) -> dict[str, list[dict[str, Any]]]:
+        if not symbols:
+            return {}
+        cutoff = datetime.now() - timedelta(days=days)
+        result = await self.session.execute(
+            select(MarketQuoteSnapshot)
+            .where(
+                MarketQuoteSnapshot.symbol.in_(symbols),
+                MarketQuoteSnapshot.captured_at >= cutoff,
+                MarketQuoteSnapshot.price.is_not(None),
+            )
+            .order_by(MarketQuoteSnapshot.symbol.asc(), MarketQuoteSnapshot.captured_at.asc())
+        )
+        rows = result.scalars().all()
+        grouped: dict[str, dict[date, dict[str, Any]]] = defaultdict(dict)
+        for row in rows:
+            symbol = str(row.symbol or "").upper()
+            point_date = row.captured_at.date()
+            bucket = grouped[symbol].get(point_date)
+            price = _float(row.price, 0)
+            open_price = row.open_price if row.open_price is not None else price
+            high_price = row.high_price if row.high_price is not None else price
+            low_price = row.low_price if row.low_price is not None else price
+            if bucket is None:
+                grouped[symbol][point_date] = {
+                    "date": point_date,
+                    "open": open_price,
+                    "high": high_price,
+                    "low": low_price,
+                    "close": price,
+                    "volume": _float(row.volume, 0),
+                    "trading_value": _float(row.trading_value, 0),
+                }
+            else:
+                bucket["close"] = price
+                bucket["high"] = max(_float(bucket["high"], price), _float(high_price, price))
+                bucket["low"] = min(_float(bucket["low"], price), _float(low_price, price))
+                bucket["volume"] = max(_float(bucket["volume"], 0), _float(row.volume, 0))
+                bucket["trading_value"] = max(_float(bucket["trading_value"], 0), _float(row.trading_value, 0))
+
+        return {
+            symbol: [grouped[symbol][day] for day in sorted(grouped[symbol].keys())][-25:]
+            for symbol in grouped
+        }
+
+    async def _load_financial_context(self, symbols: list[str]) -> dict[str, dict[str, Any]]:
+        if not symbols:
+            return {}
+
+        context: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {
+            symbol: {
+                "ratios": defaultdict(list),
+                "income": defaultdict(list),
+                "balance": defaultdict(list),
+            }
+            for symbol in symbols
+        }
+
+        ratio_rows = (
+            await self.session.execute(
+                select(MarketFinancialRatio).where(
+                    MarketFinancialRatio.symbol.in_(symbols),
+                    MarketFinancialRatio.metric_key.in_(["PE", "EPS", "BV", "ROE", "DAR", "GOS"]),
+                )
+            )
+        ).scalars().all()
+        for row in ratio_rows:
+            context[row.symbol.upper()]["ratios"][row.metric_key].append(self._serialize_financial_row(row))
+
+        income_rows = (
+            await self.session.execute(
+                select(MarketFinancialIncomeStatement).where(
+                    MarketFinancialIncomeStatement.symbol.in_(symbols),
+                    MarketFinancialIncomeStatement.metric_key.in_(["NetIncome", "LNSTTNDN", "DTTBHCCDV", "LNGBHCCDV"]),
+                )
+            )
+        ).scalars().all()
+        for row in income_rows:
+            context[row.symbol.upper()]["income"][row.metric_key].append(self._serialize_financial_row(row))
+
+        balance_rows = (
+            await self.session.execute(
+                select(MarketFinancialBalanceSheet).where(
+                    MarketFinancialBalanceSheet.symbol.in_(symbols),
+                    MarketFinancialBalanceSheet.metric_key.in_(["TotalOwnerCapital", "TotalDebt", "TotalAsset"]),
+                )
+            )
+        ).scalars().all()
+        for row in balance_rows:
+            context[row.symbol.upper()]["balance"][row.metric_key].append(self._serialize_financial_row(row))
+
+        for symbol_context in context.values():
+            for family in symbol_context.values():
+                for key, rows in family.items():
+                    rows.sort(key=self._financial_row_sort_key, reverse=True)
+                    family[key] = rows
+        return context
+
+    @staticmethod
+    def _serialize_financial_row(row: Any) -> dict[str, Any]:
+        return {
+            "metric_key": row.metric_key,
+            "metric_label": row.metric_label,
+            "value_number": row.value_number,
+            "report_period": row.report_period,
+            "period_type": row.period_type,
+            "fiscal_year": row.fiscal_year,
+            "fiscal_quarter": row.fiscal_quarter,
+            "statement_date": row.statement_date,
+            "exchange": getattr(row, "exchange", None),
+        }
+
+    def _build_fundamental_metrics(
+        self,
+        *,
+        symbol: str,
+        exchange: str,
+        current_price: float,
+        financial_context: dict[str, Any],
+    ) -> dict[str, Any]:
+        ratios = financial_context.get("ratios", {})
+        income = financial_context.get("income", {})
+
+        pe_current = self._latest_financial_value(ratios.get("PE"))
+        eps_current = self._latest_financial_value(ratios.get("EPS"))
+        bv_current = self._latest_financial_value(ratios.get("BV"))
+        roe_current = self._latest_financial_value(ratios.get("ROE"))
+        dar_current = self._latest_financial_value(ratios.get("DAR"))
+        pb_current = (current_price / bv_current) if current_price and bv_current not in (None, 0) else None
+
+        eps_series = ratios.get("EPS") or []
+        eps_prev_year = self._previous_annual_value(eps_series)
+        eps_growth_year = self._growth_pct(eps_current, eps_prev_year)
+
+        net_income_series = income.get("NetIncome") or income.get("LNSTTNDN") or []
+        revenue_series = income.get("DTTBHCCDV") or []
+        gross_profit_series = income.get("LNGBHCCDV") or []
+        latest_net_income = self._latest_period_row(net_income_series)
+        comparable_net_income = self._find_comparable_quarter_row(net_income_series, latest_net_income)
+        eps_growth_quarter = self._growth_pct(
+            latest_net_income.get("value_number") if latest_net_income else None,
+            comparable_net_income.get("value_number") if comparable_net_income else None,
+        )
+
+        latest_revenue = self._latest_period_row(revenue_series)
+        latest_gross = self._find_row_by_period(gross_profit_series, latest_revenue) if latest_revenue else None
+        prev_revenue = self._find_comparable_quarter_row(revenue_series, latest_revenue)
+        prev_gross = self._find_row_by_period(gross_profit_series, prev_revenue) if prev_revenue else None
+        gross_margin_current = self._margin_pct(
+            latest_gross.get("value_number") if latest_gross else None,
+            latest_revenue.get("value_number") if latest_revenue else None,
+        )
+        gross_margin_prev = self._margin_pct(
+            prev_gross.get("value_number") if prev_gross else None,
+            prev_revenue.get("value_number") if prev_revenue else None,
+        )
+        gross_margin_change = (
+            gross_margin_current - gross_margin_prev
+            if gross_margin_current is not None and gross_margin_prev is not None
+            else None
+        )
+
+        quality_flags = [
+            {"code": "eps_growth_year", "label": "EPS nam > 25%", "passed": eps_growth_year is not None and eps_growth_year >= 25},
+            {"code": "eps_growth_quarter", "label": "EPS quy > 25%", "passed": eps_growth_quarter is not None and eps_growth_quarter >= 25},
+            {"code": "roe", "label": "ROE > 15%", "passed": roe_current is not None and roe_current >= 15},
+            {"code": "debt", "label": "DAR < 60%", "passed": dar_current is not None and dar_current <= 60},
+            {
+                "code": "gross_margin",
+                "label": "Bien gop cai thien",
+                "passed": gross_margin_change is not None and gross_margin_change >= 0,
+            },
+        ]
+        quality_flag_count = sum(1 for item in quality_flags if item["passed"])
+
+        return {
+            "summary": {
+                "symbol": symbol,
+                "exchange": exchange,
+                "pe": round(pe_current, 2) if pe_current is not None else None,
+                "pb": round(pb_current, 2) if pb_current is not None else None,
+                "bv": round(bv_current, 2) if bv_current is not None else None,
+                "eps": round(eps_current, 2) if eps_current is not None else None,
+                "epsGrowthYear": round(eps_growth_year, 2) if eps_growth_year is not None else None,
+                "epsGrowthQuarter": round(eps_growth_quarter, 2) if eps_growth_quarter is not None else None,
+                "roe": round(roe_current, 2) if roe_current is not None else None,
+                "dar": round(dar_current, 2) if dar_current is not None else None,
+                "grossMargin": round(gross_margin_current, 2) if gross_margin_current is not None else None,
+                "grossMarginChange": round(gross_margin_change, 2) if gross_margin_change is not None else None,
+                "qualityFlags": quality_flags,
+                "qualityFlagCount": quality_flag_count,
+            },
+            "metrics": {
+                "pe_current": pe_current,
+                "pb_current": pb_current,
+                "bv_current": bv_current,
+                "eps_current": eps_current,
+                "eps_growth_year": eps_growth_year if eps_growth_year is not None else -999,
+                "eps_growth_quarter": eps_growth_quarter if eps_growth_quarter is not None else -999,
+                "roe_current": roe_current if roe_current is not None else 0,
+                "dar_current": dar_current if dar_current is not None else 100,
+                "gross_margin_current": gross_margin_current if gross_margin_current is not None else 0,
+                "gross_margin_change": gross_margin_change if gross_margin_change is not None else -999,
+                "quality_flag_count": quality_flag_count,
+            },
+        }
+
+    def _build_volume_intelligence(
+        self,
+        *,
+        history: list[dict[str, Any]],
+        current_price: float,
+        current_volume: float,
+    ) -> dict[str, Any]:
+        closes = [float(item.get("close") or 0) for item in history if item.get("close") is not None]
+        volumes = [float(item.get("volume") or 0) for item in history if item.get("volume") is not None]
+        latest = history[-1] if history else {}
+        previous = history[-2] if len(history) >= 2 else {}
+        ma10_volume = self._moving_average(volumes, 10)
+        ma20_volume = self._moving_average(volumes, 20)
+        ema10 = self._ema(closes, 10)
+        ema20 = self._ema(closes, 20)
+        reference_ema = ema10 or ema20
+        ema_gap_pct = (
+            abs((current_price - reference_ema) / reference_ema) * 100
+            if current_price and reference_ema not in (None, 0)
+            else None
+        )
+        volume_spike_ratio = (current_volume / ma20_volume) if current_volume and ma20_volume not in (None, 0) else 0
+        recent_high = max([float(item.get("high") or 0) for item in history[-11:-1]], default=0)
+        smart_money_inflow = bool(current_price and volume_spike_ratio >= 2 and current_price > recent_high > 0)
+
+        open_price = _float(latest.get("open"), current_price)
+        high_price = _float(latest.get("high"), current_price)
+        low_price = _float(latest.get("low"), current_price)
+        close_price = _float(latest.get("close"), current_price)
+        candle_range = max(high_price - low_price, 0.0001)
+        body = abs(close_price - open_price)
+        upper_wick = max(high_price - max(open_price, close_price), 0)
+        surge_trap = bool(volume_spike_ratio >= 3 and upper_wick > max(body * 0.5, candle_range * 0.35))
+        no_supply = bool(
+            reference_ema
+            and abs(close_price - reference_ema) / max(reference_ema, 0.0001) <= 0.02
+            and ma10_volume
+            and current_volume <= ma10_volume * 0.5
+        )
+        previous_high = _float(previous.get("high"), 0)
+        previous_volume = _float(previous.get("volume"), 0)
+        volume_divergence = bool(current_price > previous_high > 0 and current_volume < previous_volume)
+
+        return {
+            "summary": {
+                "ma10Volume": round(ma10_volume, 2) if ma10_volume is not None else None,
+                "ma20Volume": round(ma20_volume, 2) if ma20_volume is not None else None,
+                "volumeSpikeRatio": round(volume_spike_ratio, 2),
+                "ema10": round(ema10, 2) if ema10 is not None else None,
+                "ema20": round(ema20, 2) if ema20 is not None else None,
+                "emaGapPct": round(ema_gap_pct, 2) if ema_gap_pct is not None else None,
+                "smartMoneyInflow": smart_money_inflow,
+                "surgeTrap": surge_trap,
+                "noSupply": no_supply,
+                "volumeDivergence": volume_divergence,
+            },
+            "metrics": {
+                "ma10_volume": ma10_volume,
+                "ma20_volume": ma20_volume,
+                "volume_spike_ratio": volume_spike_ratio,
+                "ema10": ema10,
+                "ema20": ema20,
+                "ema_gap_pct": ema_gap_pct if ema_gap_pct is not None else 999,
+                "close_above_ema10": bool(ema10 and current_price >= ema10),
+                "close_above_ema20": bool(ema20 and current_price >= ema20),
+                "smart_money_inflow": smart_money_inflow,
+                "surge_trap": surge_trap,
+                "no_supply": no_supply,
+                "volume_divergence": volume_divergence,
+            },
+        }
+
+    def _build_candlestick_signals(self, history: list[dict[str, Any]]) -> dict[str, Any]:
+        latest = history[-1] if history else None
+        previous = history[-2] if len(history) >= 2 else None
+        third = history[-3] if len(history) >= 3 else None
+        signals: list[dict[str, Any]] = []
+        bullish_score = 0
+        bearish_score = 0
+
+        if latest:
+            open_price = _float(latest.get("open"))
+            high_price = _float(latest.get("high"))
+            low_price = _float(latest.get("low"))
+            close_price = _float(latest.get("close"))
+            candle_range = max(high_price - low_price, 0.0001)
+            body = abs(close_price - open_price)
+            upper_wick = max(high_price - max(open_price, close_price), 0)
+            lower_wick = max(min(open_price, close_price) - low_price, 0)
+            bullish = close_price > open_price
+
+            marubozu = body / candle_range >= 0.8
+            long_upper = upper_wick / candle_range >= 0.35
+            long_lower = lower_wick / candle_range >= 0.35
+            doji = body / candle_range <= 0.1
+
+            signals.extend(
+                [
+                    self._signal("marubozu", "Marubozu", marubozu, "bullish" if bullish else "bearish", "Nen than dai, gan nhu khong co rau."),
+                    self._signal("long_upper_wick", "Long upper wick", long_upper, "bearish", "Rau tren dai, de bi chot loi/trap."),
+                    self._signal("long_lower_wick", "Long lower wick", long_lower, "bullish", "Rau duoi dai, tu choi giam gia."),
+                    self._signal("doji", "Doji", doji, "neutral", "Nen luong lu, than nho so voi bien do."),
+                ]
+            )
+            bullish_score += 18 if marubozu and bullish else 0
+            bullish_score += 14 if long_lower else 0
+            bearish_score += 14 if long_upper else 0
+            bearish_score += 8 if doji else 0
+
+        if latest and previous:
+            prev_open = _float(previous.get("open"))
+            prev_close = _float(previous.get("close"))
+            curr_open = _float(latest.get("open"))
+            curr_close = _float(latest.get("close"))
+            bullish_engulfing = prev_close < prev_open and curr_close > curr_open and curr_close >= prev_open and curr_open <= prev_close
+            bearish_engulfing = prev_close > prev_open and curr_close < curr_open and curr_open >= prev_close and curr_close <= prev_open
+            signals.extend(
+                [
+                    self._signal("bullish_engulfing", "Bullish engulfing", bullish_engulfing, "bullish", "Nen hien tai bao trum than nen giam truoc do."),
+                    self._signal("bearish_engulfing", "Bearish engulfing", bearish_engulfing, "bearish", "Nen hien tai bao trum than nen tang truoc do."),
+                ]
+            )
+            bullish_score += 20 if bullish_engulfing else 0
+            bearish_score += 20 if bearish_engulfing else 0
+
+        if latest and previous and third:
+            t_open = _float(third.get("open"))
+            t_close = _float(third.get("close"))
+            p_open = _float(previous.get("open"))
+            p_close = _float(previous.get("close"))
+            l_open = _float(latest.get("open"))
+            l_close = _float(latest.get("close"))
+            morning_star = t_close < t_open and abs(p_close - p_open) <= abs(t_close - t_open) * 0.4 and l_close > l_open and l_close >= (t_open + t_close) / 2
+            evening_star = t_close > t_open and abs(p_close - p_open) <= abs(t_close - t_open) * 0.4 and l_close < l_open and l_close <= (t_open + t_close) / 2
+            signals.extend(
+                [
+                    self._signal("morning_star", "Morning star", morning_star, "bullish", "Bo 3 nen dao chieu tang."),
+                    self._signal("evening_star", "Evening star", evening_star, "bearish", "Bo 3 nen dao chieu giam."),
+                ]
+            )
+            bullish_score += 18 if morning_star else 0
+            bearish_score += 18 if evening_star else 0
+
+        return {
+            "items": [item for item in signals if item["detected"]],
+            "metrics": {
+                "bullish_pattern_score": _clamp(bullish_score),
+                "bearish_pattern_score": _clamp(bearish_score),
+            },
+        }
+
+    def _build_footprint_signals(
+        self,
+        *,
+        history: list[dict[str, Any]],
+        volume_intelligence: dict[str, Any],
+        candlestick_signals: dict[str, Any],
+    ) -> dict[str, Any]:
+        latest = history[-1] if history else None
+        previous_window = history[-6:-1] if len(history) >= 6 else history[:-1]
+        signals: list[dict[str, Any]] = []
+
+        spring_shakeout = False
+        absorption = False
+        breakout_confirmation = False
+        pullback_retest = False
+
+        if latest:
+            low_price = _float(latest.get("low"))
+            close_price = _float(latest.get("close"))
+            open_price = _float(latest.get("open"))
+            high_price = _float(latest.get("high"))
+            recent_support = min((_float(item.get("low")) for item in previous_window), default=0)
+            recent_resistance = max((_float(item.get("high")) for item in previous_window), default=0)
+            lower_wick = max(min(open_price, close_price) - low_price, 0)
+            upper_wick = max(high_price - max(open_price, close_price), 0)
+            body = abs(close_price - open_price)
+
+            spring_shakeout = bool(
+                recent_support
+                and low_price < recent_support
+                and close_price > recent_support
+                and lower_wick > max(body, (high_price - low_price) * 0.35)
+            )
+            breakout_confirmation = bool(
+                recent_resistance
+                and close_price > recent_resistance
+                and volume_intelligence["metrics"]["volume_spike_ratio"] >= 1.5
+            )
+            pullback_retest = bool(
+                recent_resistance
+                and abs(close_price - recent_resistance) / max(recent_resistance, 0.0001) <= 0.02
+                and volume_intelligence["metrics"]["volume_spike_ratio"] <= 1.0
+                and close_price >= open_price
+            )
+
+        if len(history) >= 3:
+            last_three = history[-3:]
+            ranges = [abs(_float(item.get("high")) - _float(item.get("low"))) for item in last_three]
+            volumes = [_float(item.get("volume")) for item in last_three]
+            closes = [_float(item.get("close")) for item in last_three]
+            avg_close = sum(closes) / len(closes) if closes else 0
+            absorption = bool(
+                max(ranges, default=0) <= max(avg_close * 0.03, 0.5)
+                and volumes[0] <= volumes[1] <= volumes[2]
+                and (max(closes) - min(closes)) <= max(avg_close * 0.025, 0.5)
+            )
+
+        signals.extend(
+            [
+                self._signal("spring_shakeout", "Spring / Shakeout", spring_shakeout, "bullish", "Rau duoi dai, thu ho tro roi rut chan nhanh."),
+                self._signal("absorption", "Absorption", absorption, "bullish", "Nen nho di ngang, volume tang dan."),
+                self._signal("breakout_confirmation", "Breakout confirmation", breakout_confirmation, "bullish", "Gia vuot khang cu va volume xac nhan."),
+                self._signal("pullback_retest", "Pullback retest", pullback_retest, "bullish", "Gia retest vung breakout/EMA voi volume thap."),
+            ]
+        )
+
+        return {
+            "items": [item for item in signals if item["detected"]],
+            "metrics": {
+                "spring_shakeout": spring_shakeout,
+                "absorption": absorption,
+                "breakout_confirmation": breakout_confirmation,
+                "pullback_retest": pullback_retest,
+            },
+        }
+
+    def _build_money_flow_intelligence(
+        self,
+        *,
+        history: list[dict[str, Any]],
+        current_price: float,
+        current_volume: float,
+        news_mentions: int,
+        volume_intelligence: dict[str, Any],
+        footprint_signals: dict[str, Any],
+    ) -> dict[str, Any]:
+        closes = [_float(item.get("close")) for item in history if item.get("close") is not None]
+        volumes = [_float(item.get("volume")) for item in history if item.get("volume") is not None]
+        highs = [_float(item.get("high")) for item in history if item.get("high") is not None]
+        lows = [_float(item.get("low")) for item in history if item.get("low") is not None]
+        previous = history[-2] if len(history) >= 2 else {}
+
+        obv_series: list[float] = []
+        if closes and volumes:
+            running_obv = 0.0
+            previous_close = closes[0]
+            for close, volume in zip(closes, volumes):
+                if close > previous_close:
+                    running_obv += volume
+                elif close < previous_close:
+                    running_obv -= volume
+                obv_series.append(running_obv)
+                previous_close = close
+
+        obv_value = obv_series[-1] if obv_series else 0.0
+        obv_ma10 = self._moving_average(obv_series, 10)
+        obv_reference = self._moving_average(obv_series[:-5], 10) if len(obv_series) > 5 else None
+        obv_slope_pct = (
+            ((obv_value - obv_reference) / abs(obv_reference)) * 100
+            if obv_reference not in (None, 0)
+            else 0.0
+        )
+        obv_trend_score = _clamp(50 + (obv_slope_pct * 0.6))
+        obv_above_ma = bool(obv_ma10 not in (None, 0) and obv_value >= obv_ma10)
+
+        recent_high = max(highs[-10:-1], default=0.0)
+        recent_window_high = max(highs[-6:], default=0.0)
+        recent_window_low = min(lows[-6:], default=0.0)
+        avg_recent_close = (sum(closes[-6:]) / len(closes[-6:])) if closes[-6:] else 0.0
+        near_breakout_zone = bool(
+            recent_high
+            and current_price
+            and abs(current_price - recent_high) / max(recent_high, 0.0001) <= 0.02
+        )
+        base_tightness_pct = (
+            ((recent_window_high - recent_window_low) / avg_recent_close) * 100
+            if avg_recent_close not in (None, 0)
+            else 999.0
+        )
+        base_is_tight = bool(base_tightness_pct <= 6.0)
+
+        price_context_score = _clamp(
+            (20 if volume_intelligence["metrics"]["close_above_ema10"] else 0)
+            + (20 if volume_intelligence["metrics"]["close_above_ema20"] else 0)
+            + (20 if near_breakout_zone else 0)
+            + (20 if footprint_signals["metrics"]["breakout_confirmation"] else 0)
+            + (20 if base_is_tight else 0)
+        )
+
+        news_pressure_score = _clamp(news_mentions * 20)
+        pre_news_accumulation = bool(
+            obv_trend_score >= 55
+            and obv_above_ma
+            and base_is_tight
+            and news_pressure_score <= 35
+            and not volume_intelligence["metrics"]["surge_trap"]
+        )
+        obv_breakout_confirmation = bool(
+            footprint_signals["metrics"]["breakout_confirmation"]
+            and obv_above_ma
+            and obv_trend_score >= 55
+        )
+        smart_money_before_news = bool(
+            pre_news_accumulation
+            and near_breakout_zone
+            and current_volume > 0
+            and volume_intelligence["metrics"]["volume_spike_ratio"] >= 1.2
+        )
+
+        previous_close = _float(previous.get("close"), current_price)
+        price_flat_or_up = current_price >= previous_close * 0.995 if previous_close else False
+        obv_distribution = bool(
+            price_flat_or_up
+            and obv_trend_score <= 42
+            and news_pressure_score <= 35
+        )
+        weak_news_chase = bool(
+            news_pressure_score >= 55
+            and obv_trend_score < 50
+            and not volume_intelligence["metrics"]["smart_money_inflow"]
+        )
+
+        money_flow_score = _clamp(
+            (obv_trend_score * 0.35)
+            + (price_context_score * 0.35)
+            + (15 if pre_news_accumulation else 0)
+            + (10 if smart_money_before_news else 0)
+            + (5 if obv_breakout_confirmation else 0)
+            - (10 if obv_distribution else 0)
+            - (15 if weak_news_chase else 0)
+        )
+
+        items = [
+            self._signal(
+                "pre_news_accumulation",
+                "Pre-news accumulation",
+                pre_news_accumulation,
+                "bullish",
+                "OBV di len, nen gia giu chat va news pressure van thap.",
+            ),
+            self._signal(
+                "obv_breakout_confirmation",
+                "OBV breakout confirmation",
+                obv_breakout_confirmation,
+                "bullish",
+                "OBV dong thuan voi breakout va gia dang o boi canh tot.",
+            ),
+            self._signal(
+                "smart_money_before_news",
+                "Smart Money before news",
+                smart_money_before_news,
+                "bullish",
+                "Dong tien vao truoc khi tin tuc bung no, volume va OBV dang dong thuan.",
+            ),
+            self._signal(
+                "obv_distribution",
+                "OBV distribution",
+                obv_distribution,
+                "bearish",
+                "Gia chua gay vo nhung OBV suy, canh bao phan phoi som.",
+            ),
+            self._signal(
+                "weak_news_chase",
+                "Weak news chase",
+                weak_news_chase,
+                "bearish",
+                "Tin tuc nhieu nhung dong tien va OBV khong dong thuan.",
+            ),
+        ]
+
+        return {
+            "summary": {
+                "obvValue": round(obv_value, 2),
+                "obvMa10": round(obv_ma10, 2) if obv_ma10 is not None else None,
+                "obvSlopePct": round(obv_slope_pct, 2),
+                "obvTrendScore": round(obv_trend_score, 2),
+                "obvAboveMa": obv_above_ma,
+                "priceContextScore": round(price_context_score, 2),
+                "nearBreakoutZone": near_breakout_zone,
+                "baseTightnessPct": round(base_tightness_pct, 2) if base_tightness_pct is not None else None,
+                "baseIsTight": base_is_tight,
+                "newsPressureScore": round(news_pressure_score, 2),
+                "moneyFlowScore": round(money_flow_score, 2),
+                "preNewsAccumulation": pre_news_accumulation,
+                "obvBreakoutConfirmation": obv_breakout_confirmation,
+                "smartMoneyBeforeNews": smart_money_before_news,
+                "obvDistribution": obv_distribution,
+                "weakNewsChase": weak_news_chase,
+                "items": [item for item in items if item["detected"]],
+            },
+            "metrics": {
+                "obv_value": obv_value,
+                "obv_ma10": obv_ma10,
+                "obv_slope_pct": obv_slope_pct,
+                "obv_trend_score": obv_trend_score,
+                "obv_above_ma": obv_above_ma,
+                "price_context_score": price_context_score,
+                "near_breakout_zone": near_breakout_zone,
+                "base_tightness_pct": base_tightness_pct if base_tightness_pct is not None else 999,
+                "base_is_tight": base_is_tight,
+                "news_pressure_score": news_pressure_score,
+                "pre_news_accumulation": pre_news_accumulation,
+                "obv_breakout_confirmation": obv_breakout_confirmation,
+                "smart_money_before_news": smart_money_before_news,
+                "obv_distribution": obv_distribution,
+                "weak_news_chase": weak_news_chase,
+                "money_flow_score": money_flow_score,
+            },
+        }
+
+    def _build_execution_plan(
+        self,
+        *,
+        current_price: float,
+        fundamental: dict[str, Any],
+        volume_intelligence: dict[str, Any],
+        candlestick_signals: dict[str, Any],
+        footprint_signals: dict[str, Any],
+        money_flow_intelligence: dict[str, Any],
+    ) -> dict[str, Any]:
+        stop_loss_low_pct = 5.0
+        stop_loss_high_pct = 8.0
+        probe_buy = bool(
+            footprint_signals["metrics"]["breakout_confirmation"]
+            and volume_intelligence["metrics"]["volume_spike_ratio"] >= 1.5
+            and not volume_intelligence["metrics"]["surge_trap"]
+            and not money_flow_intelligence["metrics"]["obv_distribution"]
+        )
+        add_buy = bool(
+            footprint_signals["metrics"]["pullback_retest"]
+            and volume_intelligence["metrics"]["no_supply"]
+            and candlestick_signals["metrics"]["bullish_pattern_score"] >= 12
+            and money_flow_intelligence["metrics"]["obv_trend_score"] >= 50
+        )
+        take_profit_signal = bool(
+            volume_intelligence["metrics"]["volume_divergence"]
+            or volume_intelligence["metrics"]["surge_trap"]
+            or money_flow_intelligence["metrics"]["obv_distribution"]
+        )
+        stand_aside = bool(
+            volume_intelligence["metrics"]["surge_trap"]
+            or fundamental["metrics"]["quality_flag_count"] < 2
+            or money_flow_intelligence["metrics"]["weak_news_chase"]
+        )
+        rationale = []
+        if probe_buy:
+            rationale.append("Co breakout kèm volume xác nhận > 1.5x.")
+        if add_buy:
+            rationale.append("Nhịp retest/EMA có volume thấp và xuất hiện nến hồi phục.")
+        if take_profit_signal:
+            rationale.append("Xuất hiện tín hiệu thoát lệnh theo volume divergence hoặc surge trap.")
+        if stand_aside:
+            rationale.append("Nên đứng ngoài vì xuất hiện trap hoặc chất lượng nền chưa đủ.")
+
+        if money_flow_intelligence["metrics"]["pre_news_accumulation"]:
+            rationale.append("Dong tien truoc tin dang tich luy va OBV dang di len.")
+        if money_flow_intelligence["metrics"]["weak_news_chase"]:
+            rationale.append("Tin tuc tang nhung dong tien chua xac nhan, tranh mua duoi.")
+
+        stop_loss_min = current_price * (1 - stop_loss_low_pct / 100) if current_price else None
+        stop_loss_max = current_price * (1 - stop_loss_high_pct / 100) if current_price else None
+
+        return {
+            "summary": {
+                "probeBuy30": probe_buy,
+                "addBuy70": add_buy,
+                "takeProfitSignal": take_profit_signal,
+                "standAside": stand_aside,
+                "stopLossMin": round(stop_loss_min, 2) if stop_loss_min is not None else None,
+                "stopLossMax": round(stop_loss_max, 2) if stop_loss_max is not None else None,
+                "rationale": rationale,
+            },
+            "metrics": {
+                "stop_loss_pct": 6.5,
+            },
+        }
+
+    @staticmethod
+    def _financial_row_sort_key(row: dict[str, Any]) -> tuple[int, int]:
+        report_period = str(row.get("report_period") or "")
+        fiscal_year = row.get("fiscal_year")
+        fiscal_quarter = row.get("fiscal_quarter")
+        if isinstance(fiscal_year, int):
+            return fiscal_year, fiscal_quarter or 0
+        if report_period.startswith("Q"):
+            quarter_part, _, year_part = report_period.partition("-")
+            try:
+                return int(year_part or 0), int(quarter_part.replace("Q", ""))
+            except ValueError:
+                return 0, 0
+        try:
+            return int(report_period), fiscal_quarter or 0
+        except ValueError:
+            return 0, 0
+
+    def _latest_financial_value(self, rows: list[dict[str, Any]] | None) -> float | None:
+        if not rows:
+            return None
+        return _float(rows[0].get("value_number"), None)
+
+    def _previous_annual_value(self, rows: list[dict[str, Any]]) -> float | None:
+        if len(rows) < 2:
+            return None
+        return _float(rows[1].get("value_number"), None)
+
+    def _latest_period_row(self, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+        return rows[0] if rows else None
+
+    def _find_comparable_quarter_row(
+        self,
+        rows: list[dict[str, Any]],
+        latest_row: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if not rows or not latest_row:
+            return None
+        period = str(latest_row.get("report_period") or "")
+        if not period.startswith("Q"):
+            return rows[1] if len(rows) > 1 else None
+        quarter_part, _, year_part = period.partition("-")
+        try:
+            previous_period = f"{quarter_part}-{int(year_part) - 1}"
+        except ValueError:
+            return rows[1] if len(rows) > 1 else None
+        return next((row for row in rows if str(row.get("report_period")) == previous_period), None)
+
+    def _find_row_by_period(self, rows: list[dict[str, Any]], target_row: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not rows or not target_row:
+            return None
+        target_period = str(target_row.get("report_period") or "")
+        return next((row for row in rows if str(row.get("report_period") or "") == target_period), None)
+
+    @staticmethod
+    def _growth_pct(current: float | None, previous: float | None) -> float | None:
+        if current is None or previous in (None, 0):
+            return None
+        return ((current - previous) / abs(previous)) * 100
+
+    @staticmethod
+    def _margin_pct(numerator: float | None, denominator: float | None) -> float | None:
+        if numerator is None or denominator in (None, 0):
+            return None
+        return (numerator / denominator) * 100
+
+    @staticmethod
+    def _moving_average(values: list[float], window: int) -> float | None:
+        if not values:
+            return None
+        effective = values[-window:] if len(values) >= window else values
+        if not effective:
+            return None
+        return sum(effective) / len(effective)
+
+    @staticmethod
+    def _ema(values: list[float], period: int) -> float | None:
+        if not values:
+            return None
+        multiplier = 2 / (period + 1)
+        ema = values[0]
+        for value in values[1:]:
+            ema = (value - ema) * multiplier + ema
+        return ema
+
+    @staticmethod
+    def _signal(code: str, label: str, detected: bool, bias: str, detail: str) -> dict[str, Any]:
+        return {
+            "code": code,
+            "label": label,
+            "detected": bool(detected),
+            "bias": bias,
+            "detail": detail,
+        }
 
     async def _upsert_snapshots(self, company_code: str, bundle: dict[str, Any], items: list[dict[str, Any]], trading_date: date) -> None:
         if not items:
@@ -741,6 +1889,52 @@ class StrategyService:
             current.computed_at = now
         if winning_formula:
             await self.session.flush()
+
+    async def _upsert_signal_snapshots(
+        self,
+        company_code: str,
+        bundle: dict[str, Any],
+        items: list[dict[str, Any]],
+        trading_date: date,
+    ) -> None:
+        if not items or not bundle.get("formulas"):
+            return
+        profile_id = int(bundle["formulas"][0]["profileId"])
+        await self.session.execute(
+            StrategySignalSnapshot.__table__.delete().where(
+                StrategySignalSnapshot.company_code == company_code,
+                StrategySignalSnapshot.profile_id == profile_id,
+                StrategySignalSnapshot.trading_date == trading_date,
+            )
+        )
+
+        now = datetime.now()
+        for row in items[:300]:
+            signal_groups = [
+                ("volume", row.get("volumeIntelligence") or {}),
+                ("money_flow", row.get("moneyFlowIntelligence") or {}),
+                ("candlestick", {"items": row.get("candlestickSignals") or []}),
+                ("footprint", {"items": row.get("footprintSignals") or []}),
+            ]
+            for category, payload in signal_groups:
+                for signal in payload.get("items") or []:
+                    self.session.add(
+                        StrategySignalSnapshot(
+                            company_code=company_code,
+                            profile_id=profile_id,
+                            symbol=row["symbol"],
+                            exchange=row.get("exchange"),
+                            trading_date=trading_date,
+                            category=category,
+                            signal_code=str(signal.get("code") or signal.get("label") or "signal"),
+                            signal_label=str(signal.get("label") or signal.get("code") or "Signal"),
+                            detected=bool(signal.get("detected", True)),
+                            signal_score=_float(row.get("winningScore"), None),
+                            detail_json=signal,
+                            computed_at=now,
+                        )
+                    )
+        await self.session.flush()
 
     def _evaluate_formula(self, formula: dict[str, Any] | None, metrics: dict[str, Any]) -> float:
         if not formula or not formula.get("isEnabled"):
@@ -801,6 +1995,12 @@ class StrategyService:
             ("Leadership", metrics.get("leadership_score")),
             ("Tin tuc", metrics.get("news_score")),
             ("Volume xac nhan", metrics.get("volume_confirmation_score")),
+            ("Money flow", metrics.get("money_flow_score")),
+            ("OBV trend", metrics.get("obv_trend_score")),
+            ("EPS growth nam", metrics.get("eps_growth_year")),
+            ("EPS growth quy", metrics.get("eps_growth_quarter")),
+            ("Volume spike", (_float(metrics.get("volume_spike_ratio")) * 20)),
+            ("Bullish pattern", metrics.get("bullish_pattern_score")),
         ]
         drivers.sort(key=lambda item: -_float(item[1]))
         return [{"label": label, "value": round(_float(value), 2)} for label, value in drivers[:4]]
@@ -832,6 +2032,18 @@ class StrategyService:
         if profile is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Strategy profile not found")
         return profile
+
+    async def _get_journal_entry(self, company_code: str, entry_id: int) -> StrategyTradeJournalEntry:
+        result = await self.session.execute(
+            select(StrategyTradeJournalEntry).where(
+                StrategyTradeJournalEntry.company_code == company_code,
+                StrategyTradeJournalEntry.id == entry_id,
+            )
+        )
+        item = result.scalar_one_or_none()
+        if item is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        return item
 
     async def _list_formulas(self, profile_id: int) -> list[dict[str, Any]]:
         result = await self.session.execute(
@@ -1188,12 +2400,21 @@ class StrategyService:
             "id": item.id,
             "profileId": item.profile_id,
             "symbol": item.symbol,
+            "tradeDate": item.trade_date.isoformat() if item.trade_date else None,
+            "classification": item.classification,
             "tradeSide": item.trade_side,
             "entryPrice": item.entry_price,
             "exitPrice": item.exit_price,
             "stopLossPrice": item.stop_loss_price,
+            "takeProfitPrice": item.take_profit_price,
+            "quantity": item.quantity,
             "positionSize": item.position_size,
+            "totalCapital": item.total_capital,
+            "strategyName": item.strategy_name,
+            "psychology": item.psychology,
             "checklistResult": item.checklist_result_json or {},
+            "signalSnapshot": item.signal_snapshot_json or {},
+            "resultSnapshot": item.result_snapshot_json or {},
             "notes": item.notes,
             "mistakeTags": item.mistake_tags_json or [],
             "createdAt": item.created_at.isoformat() if item.created_at else None,

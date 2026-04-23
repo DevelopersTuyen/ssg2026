@@ -25,6 +25,8 @@
         </div>
       </div>
 
+      <app-page-load-indicator pageId="role-permissions"></app-page-load-indicator>
+
       <div class="status-row" *ngIf="loading || notice || error">
         <div class="status-pill loading" *ngIf="loading">{{ 'permissions.loading' | translate }}</div>
         <div class="status-pill success" *ngIf="notice">{{ notice }}</div>

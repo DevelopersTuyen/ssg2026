@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 
 import { MarketAlertsPageRoutingModule } from './market-alerts-routing.module';
+import { SharedModule } from '../../shared/shared.module';
 
 import { MarketAlertsPage } from './market-alerts.page';
 
@@ -13,6 +14,7 @@ import { MarketAlertsPage } from './market-alerts.page';
     CommonModule,
     FormsModule,
     IonicModule,
+    SharedModule,
     MarketAlertsPageRoutingModule
   ],
   declarations: [MarketAlertsPage]

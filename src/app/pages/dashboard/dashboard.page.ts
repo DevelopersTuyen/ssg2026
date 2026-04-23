@@ -1,5 +1,8 @@
 import { AfterViewInit, Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription, forkJoin, interval, startWith } from 'rxjs';
+import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
+import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
+import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 import {
   AiAgentOverviewResponse,
   AiForecastCard,
@@ -96,6 +99,16 @@ interface CommandInsightVm {
   tone: 'default' | 'up' | 'warning';
 }
 
+interface StrategySignalAlertVm {
+  symbol: string;
+  title: string;
+  message: string;
+  prediction: string;
+  scope: string;
+  severity: string;
+  tags: string[];
+}
+
 interface SnapshotCardVm {
   label: string;
   value: string;
@@ -120,6 +133,7 @@ interface CommandSnapshotVm {
   standalone: false,
 })
 export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
+  private readonly pageLoadKey = 'dashboard';
   readonly newsPageSize = 5;
 
   selectedExchange: ExchangeTab = 'HSX';
@@ -167,20 +181,53 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
   private exchangeInitialized = false;
   private pollSub?: Subscription;
   private boardSub?: Subscription;
+  private stockSub?: Subscription;
+  private insightSub?: Subscription;
   private commandSub?: Subscription;
   private symbolSub?: Subscription;
   private searchSub?: Subscription;
+  private backgroundSub?: Subscription;
+  private financialSub?: Subscription;
   private renderTimer: any;
+  private activeView = false;
+  private lastIndexCapturedAt: string | null = null;
+  private lastStockCapturedAt: string | null = null;
+  private financialRequestedSymbol = '';
 
   private marketChart: any;
   private symbolChart: any;
   private watchDonut: any;
   private sparkCharts: any[] = [];
   private commandSnapshots: Partial<Record<ExchangeTab, CommandSnapshotVm>> = {};
+  private rawIndexCards: LiveIndexCardItem[] = [];
 
-  constructor(private api: MarketApiService) {}
+  constructor(
+    private api: MarketApiService,
+    private i18n: AppI18nService,
+    private backgroundRefresh: BackgroundRefreshService,
+    private pageLoadState: PageLoadStateService
+  ) {}
 
   ngOnInit(): void {
+    this.pageLoadState.registerPage(this.pageLoadKey, 'dashboard.title');
+    this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
+      if (!this.activeView) return;
+      if (domains.some((item) => ['quotes', 'intraday', 'indexDaily'].includes(item))) {
+        this.loadMarketWidget(true);
+      }
+      if (domains.some((item) => ['quotes', 'seedSymbols'].includes(item))) {
+        this.loadStockWidget(false, true);
+      }
+      if (domains.some((item) => ['news', 'quotes', 'intraday', 'financial'].includes(item))) {
+        this.loadInsightWidget(true);
+      }
+      if (domains.some((item) => ['quotes', 'intraday', 'seedSymbols'].includes(item)) && this.selectedSymbol) {
+        this.loadSelectedSymbol(true);
+      }
+      if (domains.some((item) => ['quotes', 'intraday', 'indexDaily', 'news', 'seedSymbols'].includes(item))) {
+        this.loadCommandSnapshots();
+      }
+    });
     this.bootstrap();
   }
 
@@ -188,12 +235,28 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     this.scheduleRender();
   }
 
+  ionViewDidEnter(): void {
+    this.activeView = true;
+    this.pageLoadState.setActivePage(this.pageLoadKey);
+    if (this.exchangeInitialized && !this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 12000)) {
+      this.loadDashboard(false, true);
+    }
+  }
+
+  ionViewDidLeave(): void {
+    this.activeView = false;
+  }
+
   ngOnDestroy(): void {
-    this.pollSub?.unsubscribe();
+    this.stopPolling();
     this.boardSub?.unsubscribe();
+    this.stockSub?.unsubscribe();
+    this.insightSub?.unsubscribe();
     this.commandSub?.unsubscribe();
     this.symbolSub?.unsubscribe();
     this.searchSub?.unsubscribe();
+    this.backgroundSub?.unsubscribe();
+    this.financialSub?.unsubscribe();
 
     if (this.renderTimer) {
       clearTimeout(this.renderTimer);
@@ -256,6 +319,10 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     return Math.max(0, Number((100 - this.breadthUpPercent - this.breadthDownPercent).toFixed(1)));
   }
 
+  get breadthSubtitle(): string {
+    return `${this.t('dashboard.breadthSubtitle')} ${this.breadthSource.length} ${this.selectedExchange}`;
+  }
+
   get hottestWatchlist(): WatchlistVm | null {
     return (
       [...this.watchlistRows].sort((a, b) => {
@@ -275,15 +342,17 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
 
     return [
       {
-        label: 'Chi so trung tam',
+        label: this.t('dashboard.snapshot.index'),
         value: selectedIndex?.valueText || '--',
-        helper: selectedIndex ? `${selectedIndex.symbol} ${selectedIndex.changeText} / ${selectedIndex.percentText}` : 'Chua co du lieu index',
+        helper: selectedIndex
+          ? `${selectedIndex.symbol} ${selectedIndex.changeText} / ${selectedIndex.percentText}`
+          : this.t('dashboard.empty.index'),
         tone: selectedIndex ? (selectedIndex.up ? 'up' : 'down') : 'default',
       },
       {
-        label: 'Do rong san',
+        label: this.t('dashboard.snapshot.breadth'),
         value: `${this.breadthUpCount}/${this.breadthDownCount}`,
-        helper: `${this.breadthNeutralCount} ma trung tinh trong mau quet`,
+        helper: `${this.breadthNeutralCount} ${this.t('dashboard.helper.neutralSample')}`,
         tone:
           this.breadthUpCount > this.breadthDownCount
             ? 'up'
@@ -292,41 +361,47 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
             : 'default',
       },
       {
-        label: 'Tong gia tri',
+        label: this.t('dashboard.snapshot.value'),
         value: totalTradingValue ? this.formatMoney(totalTradingValue) : '--',
-        helper: totalVolume ? `${this.formatAxisNumber(totalVolume)} khoi luong cong don` : 'Chua co du lieu dong tien',
+        helper: totalVolume
+          ? `${this.formatAxisNumber(totalVolume)} ${this.t('dashboard.helper.accumulatedVolume')}`
+          : this.t('dashboard.empty.flow'),
         tone: totalTradingValue ? 'up' : 'default',
       },
       {
-        label: 'Universe san',
+        label: this.t('dashboard.snapshot.universe'),
         value: this.exchangeStockTotal ? `${this.exchangeStockTotal} ma` : '--',
-        helper: `${this.marketUniverse.length || this.stocks.length} ma dang hien thi trong dashboard`,
+        helper: `${this.marketUniverse.length || this.stocks.length} ${this.t('dashboard.helper.symbolsShown')}`,
         tone: this.exchangeStockTotal ? 'default' : 'warning',
       },
       {
-        label: 'Dan dau tang',
+        label: this.t('dashboard.snapshot.topGainer'),
         value: strongestGainer?.symbol || '--',
-        helper: strongestGainer ? `${strongestGainer.changeText} / ${strongestGainer.percentText}` : 'Chua co ma tang manh',
+        helper: strongestGainer
+          ? `${strongestGainer.changeText} / ${strongestGainer.percentText}`
+          : this.t('dashboard.empty.topGainer'),
         tone: strongestGainer ? 'up' : 'default',
       },
       {
-        label: 'Dan dau giam',
+        label: this.t('dashboard.snapshot.topLoser'),
         value: strongestLoser?.symbol || '--',
-        helper: strongestLoser ? `${strongestLoser.changeText} / ${strongestLoser.percentText}` : 'Chua co ma giam manh',
+        helper: strongestLoser
+          ? `${strongestLoser.changeText} / ${strongestLoser.percentText}`
+          : this.t('dashboard.empty.topLoser'),
         tone: strongestLoser ? 'down' : 'default',
       },
       {
-        label: 'Watchlist noi bat',
+        label: this.t('dashboard.snapshot.watchlistHot'),
         value: this.hottestWatchlist?.symbol || '--',
         helper: this.hottestWatchlist
           ? `${this.hottestWatchlist.changeText} / ${this.hottestWatchlist.percentText}`
-          : 'Chua co ma watchlist bien dong',
+          : this.t('dashboard.empty.watchlistMove'),
         tone: this.hottestWatchlist ? (this.hottestWatchlist.up ? 'up' : 'warning') : 'default',
       },
       {
-        label: 'Tin dong bo',
+        label: this.t('dashboard.snapshot.news'),
         value: `${this.news.length} tin`,
-        helper: this.news[0]?.title || 'Chua co tin CafeF moi',
+        helper: this.news[0]?.title || this.t('dashboard.empty.news'),
         tone: this.news.length ? 'default' : 'warning',
       },
     ];
@@ -341,7 +416,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get commandScopeLabel(): string {
-    return this.selectedCommandScope === 'ALL' ? 'Tong quan 3 san' : this.selectedCommandScope;
+    return this.selectedCommandScope === 'ALL' ? this.t('dashboard.scope.all') : this.selectedCommandScope;
   }
 
   get commandScopeSnapshots(): CommandSnapshotVm[] {
@@ -411,7 +486,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get aiProviderText(): string {
-    if (!this.commandScopeAiOverviews.length) return 'Chua ket noi';
+    if (!this.commandScopeAiOverviews.length) return this.t('dashboard.empty.disconnected');
 
     const providers = new Set(
       this.commandScopeAiOverviews.map((item) => {
@@ -430,7 +505,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
       0
     );
     const watchlistCount = this.watchlistRows.length;
-    const topNews = this.news[0]?.title || 'Chua co tin noi bat';
+    const topNews = this.news[0]?.title || this.t('dashboard.empty.featuredNews');
     const positive = this.commandBreadthUpCount;
     const negative = this.commandBreadthDownCount;
     const neutral = this.commandBreadthNeutralCount;
@@ -444,54 +519,58 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
 
     return [
       {
-        label: 'AI alerts',
+        label: this.t('dashboard.command.aiAlerts'),
         value: `${totalAlerts}`,
-        helper: `${watchlistAlerts} lien quan watchlist`,
+        helper: `${watchlistAlerts} ${this.t('dashboard.helper.watchlistRelated')}`,
         tone: totalAlerts >= 8 ? 'warning' : 'default',
       },
       {
-        label: 'Watchlist focus',
+        label: this.t('dashboard.command.watchlistFocus'),
         value: `${watchlistCount} ma`,
-        helper: this.watchlistRows[0]?.symbol ? `Dang uu tien ${this.watchlistRows[0].symbol}` : 'Chua co ma uu tien',
+        helper: this.watchlistRows[0]?.symbol
+          ? `${this.t('dashboard.helper.prioritizing')} ${this.watchlistRows[0].symbol}`
+          : this.t('dashboard.empty.prioritySymbol'),
         tone: watchlistCount ? 'up' : 'default',
       },
       {
-        label: 'News pulse',
-        value: this.news.length ? 'CafeF live' : 'No feed',
+        label: this.t('dashboard.command.newsPulse'),
+        value: this.news.length ? this.t('dashboard.value.cafefLive') : this.t('dashboard.value.noFeed'),
         helper: topNews,
         tone: this.news.length ? 'up' : 'default',
       },
       {
-        label: 'AI provider',
+        label: this.t('dashboard.command.aiProvider'),
         value:
           this.selectedCommandScope === 'ALL'
-            ? `${this.commandScopeSnapshots.length}/3 exchanges`
-            : this.commandScopeAiOverviews[0]?.model || 'fallback',
+            ? `${this.commandScopeSnapshots.length}/3 ${this.t('dashboard.value.exchanges')}`
+            : this.commandScopeAiOverviews[0]?.model || this.t('dashboard.value.fallback'),
         helper: this.aiProviderText,
         tone: this.commandScopeAiOverviews.some((item) => item.used_fallback) ? 'warning' : 'up',
       },
       {
-        label: 'Market breadth',
+        label: this.t('dashboard.command.marketBreadth'),
         value: `${positive}/${negative}`,
-        helper: `${neutral} ma dung gia`,
+        helper: `${neutral} ${this.t('dashboard.helper.flatSymbols')}`,
         tone: positive > negative ? 'up' : negative > positive ? 'down' : 'default',
       },
       {
-        label: 'Flow pulse',
+        label: this.t('dashboard.command.flowPulse'),
         value: totalTradingValue ? this.formatMoney(totalTradingValue) : '--',
-        helper: this.commandHourlyTrading.length ? `${this.commandHourlyTrading.length} moc du lieu command center` : 'Chua co du lieu dong tien',
+        helper: this.commandHourlyTrading.length
+          ? `${this.commandHourlyTrading.length} ${this.t('dashboard.helper.commandPoints')}`
+          : this.t('dashboard.empty.flow'),
         tone: totalTradingValue ? 'up' : 'default',
       },
       {
-        label: 'Lead mover',
+        label: this.t('dashboard.command.leadMover'),
         value: leadMover?.symbol || '--',
-        helper: leadMover ? `${leadMover.changeText} / ${leadMover.percentText}` : 'Chua co ma noi bat',
+        helper: leadMover ? `${leadMover.changeText} / ${leadMover.percentText}` : this.t('dashboard.empty.highlightSymbol'),
         tone: leadMover ? (leadMover.up ? 'up' : 'down') : 'default',
       },
       {
-        label: 'Watchlist heat',
+        label: this.t('dashboard.command.watchlistHeat'),
         value: `${hotWatchlist}`,
-        helper: 'Ma watchlist bien dong tu 2% tro len',
+        helper: this.t('dashboard.helper.watchlistHeat'),
         tone: hotWatchlist >= 3 ? 'warning' : hotWatchlist > 0 ? 'up' : 'default',
       },
     ];
@@ -509,28 +588,28 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
 
     return [
       {
-        label: 'Do rong san',
+        label: this.t('dashboard.signal.breadth'),
         value: `${positive} tang / ${negative} giam`,
         helper:
           this.selectedCommandScope === 'ALL'
-            ? `${this.commandStocks.length} ma tong hop trong AI command center`
+            ? `${this.commandStocks.length} ${this.t('dashboard.helper.commandUniverse')}`
             : this.exchangeStockTotal
-            ? `${this.exchangeStockTotal} ma trong universe san`
-            : 'Chua co snapshot thi truong',
+            ? `${this.exchangeStockTotal} ${this.t('dashboard.helper.exchangeUniverse')}`
+            : this.t('dashboard.empty.marketSnapshot'),
         tone: positive > negative ? 'up' : negative > positive ? 'down' : 'default',
       },
       {
-        label: 'Dong tien trong phien',
+        label: this.t('dashboard.signal.flow'),
         value: totalVolume ? this.formatAxisNumber(totalVolume) : '--',
-        helper: this.hourlyTrading.length ? 'Tong khoi luong cong don theo gio' : 'Chua co du lieu giao dich',
+        helper: this.hourlyTrading.length ? this.t('dashboard.helper.hourlyAccumulated') : this.t('dashboard.empty.trading'),
         tone: totalVolume ? 'up' : 'default',
       },
       {
-        label: 'Watchlist can chu y',
+        label: this.t('dashboard.signal.watchlist'),
         value: strongestWatch?.symbol || '--',
         helper: strongestWatch
           ? `${strongestWatch.changeText} / ${strongestWatch.percentText}`
-          : 'Chua co ma watchlist noi bat',
+          : this.t('dashboard.empty.watchlistFocus'),
         tone: strongestWatch ? (strongestWatch.up ? 'up' : 'warning') : 'default',
       },
     ];
@@ -565,7 +644,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
 
       if (scopedAlert?.headline) {
         items.push({
-          title: 'Market headline',
+          title: this.t('dashboard.insight.marketHeadline'),
           text: scopedAlert.headline,
           tone: 'up',
         });
@@ -573,7 +652,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
 
       if (scopedAlert?.watchlist_headline) {
         items.push({
-          title: 'Watchlist lens',
+          title: this.t('dashboard.insight.watchlistLens'),
           text: scopedAlert.watchlist_headline,
           tone: 'warning',
         });
@@ -581,7 +660,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
 
       if (scopedAi?.assistant_greeting) {
         items.push({
-          title: 'AI note',
+          title: this.t('dashboard.insight.aiNote'),
           text: scopedAi.assistant_greeting,
           tone: 'default',
         });
@@ -590,13 +669,50 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
 
     if (!items.length && this.news[0]?.title) {
       items.push({
-        title: 'CafeF pulse',
+        title: this.t('dashboard.insight.cafefPulse'),
         text: this.news[0].title,
         tone: 'default',
       });
     }
 
     return items.slice(0, 3);
+  }
+
+  get preNewsSignalAlerts(): StrategySignalAlertVm[] {
+    const sourceAlerts =
+      this.selectedCommandScope === 'ALL'
+        ? this.commandScopeAlertsOverviews.reduce<MarketAlertItem[]>(
+            (acc, overview: MarketAlertsOverviewResponse) => acc.concat(overview.alerts || []),
+            []
+          )
+        : this.alertsOverview?.alerts || [];
+
+    const seen = new Set<string>();
+    const items: StrategySignalAlertVm[] = [];
+    for (const item of sourceAlerts) {
+      const tags = item.tags || [];
+      if (!tags.includes('strategy')) {
+        continue;
+      }
+      const key = `${item.symbol}|${item.title}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      items.push({
+        symbol: item.symbol,
+        title: item.title,
+        message: item.message,
+        prediction: item.prediction,
+        scope: item.scope,
+        severity: item.severity,
+        tags,
+      });
+      if (items.length >= 4) {
+        break;
+      }
+    }
+    return items;
   }
 
   get commandFocusSymbols(): string[] {
@@ -660,6 +776,10 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     return this.financialOverview?.sections || [];
   }
 
+  get financialSyncStatus() {
+    return this.financialOverview?.syncStatus || null;
+  }
+
   changeExchange(exchange: ExchangeTab): void {
     if (this.selectedExchange === exchange) return;
     this.selectedExchange = exchange;
@@ -689,7 +809,9 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     this.selectedSymbol = symbol;
     this.financialModalOpen = false;
     this.financialOverview = null;
+    this.financialRequestedSymbol = '';
     this.loadSelectedSymbol();
+    this.ensureFinancialOverview(symbol, true);
   }
 
   closeSymbolModal(): void {
@@ -702,7 +824,7 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     if (this.financialOverview?.symbol === this.selectedSymbol) {
       return;
     }
-    this.loadFinancialOverview();
+    this.ensureFinancialOverview(this.selectedSymbol);
   }
 
   closeFinancialModal(): void {
@@ -781,12 +903,19 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
       }
 
       this.loadDashboard(true);
-
-      this.pollSub?.unsubscribe();
-      this.pollSub = interval(30000)
-        .pipe(startWith(30000))
-        .subscribe(() => this.loadDashboard(false));
     });
+  }
+
+  private startPolling(): void {
+    this.pollSub?.unsubscribe();
+    this.pollSub = interval(120000)
+      .pipe(startWith(120000))
+      .subscribe(() => this.loadDashboard(false));
+  }
+
+  private stopPolling(): void {
+    this.pollSub?.unsubscribe();
+    this.pollSub = undefined;
   }
 
   private detectDefaultExchange(items: WatchlistItem[]): ExchangeTab {
@@ -808,53 +937,104 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     return best || 'HSX';
   }
 
-  private loadDashboard(resetSelectedSymbol: boolean): void {
-    this.loading = true;
-    this.boardSub?.unsubscribe();
+  private loadDashboard(resetSelectedSymbol: boolean, silent = false): void {
+    if (!silent) {
+      this.loading = true;
+      this.pageLoadState.start(this.pageLoadKey);
+    } else {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
+    let hasError = false;
+    let pending = 3;
+    const finish = (failed = false) => {
+      if (failed) {
+        hasError = true;
+      }
+      pending -= 1;
+      const completed = 3 - pending;
+      this.pageLoadState.setProgress(this.pageLoadKey, 15 + completed * 25);
+      if (pending <= 0) {
+        this.loading = false;
+        this.loadCommandSnapshots();
+        if (hasError) {
+          this.pageLoadState.fail(this.pageLoadKey, 'Một phần dữ liệu chưa tải xong.');
+        } else {
+          this.pageLoadState.finish(this.pageLoadKey);
+        }
+      }
+    };
 
+    this.loadMarketWidget(true, finish);
+    this.loadStockWidget(resetSelectedSymbol, true, finish);
+    this.loadInsightWidget(true, finish);
+  }
+
+  private loadMarketWidget(silent = false, done?: (failed?: boolean) => void): void {
+    if (silent && !done) {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
+    this.boardSub?.unsubscribe();
     this.boardSub = forkJoin({
       indexCards: this.api.getLiveIndexCards(),
       hourlyTrading: this.api.getHourlyTrading(this.selectedExchange),
       indexSeries: this.api.getLiveIndexSeries(this.selectedExchange),
-      stocks: this.api.getAllStocks(this.selectedExchange, 'actives', 1, 5000),
-      gainers: this.api.getAllStocks(this.selectedExchange, 'gainers', 1, 8),
-      losers: this.api.getAllStocks(this.selectedExchange, 'losers', 1, 8),
-      watchlist: this.api.listWatchlist(),
-      news: this.api.getNews(20),
-      aiOverview: this.api.getAiAgentOverview(this.selectedExchange),
-      alertsOverview: this.api.getMarketAlertsOverview(this.selectedExchange),
     }).subscribe({
-      next: ({ indexCards, hourlyTrading, indexSeries, stocks, gainers, losers, watchlist, news, aiOverview, alertsOverview }) => {
+      next: ({ indexCards, hourlyTrading, indexSeries }) => {
         const indexItems = indexCards.items || [];
-        const activeItems = stocks.items || [];
-        const gainerItems = gainers.items || [];
-        const loserItems = losers.items || [];
-        const watchlistItems = (watchlist.data || []).filter((x) => x.is_active !== false);
-
+        this.rawIndexCards = indexItems;
         this.indexCards = indexItems.map((x) => this.toIndexCardVm(x));
         this.marketRows = this.indexCards;
         this.marketIndexSeries = (indexSeries.items || []).sort(
           (a, b) => new Date(a.time || 0).getTime() - new Date(b.time || 0).getTime()
         );
         this.hourlyTrading = this.resolveMarketHourlySeries(hourlyTrading.items || [], this.marketIndexSeries);
+        this.lastIndexCapturedAt = indexCards.capturedAt || null;
+        this.updateLastUpdated();
+        this.refreshDerivedWidgets();
+        if (this.selectedSymbol) {
+          this.loadSelectedSymbol(true);
+        }
+        this.scheduleRender();
+        if (silent && !done) {
+          this.pageLoadState.finish(this.pageLoadKey);
+        }
+        done?.(false);
+      },
+      error: () => {
+        if (!silent) {
+          this.loading = false;
+        }
+        if (silent && !done) {
+          this.pageLoadState.fail(this.pageLoadKey, 'Không cập nhật được block thị trường.');
+        }
+        done?.(true);
+      },
+    });
+  }
+
+  private loadStockWidget(resetSelectedSymbol: boolean, silent = false, done?: (failed?: boolean) => void): void {
+    if (silent && !done) {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
+    this.stockSub?.unsubscribe();
+    this.stockSub = forkJoin({
+      stocks: this.api.getAllStocks(this.selectedExchange, 'actives', 1, 5000),
+      gainers: this.api.getAllStocks(this.selectedExchange, 'gainers', 1, 8),
+      losers: this.api.getAllStocks(this.selectedExchange, 'losers', 1, 8),
+      watchlist: this.api.listWatchlist(),
+    }).subscribe({
+      next: ({ stocks, gainers, losers, watchlist }) => {
+        const activeItems = stocks.items || [];
+        const gainerItems = gainers.items || [];
+        const loserItems = losers.items || [];
+        const watchlistItems = (watchlist.data || []).filter((x) => x.is_active !== false);
+
         this.stocks = activeItems.map((x) => this.toStockVm(x));
         this.gainerStocks = gainerItems.map((x) => this.toStockVm(x));
         this.loserStocks = loserItems.map((x) => this.toStockVm(x));
         this.marketUniverse = this.mergeDistinctStocks(activeItems, gainerItems, loserItems).map((x) => this.toStockVm(x));
         this.exchangeStockTotal = stocks.total || this.marketUniverse.length || this.stocks.length;
-        this.news = news || [];
-        this.currentNewsPage = 1;
-        this.aiOverview = aiOverview.data || null;
-        this.alertsOverview = alertsOverview.data || null;
-        this.lastUpdated = this.resolveLastUpdated(indexCards.capturedAt || stocks.capturedAt);
-        this.commandSnapshots[this.selectedExchange] = {
-          exchange: this.selectedExchange,
-          stocks: this.marketUniverse,
-          hourlyTrading: this.hourlyTrading,
-          aiOverview: this.aiOverview,
-          alertsOverview: this.alertsOverview,
-        };
-
+        this.lastStockCapturedAt = stocks.capturedAt || null;
         this.buildWatchlistRows(watchlistItems, this.marketUniverse);
 
         const selectedFromWatchlist = watchlistItems.find(
@@ -865,34 +1045,90 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
           this.selectedSymbol = this.resolvePreferredSelectedSymbol(selectedFromWatchlist);
         }
 
-        this.aiForecast = this.buildForecast(
-          this.aiOverview?.forecast_cards || [],
-          indexItems,
-          this.hourlyTrading,
-          this.marketUniverse.map((item) => item.raw)
-        );
-        this.alerts = this.buildAlerts(
-          this.alertsOverview?.alerts || [],
-          this.marketUniverse.map((item) => item.raw),
-          this.watchlistRows,
-          this.news
-        );
-
+        this.updateLastUpdated();
+        this.refreshDerivedWidgets();
         if (this.selectedSymbol) {
-          this.loadSelectedSymbol();
-        } else {
-          this.selectedQuote = null;
-          this.selectedHourly = [];
+          this.loadSelectedSymbol(true);
         }
-
-        this.loading = false;
-        this.loadCommandSnapshots();
         this.scheduleRender();
+        if (silent && !done) {
+          this.pageLoadState.finish(this.pageLoadKey);
+        }
+        done?.(false);
       },
       error: () => {
-        this.loading = false;
+        if (!silent) {
+          this.loading = false;
+        }
+        if (silent && !done) {
+          this.pageLoadState.fail(this.pageLoadKey, 'Không cập nhật được block cổ phiếu.');
+        }
+        done?.(true);
       },
     });
+  }
+
+  private loadInsightWidget(silent = false, done?: (failed?: boolean) => void): void {
+    if (silent && !done) {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
+    this.insightSub?.unsubscribe();
+    this.insightSub = forkJoin({
+      news: this.api.getNews(20),
+      aiOverview: this.api.getAiAgentOverview(this.selectedExchange),
+      alertsOverview: this.api.getMarketAlertsOverview(this.selectedExchange),
+    }).subscribe({
+      next: ({ news, aiOverview, alertsOverview }) => {
+        this.news = news || [];
+        this.currentNewsPage = 1;
+        this.aiOverview = aiOverview.data || null;
+        this.alertsOverview = alertsOverview.data || null;
+        this.refreshDerivedWidgets();
+        if (silent && !done) {
+          this.pageLoadState.finish(this.pageLoadKey);
+        }
+        done?.(false);
+      },
+      error: () => {
+        if (!silent) {
+          this.loading = false;
+        }
+        if (silent && !done) {
+          this.pageLoadState.fail(this.pageLoadKey, 'Không cập nhật được block AI và tin tức.');
+        }
+        done?.(true);
+      },
+    });
+  }
+
+  private refreshDerivedWidgets(): void {
+    this.aiForecast = this.buildForecast(
+      this.aiOverview?.forecast_cards || [],
+      this.rawIndexCards,
+      this.hourlyTrading,
+      this.marketUniverse.map((item) => item.raw)
+    );
+    this.alerts = this.buildAlerts(
+      this.alertsOverview?.alerts || [],
+      this.marketUniverse.map((item) => item.raw),
+      this.watchlistRows,
+      this.news
+    );
+    this.updateSelectedExchangeCommandSnapshot();
+  }
+
+  private updateLastUpdated(): void {
+    this.lastUpdated = this.resolveLastUpdated(this.lastStockCapturedAt || this.lastIndexCapturedAt);
+  }
+
+  private updateSelectedExchangeCommandSnapshot(): void {
+    this.commandSnapshots[this.selectedExchange] = {
+      exchange: this.selectedExchange,
+      stocks: this.marketUniverse,
+      hourlyTrading: this.hourlyTrading,
+      aiOverview: this.aiOverview,
+      alertsOverview: this.alertsOverview,
+    };
   }
 
   private buildWatchlistRows(items: WatchlistItem[], stockPool: StockVm[]): void {
@@ -1001,10 +1237,12 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     };
   }
 
-  private loadSelectedSymbol(): void {
+  private loadSelectedSymbol(silent = false): void {
     if (!this.selectedSymbol) return;
 
-    this.symbolLoading = true;
+    if (!silent) {
+      this.symbolLoading = true;
+    }
     this.symbolSub?.unsubscribe();
 
     this.symbolSub = forkJoin({
@@ -1025,16 +1263,26 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  private loadFinancialOverview(): void {
-    if (!this.selectedSymbol) return;
+  private ensureFinancialOverview(symbol: string, silent = false): void {
+    if (!symbol) return;
+    if (this.financialOverview?.symbol === symbol) return;
+    if (this.financialLoading && this.financialRequestedSymbol === symbol) return;
 
+    this.financialSub?.unsubscribe();
+    this.financialRequestedSymbol = symbol;
     this.financialLoading = true;
-    this.api.getSymbolFinancials(this.selectedSymbol, 18).subscribe({
+    this.financialSub = this.api.getSymbolFinancials(symbol, 12).subscribe({
       next: (data) => {
+        if (this.financialRequestedSymbol !== symbol) {
+          return;
+        }
         this.financialOverview = data;
         this.financialLoading = false;
       },
       error: () => {
+        if (this.financialRequestedSymbol !== symbol) {
+          return;
+        }
         this.financialOverview = null;
         this.financialLoading = false;
       },
@@ -1141,6 +1389,10 @@ export class DashboardPage implements OnInit, AfterViewInit, OnDestroy {
     }));
 
     return [...strongMovers, ...watchAlerts, ...newsAlerts];
+  }
+
+  private t(key: string): string {
+    return this.i18n.translate(key);
   }
 
   private toIndexCardVm(item: LiveIndexCardItem): IndexCardVm {

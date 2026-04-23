@@ -215,3 +215,30 @@ async def create_strategy_journal(
     data = await strategy_service.create_journal_entry(user, body)
     await session.commit()
     return ApiEnvelope(data=data)
+
+
+@router.put("/journal/{entry_id}", response_model=ApiEnvelope)
+async def update_strategy_journal(
+    entry_id: int,
+    authorization: str | None = Header(default=None),
+    body: dict[str, Any] = Body(default_factory=dict),
+    services: tuple[AuthService, StrategyService, Any] = Depends(get_services),
+):
+    auth_service, strategy_service, session = services
+    user = await auth_service.get_current_user(_extract_bearer_token(authorization))
+    data = await strategy_service.update_journal_entry(user, entry_id, body)
+    await session.commit()
+    return ApiEnvelope(data=data)
+
+
+@router.delete("/journal/{entry_id}", response_model=ApiEnvelope)
+async def delete_strategy_journal(
+    entry_id: int,
+    authorization: str | None = Header(default=None),
+    services: tuple[AuthService, StrategyService, Any] = Depends(get_services),
+):
+    auth_service, strategy_service, session = services
+    user = await auth_service.get_current_user(_extract_bearer_token(authorization))
+    data = await strategy_service.delete_journal_entry(user, entry_id)
+    await session.commit()
+    return ApiEnvelope(data=data)

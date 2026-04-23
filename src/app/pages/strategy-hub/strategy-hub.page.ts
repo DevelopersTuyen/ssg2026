@@ -1,5 +1,7 @@
-import { Component, OnInit } from '@angular/core';
-import { forkJoin } from 'rxjs';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription, forkJoin } from 'rxjs';
+import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
+import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 
 import {
   StrategyAlertRule,
@@ -11,6 +13,7 @@ import {
   StrategyParameter,
   StrategyProfile,
   StrategyProfileConfigResponse,
+  StrategyRuleResult,
   StrategyRiskOverviewResponse,
   StrategyScreenRule,
   StrategyScoredItem,
@@ -28,19 +31,42 @@ interface StrategyVariableHint {
   kind: 'metric' | 'parameter' | 'formula';
 }
 
+interface StrategyDecisionNarrative {
+  label: string;
+  status: 'pass' | 'fail' | 'warn';
+  detail: string;
+}
+
+interface StrategyJournalSuggestion {
+  symbol: string;
+  classification: string;
+  tradeSide: 'buy' | 'sell';
+  entryPrice: number | null;
+  exitPrice: number | null;
+  stopLossPrice: number | null;
+  takeProfitPrice: number | null;
+  positionSize: number | null;
+  strategyName: string;
+  psychology: string;
+  notes: string;
+  reasons: string[];
+}
+
+type StrategyExecutionBadgeState = 'ready' | 'wait' | 'standAside';
+
 const VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
-  Q: { key: 'Q', label: 'Q Score', description: 'Điểm chất lượng doanh nghiệp/độ khỏe của mã.', kind: 'formula' },
+  Q: { key: 'Q', label: 'Q Score', description: 'Điểm chất lượng doanh nghiệp và độ khỏe của mã.', kind: 'formula' },
   L: { key: 'L', label: 'L Score', description: 'Điểm leadership và mức độ đi cùng xu hướng thị trường.', kind: 'formula' },
   M: { key: 'M', label: 'M Score', description: 'Điểm động lực và xác nhận breakout.', kind: 'formula' },
-  P: { key: 'P', label: 'P Score', description: 'Hệ số giá/rủi ro dùng làm mẫu số giảm bớt hưng phấn mua đuổi.', kind: 'formula' },
-  liquidity_score: { key: 'liquidity_score', label: 'Điểm thanh khoản', description: 'Mức dễ vào/ra lệnh dựa trên giá trị giao dịch.', kind: 'metric' },
+  P: { key: 'P', label: 'P Score', description: 'Hệ số giá và rủi ro dùng làm mẫu số để giảm bớt hưng phấn mua đuổi.', kind: 'formula' },
+  liquidity_score: { key: 'liquidity_score', label: 'Điểm thanh khoản', description: 'Mức dễ vào và ra lệnh dựa trên giá trị giao dịch.', kind: 'metric' },
   stability_score: { key: 'stability_score', label: 'Điểm ổn định giá', description: 'Giá biến động càng ổn định thì điểm càng cao.', kind: 'metric' },
   news_score: { key: 'news_score', label: 'Điểm tin tức', description: 'Mức độ được nhắc tới trong luồng tin hiện tại.', kind: 'metric' },
   watchlist_bonus: { key: 'watchlist_bonus', label: 'Điểm ưu tiên watchlist', description: 'Thưởng điểm nếu mã nằm trong danh sách theo dõi.', kind: 'metric' },
   leadership_score: { key: 'leadership_score', label: 'Điểm dẫn dắt', description: 'Khả năng dẫn dòng tiền và nổi bật trong sàn.', kind: 'metric' },
   market_trend_score: { key: 'market_trend_score', label: 'Điểm xu hướng sàn', description: 'Sức khỏe của sàn giao dịch mà mã đang thuộc về.', kind: 'metric' },
   volume_score: { key: 'volume_score', label: 'Điểm volume', description: 'Mức thanh khoản tương đối so với universe.', kind: 'metric' },
-  momentum_score: { key: 'momentum_score', label: 'Điểm động lượng giá', description: 'Độ mạnh của % tăng/giảm hiện tại.', kind: 'metric' },
+  momentum_score: { key: 'momentum_score', label: 'Điểm động lượng giá', description: 'Độ mạnh của phần trăm tăng hoặc giảm hiện tại.', kind: 'metric' },
   volume_confirmation_score: { key: 'volume_confirmation_score', label: 'Điểm xác nhận volume', description: 'Volume có đang ủng hộ xu hướng giá hay không.', kind: 'metric' },
   price_risk_score: { key: 'price_risk_score', label: 'Điểm rủi ro giá', description: 'Giá càng nóng thì rủi ro càng cao.', kind: 'metric' },
   hotness_score: { key: 'hotness_score', label: 'Điểm quá nóng', description: 'Dùng để phát hiện mã bị kéo quá nhanh.', kind: 'metric' },
@@ -55,6 +81,61 @@ const VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
   winning_score: { key: 'winning_score', label: 'Winning Score', description: 'Điểm tổng hợp cuối cùng để xếp hạng mã.', kind: 'formula' },
   journal_entries_today: { key: 'journal_entries_today', label: 'Số entry journal hôm nay', description: 'Dùng cho checklist kỷ luật cuối ngày.', kind: 'metric' },
 };
+
+const EXTENDED_VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
+  pe_current: { key: 'pe_current', label: 'P/E', description: 'Hệ số P/E hiện tại của mã.', kind: 'metric' },
+  pb_current: { key: 'pb_current', label: 'P/B', description: 'Hệ số P/B hiện tại của mã.', kind: 'metric' },
+  bv_current: { key: 'bv_current', label: 'Book value', description: 'Giá trị sổ sách trên mỗi cổ phần.', kind: 'metric' },
+  eps_current: { key: 'eps_current', label: 'EPS', description: 'EPS hiện tại dùng để lọc tăng trưởng.', kind: 'metric' },
+  eps_growth_year: { key: 'eps_growth_year', label: 'EPS growth năm', description: 'Tăng trưởng EPS năm gần nhất so với năm trước.', kind: 'metric' },
+  eps_growth_quarter: { key: 'eps_growth_quarter', label: 'EPS growth quý', description: 'Tăng trưởng EPS quý gần nhất so với cùng kỳ.', kind: 'metric' },
+  roe_current: { key: 'roe_current', label: 'ROE', description: 'ROE hiện tại của doanh nghiệp.', kind: 'metric' },
+  dar_current: { key: 'dar_current', label: 'DAR', description: 'Tỷ lệ nợ trên tài sản hiện tại.', kind: 'metric' },
+  gross_margin_current: { key: 'gross_margin_current', label: 'Biên gộp', description: 'Biên lợi nhuận gộp gần nhất.', kind: 'metric' },
+  gross_margin_change: { key: 'gross_margin_change', label: 'Biến động biên gộp', description: 'Mức cải thiện hoặc suy giảm biên gộp.', kind: 'metric' },
+  quality_flag_count: { key: 'quality_flag_count', label: 'Số cờ chất lượng', description: 'Số tiêu chí chất lượng hiện đang đạt.', kind: 'metric' },
+  industry_pe_average: { key: 'industry_pe_average', label: 'P/E peer average', description: 'P/E trung bình nhóm so sánh hiện tại.', kind: 'metric' },
+  pe_gap_to_peer: { key: 'pe_gap_to_peer', label: 'P/E gap to peer', description: 'Khoảng cách P/E so với trung bình nhóm.', kind: 'metric' },
+  industry_pb_average: { key: 'industry_pb_average', label: 'P/B peer average', description: 'P/B trung bình nhóm so sánh hiện tại.', kind: 'metric' },
+  pb_gap_to_peer: { key: 'pb_gap_to_peer', label: 'P/B gap to peer', description: 'Khoảng cách P/B so với trung bình nhóm.', kind: 'metric' },
+  ma10_volume: { key: 'ma10_volume', label: 'MA10 volume', description: 'Khối lượng trung bình 10 phiên.', kind: 'metric' },
+  ma20_volume: { key: 'ma20_volume', label: 'MA20 volume', description: 'Khối lượng trung bình 20 phiên.', kind: 'metric' },
+  volume_spike_ratio: { key: 'volume_spike_ratio', label: 'Volume spike ratio', description: 'Tỷ lệ volume hiện tại so với MA10 hoặc MA20.', kind: 'metric' },
+  ema10: { key: 'ema10', label: 'EMA10', description: 'Đường EMA10 của giá đóng cửa.', kind: 'metric' },
+  ema20: { key: 'ema20', label: 'EMA20', description: 'Đường EMA20 của giá đóng cửa.', kind: 'metric' },
+  ema_gap_pct: { key: 'ema_gap_pct', label: 'EMA gap %', description: 'Khoảng cách giá hiện tại với EMA10 hoặc EMA20.', kind: 'metric' },
+  close_above_ema10: { key: 'close_above_ema10', label: 'Đóng trên EMA10', description: 'Cờ xác nhận giá đóng cửa đang nằm trên EMA10.', kind: 'metric' },
+  close_above_ema20: { key: 'close_above_ema20', label: 'Đóng trên EMA20', description: 'Cờ xác nhận giá đóng cửa đang nằm trên EMA20.', kind: 'metric' },
+  smart_money_inflow: { key: 'smart_money_inflow', label: 'Smart money inflow', description: 'Dòng tiền lớn vào với volume xác nhận và giá vượt vùng.', kind: 'metric' },
+  surge_trap: { key: 'surge_trap', label: 'Surge trap', description: 'Volume bùng nổ nhưng nến cho tín hiệu xả hoặc trap.', kind: 'metric' },
+  no_supply: { key: 'no_supply', label: 'No supply', description: 'Nhịp kéo về với volume cạn ở hỗ trợ.', kind: 'metric' },
+  volume_divergence: { key: 'volume_divergence', label: 'Volume divergence', description: 'Giá tăng nhưng volume suy yếu dần.', kind: 'metric' },
+  breakout_confirmation: { key: 'breakout_confirmation', label: 'Breakout confirmation', description: 'Mã đang xác nhận breakout với giá và volume.', kind: 'metric' },
+  spring_shakeout: { key: 'spring_shakeout', label: 'Spring / Shakeout', description: 'Rút chân mạnh sau khi thủng hỗ trợ.', kind: 'metric' },
+  absorption: { key: 'absorption', label: 'Absorption', description: 'Chuỗi nến hấp thụ nguồn cung với volume tăng dần.', kind: 'metric' },
+  pullback_retest: { key: 'pullback_retest', label: 'Pullback retest', description: 'Nhịp test lại breakout hoặc EMA thành công.', kind: 'metric' },
+  bullish_pattern_score: { key: 'bullish_pattern_score', label: 'Bullish pattern score', description: 'Điểm tổng hợp của các mẫu nến tăng giá.', kind: 'metric' },
+  bearish_pattern_score: { key: 'bearish_pattern_score', label: 'Bearish pattern score', description: 'Điểm tổng hợp của các mẫu nến giảm giá.', kind: 'metric' },
+  stop_loss_pct: { key: 'stop_loss_pct', label: 'Stop-loss %', description: 'Tỷ lệ stop-loss gợi ý theo execution engine.', kind: 'metric' },
+  obv_value: { key: 'obv_value', label: 'OBV value', description: 'Giá trị OBV hiện tại của mã.', kind: 'metric' },
+  obv_ma10: { key: 'obv_ma10', label: 'OBV MA10', description: 'Đường trung bình 10 phiên của OBV.', kind: 'metric' },
+  obv_slope_pct: { key: 'obv_slope_pct', label: 'OBV slope %', description: 'Độ dốc gần đây của OBV.', kind: 'metric' },
+  obv_trend_score: { key: 'obv_trend_score', label: 'OBV trend score', description: 'Điểm xu hướng dòng tiền theo OBV.', kind: 'metric' },
+  obv_above_ma: { key: 'obv_above_ma', label: 'OBV trên MA', description: 'OBV đang nằm trên đường trung bình tham chiếu.', kind: 'metric' },
+  price_context_score: { key: 'price_context_score', label: 'Price context score', description: 'Điểm bối cảnh giá: EMA, nền chặt và vùng gần breakout.', kind: 'metric' },
+  near_breakout_zone: { key: 'near_breakout_zone', label: 'Near breakout zone', description: 'Giá đang nằm sát vùng breakout.', kind: 'metric' },
+  base_tightness_pct: { key: 'base_tightness_pct', label: 'Base tightness %', description: 'Độ chặt của nền giá gần đây.', kind: 'metric' },
+  base_is_tight: { key: 'base_is_tight', label: 'Nền giá chặt', description: 'Cờ xác nhận nền giá đang chặt.', kind: 'metric' },
+  news_pressure_score: { key: 'news_pressure_score', label: 'News pressure score', description: 'Mức độ tin tức đang gây áp lực hoặc hưng phấn lên mã.', kind: 'metric' },
+  pre_news_accumulation: { key: 'pre_news_accumulation', label: 'Pre-news accumulation', description: 'Dòng tiền tích lũy trước khi tin bùng nổ.', kind: 'metric' },
+  obv_breakout_confirmation: { key: 'obv_breakout_confirmation', label: 'OBV breakout confirmation', description: 'OBV xác nhận cho breakout.', kind: 'metric' },
+  smart_money_before_news: { key: 'smart_money_before_news', label: 'Smart money before news', description: 'Dòng tiền lớn vào trước khi news pressure tăng.', kind: 'metric' },
+  obv_distribution: { key: 'obv_distribution', label: 'OBV distribution', description: 'Cảnh báo phân phối sớm theo OBV.', kind: 'metric' },
+  weak_news_chase: { key: 'weak_news_chase', label: 'Weak news chase', description: 'Tin nhiều nhưng dòng tiền không đồng thuận.', kind: 'metric' },
+  money_flow_score: { key: 'money_flow_score', label: 'Money flow score', description: 'Điểm tổng hợp của engine dòng tiền trước tin.', kind: 'metric' },
+};
+
+Object.assign(VARIABLE_HINTS, EXTENDED_VARIABLE_HINTS);
 
 const EXPRESSION_RESERVED_WORDS = new Set([
   'and',
@@ -102,13 +183,69 @@ const EXPRESSION_VARIABLE_ORDER = [
   'journal_entries_today',
 ];
 
+EXPRESSION_VARIABLE_ORDER.splice(
+  5,
+  0,
+  'pe_current',
+  'pb_current',
+  'bv_current',
+  'eps_current',
+  'eps_growth_year',
+  'eps_growth_quarter',
+  'roe_current',
+  'dar_current',
+  'gross_margin_current',
+  'gross_margin_change',
+  'quality_flag_count',
+  'industry_pe_average',
+  'pe_gap_to_peer',
+  'industry_pb_average',
+  'pb_gap_to_peer',
+  'ma10_volume',
+  'ma20_volume',
+  'volume_spike_ratio',
+  'ema10',
+  'ema20',
+  'ema_gap_pct',
+  'close_above_ema10',
+  'close_above_ema20',
+  'smart_money_inflow',
+  'surge_trap',
+  'no_supply',
+  'volume_divergence',
+  'breakout_confirmation',
+  'spring_shakeout',
+  'absorption',
+  'pullback_retest',
+  'bullish_pattern_score',
+  'bearish_pattern_score',
+  'stop_loss_pct',
+  'obv_value',
+  'obv_ma10',
+  'obv_slope_pct',
+  'obv_trend_score',
+  'obv_above_ma',
+  'price_context_score',
+  'near_breakout_zone',
+  'base_tightness_pct',
+  'base_is_tight',
+  'news_pressure_score',
+  'pre_news_accumulation',
+  'obv_breakout_confirmation',
+  'smart_money_before_news',
+  'obv_distribution',
+  'weak_news_chase',
+  'money_flow_score'
+);
+
 @Component({
   selector: 'app-strategy-hub',
   templateUrl: './strategy-hub.page.html',
   styleUrls: ['./strategy-hub.page.scss'],
   standalone: false,
 })
-export class StrategyHubPage implements OnInit {
+export class StrategyHubPage implements OnInit, OnDestroy {
+  private readonly pageLoadKey = 'strategy-hub';
   readonly expressionOperatorGroups = EXPRESSION_OPERATOR_GROUPS;
   selectedTab: StrategyTab = 'overview';
   selectedSettingsSection: StrategySettingsSection = 'formulas';
@@ -116,6 +253,8 @@ export class StrategyHubPage implements OnInit {
   loading = false;
   saving = false;
   publishing = false;
+  detailLoading = false;
+  detailLoadingSymbol: string | null = null;
   error = '';
   message = '';
 
@@ -128,6 +267,7 @@ export class StrategyHubPage implements OnInit {
   risk: StrategyRiskOverviewResponse | null = null;
   journal: StrategyJournalEntry[] = [];
   selectedScoreItem: StrategyScoredItem | null = null;
+  journalSuggestion: StrategyJournalSuggestion | null = null;
 
   scoringExchange = 'ALL';
   scoringKeyword = '';
@@ -144,27 +284,105 @@ export class StrategyHubPage implements OnInit {
 
   journalForm = {
     symbol: '',
+    trade_date: new Date().toISOString().slice(0, 10),
+    classification: 'swing',
     trade_side: 'buy',
     entry_price: null as number | null,
     exit_price: null as number | null,
     stop_loss_price: null as number | null,
+    take_profit_price: null as number | null,
+    quantity: null as number | null,
     position_size: null as number | null,
+    total_capital: null as number | null,
+    strategy_name: '',
+    psychology: '',
     notes: '',
     mistake_tags_json: [] as string[],
   };
+  editingJournalId: number | null = null;
 
-  constructor(private api: MarketApiService) {}
+  private backgroundSub?: Subscription;
+  private activeView = false;
+
+  constructor(
+    private api: MarketApiService,
+    private backgroundRefresh: BackgroundRefreshService,
+    private pageLoadState: PageLoadStateService
+  ) {}
 
   ngOnInit(): void {
+    this.pageLoadState.registerPage(this.pageLoadKey, 'tabs.strategy');
+    this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
+      if (!this.activeView || !this.activeProfileId) return;
+      if (domains.some((item) => ['quotes', 'intraday', 'news', 'financial', 'seedSymbols'].includes(item))) {
+        this.refreshActiveTabData(true);
+      }
+    });
     this.loadOverview();
+  }
+
+  ionViewDidEnter(): void {
+    this.activeView = true;
+    this.pageLoadState.setActivePage(this.pageLoadKey);
+    if (this.activeProfileId && !this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 15000)) {
+      this.refreshActiveTabData(true);
+    }
+  }
+
+  ionViewDidLeave(): void {
+    this.activeView = false;
+  }
+
+  ngOnDestroy(): void {
+    this.backgroundSub?.unsubscribe();
+  }
+
+  private hasDetailedScoreItem(item: StrategyScoredItem | null | undefined): boolean {
+    return !!item?.explanation?.topDrivers?.length;
+  }
+
+  private hasDetailedRankings(response: StrategyPagedResponse | null | undefined): boolean {
+    return !!response?.items?.some((item) => this.hasDetailedScoreItem(item));
+  }
+
+  get enabledFormulas(): StrategyFormula[] {
+    return [...(this.config?.formulas || [])]
+      .filter((item) => item.isEnabled)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+  }
+
+  get enabledFormulaLabels(): string[] {
+    return this.enabledFormulas.map((item) => item.label);
   }
 
   selectTab(tab: StrategyTab): void {
     this.selectedTab = tab;
+    if (!this.activeProfileId) {
+      return;
+    }
+    if (tab === 'scoring' && (!this.rankings || !this.hasDetailedRankings(this.rankings))) {
+      this.reloadScoring();
+      return;
+    }
+    if (tab === 'scoring' && this.selectedScoreItem) {
+      this.ensureDetailedScoreItem(this.selectedScoreItem);
+    }
+    if (tab === 'screener' && !this.screener) {
+      this.reloadScreener();
+      return;
+    }
+    if (tab === 'risk' && (!this.risk || !(this.risk.highRiskItems?.length))) {
+      this.reloadRisk();
+      return;
+    }
+    if (tab === 'journal' && !this.journal.length) {
+      this.reloadJournal();
+    }
   }
 
   loadOverview(): void {
     this.loading = true;
+    this.pageLoadState.start(this.pageLoadKey);
     this.error = '';
     this.message = '';
 
@@ -183,31 +401,42 @@ export class StrategyHubPage implements OnInit {
         this.screener = response.data.screener || null;
         this.risk = response.data.risk || null;
         this.journal = response.data.journal || [];
-        this.selectedScoreItem = this.rankings?.items?.[0] || null;
+        if (this.activeProfileId) {
+          this.ensureProfileConfigLoaded(this.activeProfileId);
+        }
+        this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+        this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
         this.loading = false;
         this.error = 'Không tải được Strategy Hub.';
+        this.pageLoadState.fail(this.pageLoadKey, this.error);
       },
     });
   }
 
   onProfileChange(): void {
     if (!this.activeProfileId) return;
+    this.config = null;
+    this.selectedScoreItem = null;
     this.loadOverview();
   }
 
   loadConfig(profileId: number): void {
+    this.pageLoadState.startBackground(this.pageLoadKey);
     this.api.getStrategyProfileConfig(profileId).subscribe({
       next: (response) => {
         this.config = response.data || null;
         this.ensureSettingsExpansion();
+        this.pageLoadState.finish(this.pageLoadKey);
       },
+      error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được cấu hình strategy.'),
     });
   }
 
   reloadScoring(): void {
     if (!this.activeProfileId) return;
+    this.pageLoadState.start(this.pageLoadKey);
     this.api
       .getStrategyRankings({
         profileId: this.activeProfileId,
@@ -220,13 +449,16 @@ export class StrategyHubPage implements OnInit {
       .subscribe({
         next: (response) => {
           this.rankings = response.data || null;
-          this.selectedScoreItem = this.rankings?.items?.[0] || null;
+          this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+          this.pageLoadState.finish(this.pageLoadKey);
         },
+        error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được dữ liệu scoring.'),
       });
   }
 
   reloadScreener(): void {
     if (!this.activeProfileId) return;
+    this.pageLoadState.start(this.pageLoadKey);
     this.api
       .runStrategyScreener({
         profileId: this.activeProfileId,
@@ -239,30 +471,52 @@ export class StrategyHubPage implements OnInit {
       .subscribe({
         next: (response) => {
           this.screener = response.data || null;
+          this.pageLoadState.finish(this.pageLoadKey);
         },
+        error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được dữ liệu screener.'),
       });
   }
 
   reloadRisk(): void {
     if (!this.activeProfileId) return;
+    this.pageLoadState.start(this.pageLoadKey);
     this.api.getStrategyRiskOverview(this.activeProfileId).subscribe({
       next: (response) => {
         this.risk = response.data || null;
+        this.pageLoadState.finish(this.pageLoadKey);
       },
+      error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được dữ liệu risk.'),
     });
   }
 
-  refreshData(): void {
-    if (!this.activeProfileId) {
+  reloadJournal(): void {
+    this.pageLoadState.startBackground(this.pageLoadKey);
+    this.api.listStrategyJournal(12).subscribe({
+      next: (response) => {
+        this.journal = response.data || [];
+        this.pageLoadState.finish(this.pageLoadKey);
+      },
+      error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được nhật ký giao dịch.'),
+    });
+  }
+
+  refreshData(silent = false): void {
+    if (!this.activeProfileId || this.selectedTab === 'overview') {
       this.loadOverview();
       return;
     }
 
-    this.loading = true;
+    this.refreshActiveTabData(silent);
+    return;
+
+    if (!silent) {
+      this.loading = true;
+      this.error = '';
+    }
     forkJoin({
-      overview: this.api.getStrategyOverview(this.activeProfileId),
+      overview: this.api.getStrategyOverview(this.activeProfileId!),
       rankings: this.api.getStrategyRankings({
-        profileId: this.activeProfileId,
+        profileId: this.activeProfileId!,
         exchange: this.scoringExchange !== 'ALL' ? this.scoringExchange : undefined,
         keyword: this.scoringKeyword || undefined,
         watchlistOnly: this.scoringWatchlistOnly,
@@ -270,23 +524,33 @@ export class StrategyHubPage implements OnInit {
         pageSize: 24,
       }),
       screener: this.api.runStrategyScreener({
-        profileId: this.activeProfileId,
+        profileId: this.activeProfileId!,
         exchange: this.screenerExchange !== 'ALL' ? this.screenerExchange : undefined,
         keyword: this.screenerKeyword || undefined,
         watchlistOnly: this.screenerWatchlistOnly,
         page: 1,
         pageSize: 24,
       }),
-      risk: this.api.getStrategyRiskOverview(this.activeProfileId),
+      risk: this.api.getStrategyRiskOverview(this.activeProfileId!),
       journal: this.api.listStrategyJournal(12),
     }).subscribe({
       next: ({ overview, rankings, screener, risk, journal }) => {
         this.loading = false;
         this.overview = overview.data || this.overview;
+        this.profiles = this.overview?.profiles || this.profiles;
+        this.activeProfileId = this.overview?.activeProfile?.id || this.activeProfileId;
         this.rankings = rankings.data || this.rankings;
         this.screener = screener.data || this.screener;
         this.risk = risk.data || this.risk;
         this.journal = journal.data || this.journal;
+        if (this.selectedScoreItem?.symbol) {
+          this.selectedScoreItem =
+            this.rankings?.items?.find((item) => item.symbol === this.selectedScoreItem?.symbol) ||
+            this.rankings?.items?.[0] ||
+            null;
+        } else {
+          this.selectedScoreItem = this.rankings?.items?.[0] || null;
+        }
       },
       error: () => {
         this.loading = false;
@@ -298,6 +562,110 @@ export class StrategyHubPage implements OnInit {
   chooseScoreItem(item: StrategyScoredItem): void {
     this.selectedScoreItem = item;
     this.selectedTab = 'scoring';
+    this.ensureDetailedScoreItem(item);
+  }
+
+  openJournalFromItem(item: StrategyScoredItem, event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    this.selectedTab = 'journal';
+    this.selectedScoreItem = item;
+    this.message = '';
+
+    if (!this.activeProfileId || this.hasDetailedScoreItem(item)) {
+      this.prefillJournalFromScoreItem(item);
+      return;
+    }
+
+    const symbol = item.symbol?.toUpperCase?.() || item.symbol;
+    if (!symbol) {
+      this.prefillJournalFromScoreItem(item);
+      return;
+    }
+
+    this.detailLoading = true;
+    this.detailLoadingSymbol = symbol;
+    this.pageLoadState.startBackground(this.pageLoadKey);
+    this.api.getStrategySymbolScore(this.activeProfileId, symbol).subscribe({
+      next: (response) => {
+        this.detailLoading = false;
+        if (this.detailLoadingSymbol === symbol) {
+          this.detailLoadingSymbol = null;
+        }
+        const detailedItem = response.data?.symbol === symbol ? response.data : item;
+        this.selectedScoreItem = detailedItem;
+        this.prefillJournalFromScoreItem(detailedItem);
+        this.pageLoadState.finish(this.pageLoadKey);
+      },
+      error: () => {
+        this.detailLoading = false;
+        if (this.detailLoadingSymbol === symbol) {
+          this.detailLoadingSymbol = null;
+        }
+        this.prefillJournalFromScoreItem(item);
+        this.pageLoadState.fail(this.pageLoadKey, 'Không tải được chi tiết công thức của mã.');
+      },
+    });
+  }
+
+  private ensureProfileConfigLoaded(profileId: number, force = false): void {
+    if (!force && this.config?.profile?.id === profileId) {
+      return;
+    }
+    this.loadConfig(profileId);
+  }
+
+  private syncSelectedScoreItem(
+    source: StrategyPagedResponse | null | undefined,
+    preferredSymbol?: string | null,
+    hydrateDetail = false
+  ): void {
+    const items = source?.items || [];
+    const nextItem = preferredSymbol
+      ? items.find((item) => item.symbol === preferredSymbol) || items[0] || null
+      : items[0] || null;
+    this.selectedScoreItem = nextItem;
+    if (hydrateDetail && nextItem) {
+      this.ensureDetailedScoreItem(nextItem);
+    }
+  }
+
+  private ensureDetailedScoreItem(item: StrategyScoredItem | null | undefined): void {
+    if (!item || !this.activeProfileId) {
+      return;
+    }
+    if (this.hasDetailedScoreItem(item)) {
+      this.selectedScoreItem = item;
+      return;
+    }
+
+    const symbol = item.symbol?.toUpperCase?.() || item.symbol;
+    if (!symbol || (this.detailLoading && this.detailLoadingSymbol === symbol)) {
+      return;
+    }
+
+    this.detailLoading = true;
+    this.detailLoadingSymbol = symbol;
+    this.pageLoadState.startBackground(this.pageLoadKey);
+    this.api.getStrategySymbolScore(this.activeProfileId, symbol).subscribe({
+      next: (response) => {
+        this.detailLoading = false;
+        if (this.detailLoadingSymbol === symbol) {
+          this.detailLoadingSymbol = null;
+        }
+        if (response.data && response.data.symbol === symbol) {
+          this.selectedScoreItem = response.data;
+        }
+        this.pageLoadState.finish(this.pageLoadKey);
+      },
+      error: () => {
+        this.detailLoading = false;
+        if (this.detailLoadingSymbol === symbol) {
+          this.detailLoadingSymbol = null;
+        }
+        this.pageLoadState.fail(this.pageLoadKey, 'Không tải được chi tiết công thức của mã.');
+      },
+    });
   }
 
   activateProfile(profile: StrategyProfile): void {
@@ -383,38 +751,240 @@ export class StrategyHubPage implements OnInit {
       this.error = 'Cần nhập mã giao dịch.';
       return;
     }
-    this.api
-      .createStrategyJournal({
-        profile_id: this.activeProfileId,
-        symbol: this.journalForm.symbol.trim().toUpperCase(),
-        trade_side: this.journalForm.trade_side,
-        entry_price: this.journalForm.entry_price,
-        exit_price: this.journalForm.exit_price,
-        stop_loss_price: this.journalForm.stop_loss_price,
-        position_size: this.journalForm.position_size,
-        notes: this.journalForm.notes,
-        mistake_tags_json: this.journalForm.mistake_tags_json,
-      })
-      .subscribe({
-        next: (response) => {
-          if (!response.data) {
-            this.error = 'Không lưu được journal.';
-            return;
+    const payload = {
+      profile_id: this.activeProfileId,
+      symbol: this.journalForm.symbol.trim().toUpperCase(),
+      trade_date: this.journalForm.trade_date,
+      classification: this.journalForm.classification,
+      trade_side: this.journalForm.trade_side,
+      entry_price: this.journalForm.entry_price,
+      exit_price: this.journalForm.exit_price,
+      stop_loss_price: this.journalForm.stop_loss_price,
+      take_profit_price: this.journalForm.take_profit_price,
+      quantity: this.journalForm.quantity,
+      position_size: this.journalForm.position_size,
+      total_capital: this.journalForm.total_capital,
+      strategy_name: this.journalForm.strategy_name,
+      psychology: this.journalForm.psychology,
+      notes: this.journalForm.notes,
+      mistake_tags_json: this.journalForm.mistake_tags_json,
+      signal_snapshot_json: this.selectedScoreItem
+        ? {
+            volumeIntelligence: this.selectedScoreItem.volumeIntelligence,
+            candlestickSignals: this.selectedScoreItem.candlestickSignals,
+            footprintSignals: this.selectedScoreItem.footprintSignals,
           }
-          this.message = 'Đã thêm nhật ký giao dịch.';
-          this.journalForm = {
-            symbol: '',
-            trade_side: 'buy',
-            entry_price: null,
-            exit_price: null,
-            stop_loss_price: null,
-            position_size: null,
-            notes: '',
-            mistake_tags_json: [],
-          };
-          this.refreshData();
-        },
-      });
+        : undefined,
+      result_snapshot_json: this.selectedScoreItem
+        ? {
+            winningScore: this.selectedScoreItem.winningScore,
+            qScore: this.selectedScoreItem.qScore,
+            lScore: this.selectedScoreItem.lScore,
+            mScore: this.selectedScoreItem.mScore,
+            pScore: this.selectedScoreItem.pScore,
+            riskScore: this.selectedScoreItem.riskScore,
+            fairValue: this.selectedScoreItem.fairValue,
+            marginOfSafety: this.selectedScoreItem.marginOfSafety,
+            executionPlan: this.selectedScoreItem.executionPlan,
+          }
+        : undefined,
+    };
+
+    const request$ = this.editingJournalId
+      ? this.api.updateStrategyJournal(this.editingJournalId, payload)
+      : this.api.createStrategyJournal(payload);
+
+    request$.subscribe({
+      next: (response) => {
+        if (!response.data) {
+          this.error = this.editingJournalId ? 'Không cập nhật được nhật ký.' : 'Không lưu được nhật ký.';
+          return;
+        }
+        this.message = this.editingJournalId ? 'Đã cập nhật nhật ký giao dịch.' : 'Đã thêm nhật ký giao dịch.';
+        this.resetJournalForm();
+        this.refreshData();
+      },
+    });
+  }
+
+  editJournal(item: StrategyJournalEntry): void {
+    this.journalSuggestion = null;
+    this.editingJournalId = item.id;
+    this.journalForm = {
+      symbol: item.symbol || '',
+      trade_date: item.tradeDate || new Date().toISOString().slice(0, 10),
+      classification: item.classification || 'swing',
+      trade_side: item.tradeSide || 'buy',
+      entry_price: item.entryPrice ?? null,
+      exit_price: item.exitPrice ?? null,
+      stop_loss_price: item.stopLossPrice ?? null,
+      take_profit_price: item.takeProfitPrice ?? null,
+      quantity: item.quantity ?? null,
+      position_size: item.positionSize ?? null,
+      total_capital: item.totalCapital ?? null,
+      strategy_name: item.strategyName || '',
+      psychology: item.psychology || '',
+      notes: item.notes || '',
+      mistake_tags_json: [...(item.mistakeTags || [])],
+    };
+  }
+
+  cancelJournalEdit(): void {
+    this.resetJournalForm();
+  }
+
+  deleteJournal(item: StrategyJournalEntry): void {
+    const confirmed = window.confirm(`Xóa nhật ký giao dịch cho mã ${item.symbol}?`);
+    if (!confirmed) {
+      return;
+    }
+    this.api.deleteStrategyJournal(item.id).subscribe({
+      next: (response) => {
+        if (!response.data) {
+          this.error = 'Không xóa được journal.';
+          return;
+        }
+        if (this.editingJournalId === item.id) {
+          this.resetJournalForm();
+        }
+        this.message = 'Đã xóa nhật ký giao dịch.';
+        this.reloadJournal();
+      },
+    });
+  }
+
+  private resetJournalForm(): void {
+    this.editingJournalId = null;
+    this.journalSuggestion = null;
+    this.journalForm = {
+      symbol: '',
+      trade_date: new Date().toISOString().slice(0, 10),
+      classification: 'swing',
+      trade_side: 'buy',
+      entry_price: null,
+      exit_price: null,
+      stop_loss_price: null,
+      take_profit_price: null,
+      quantity: null,
+      position_size: null,
+      total_capital: null,
+      strategy_name: '',
+      psychology: '',
+      notes: '',
+      mistake_tags_json: [],
+    };
+  }
+
+  private refreshActiveTabData(silent = false): void {
+    if (!this.activeProfileId) {
+      this.loadOverview();
+      return;
+    }
+
+    if (!silent) {
+      this.loading = true;
+      this.error = '';
+    }
+
+    const complete = () => {
+      if (!silent) {
+        this.loading = false;
+      }
+    };
+
+    switch (this.selectedTab) {
+      case 'overview':
+        this.api.getStrategyOverview(this.activeProfileId).subscribe({
+          next: (response) => {
+            if (response.data) {
+              this.overview = response.data;
+              this.profiles = response.data.profiles || this.profiles;
+              this.activeProfileId = response.data.activeProfile?.id || this.activeProfileId;
+              this.rankings = response.data.rankings || this.rankings;
+              this.screener = response.data.screener || this.screener;
+              this.risk = response.data.risk || this.risk;
+              this.journal = response.data.journal || this.journal;
+              if (this.activeProfileId) {
+                this.ensureProfileConfigLoaded(this.activeProfileId);
+              }
+              this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+            }
+            complete();
+          },
+          error: () => {
+            this.error = 'Không làm mới được dữ liệu Strategy Hub.';
+            complete();
+          },
+        });
+        return;
+      case 'scoring':
+        this.api
+          .getStrategyRankings({
+            profileId: this.activeProfileId,
+            exchange: this.scoringExchange !== 'ALL' ? this.scoringExchange : undefined,
+            keyword: this.scoringKeyword || undefined,
+            watchlistOnly: this.scoringWatchlistOnly,
+            page: 1,
+            pageSize: 24,
+          })
+          .subscribe({
+            next: (response) => {
+              this.rankings = response.data || this.rankings;
+              this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+              complete();
+            },
+            error: () => {
+              this.error = 'Không làm mới được dữ liệu Strategy Hub.';
+              complete();
+            },
+          });
+        return;
+      case 'screener':
+        this.api
+          .runStrategyScreener({
+            profileId: this.activeProfileId,
+            exchange: this.screenerExchange !== 'ALL' ? this.screenerExchange : undefined,
+            keyword: this.screenerKeyword || undefined,
+            watchlistOnly: this.screenerWatchlistOnly,
+            page: 1,
+            pageSize: 24,
+          })
+          .subscribe({
+            next: (response) => {
+              this.screener = response.data || this.screener;
+              complete();
+            },
+            error: () => {
+              this.error = 'Không làm mới được dữ liệu Strategy Hub.';
+              complete();
+            },
+          });
+        return;
+      case 'risk':
+        this.api.getStrategyRiskOverview(this.activeProfileId).subscribe({
+          next: (response) => {
+            this.risk = response.data || this.risk;
+            complete();
+          },
+          error: () => {
+            this.error = 'Không làm mới được dữ liệu Strategy Hub.';
+            complete();
+          },
+        });
+        return;
+      case 'journal':
+        this.api.listStrategyJournal(12).subscribe({
+          next: (response) => {
+            this.journal = response.data || this.journal;
+            complete();
+          },
+          error: () => {
+            this.error = 'Không làm mới được dữ liệu Strategy Hub.';
+            complete();
+          },
+        });
+        return;
+    }
   }
 
   parseTags(input: string): void {
@@ -515,6 +1085,119 @@ export class StrategyHubPage implements OnInit {
     return String(parameter.value);
   }
 
+  getDecisionNarratives(item: StrategyScoredItem | null): StrategyDecisionNarrative[] {
+    if (!item) {
+      return [];
+    }
+
+    const narratives: StrategyDecisionNarrative[] = [];
+    const winningRule =
+      this.findRuleResult(item.layerResults, ['score']) ||
+      this.findRuleResult(item.checklistResults, ['winning_score']);
+    const marginRule =
+      this.findRuleResult(item.checklistResults, ['margin']) ||
+      this.findRuleResult(item.alertResults, ['margin_safety_low']);
+    const qualityRule = this.findRuleResult(item.checklistResults, ['business_quality']);
+    const breakoutRule =
+      this.findRuleResult(item.layerResults, ['breakout_volume']) ||
+      this.findRuleResult(item.layerResults, ['price_action']);
+
+    if (winningRule) {
+      narratives.push({
+        label: 'Winning Score',
+        status: winningRule.passed ? 'pass' : 'fail',
+        detail: this.buildRuleNarrative(
+          winningRule,
+          `Hiện tại ${item.winningScore.toFixed(2)}`,
+          'Vượt ngưỡng cấu hình',
+          'Chưa đạt ngưỡng cấu hình'
+        ),
+      });
+    }
+
+    if (marginRule) {
+      narratives.push({
+        label: 'Biên an toàn',
+        status: marginRule.passed ? 'pass' : 'fail',
+        detail: this.buildRuleNarrative(
+          marginRule,
+          `Hiện tại ${(item.marginOfSafety * 100).toFixed(1)}%`,
+          'Biên an toàn đang đạt yêu cầu',
+          'Biên an toàn còn thấp hơn mức yêu cầu'
+        ),
+      });
+    }
+
+    if (qualityRule) {
+      narratives.push({
+        label: 'Chất lượng doanh nghiệp',
+        status: qualityRule.passed ? 'pass' : 'fail',
+        detail: this.buildRuleNarrative(
+          qualityRule,
+          `Q Score hiện tại ${item.qScore.toFixed(2)}`,
+          'Q Score đang đạt chuẩn vào lệnh',
+          'Q Score chưa đạt chuẩn vào lệnh'
+        ),
+      });
+    }
+
+    if (breakoutRule) {
+      narratives.push({
+        label: 'Xác nhận kỹ thuật',
+        status: breakoutRule.passed ? 'pass' : 'warn',
+        detail: this.buildRuleNarrative(
+          breakoutRule,
+          `M Score ${item.mScore.toFixed(2)}`,
+          'Đang có xác nhận kỹ thuật tốt',
+          'Xác nhận kỹ thuật còn yếu'
+        ),
+      });
+    }
+
+    return narratives;
+  }
+
+  getSmartMoneyBadgeState(item: StrategyScoredItem | null): 'on' | 'off' {
+    return item?.volumeIntelligence?.smartMoneyInflow ? 'on' : 'off';
+  }
+
+  getPrimaryCandlestickSignal(item: StrategyScoredItem | null): string {
+    const detectedSignal = item?.candlestickSignals?.find((signal) => signal.detected);
+    return detectedSignal?.label || 'strategyHub.state.none';
+  }
+
+  getExecutionBadgeState(item: StrategyScoredItem | null): StrategyExecutionBadgeState {
+    const executionPlan = item?.executionPlan;
+    if (!executionPlan) {
+      return 'wait';
+    }
+    if (executionPlan.standAside) {
+      return 'standAside';
+    }
+    if (executionPlan.probeBuy30 || executionPlan.addBuy70) {
+      return 'ready';
+    }
+    return 'wait';
+  }
+
+  getExecutionBadgeLabel(item: StrategyScoredItem | null): string {
+    const state = this.getExecutionBadgeState(item);
+    if (state === 'standAside') {
+      return 'strategyHub.state.standAside';
+    }
+    if (state === 'ready') {
+      return 'strategyHub.state.ready';
+    }
+    return 'strategyHub.state.wait';
+  }
+
+  useSuggestedJournalPrefill(): void {
+    if (!this.selectedScoreItem) {
+      return;
+    }
+    this.prefillJournalFromScoreItem(this.selectedScoreItem);
+  }
+
   getExpressionBuilderVariables(entity: StrategyConfigEntity): StrategyVariableHint[] {
     const parameterHints = (entity.parameters || []).map((parameter) => ({
       key: parameter.paramKey,
@@ -549,6 +1232,8 @@ export class StrategyHubPage implements OnInit {
     const nextExpression = `${before}${token}${after}`;
 
     entity.expression = nextExpression;
+    editor.value = nextExpression;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
 
     const nextCaret = before.length + token.length;
     requestAnimationFrame(() => {
@@ -578,6 +1263,33 @@ export class StrategyHubPage implements OnInit {
       description: 'Biến kỹ thuật đang được dùng trong công thức, chưa có mô tả business riêng.',
       kind: 'metric',
     };
+  }
+
+  private findRuleResult(results: StrategyRuleResult[], codes: string[]): StrategyRuleResult | null {
+    return results.find((item) => codes.includes(item.ruleCode)) || null;
+  }
+
+  private buildRuleNarrative(
+    rule: StrategyRuleResult,
+    currentValueText: string,
+    passPrefix: string,
+    failPrefix: string
+  ): string {
+    const thresholdText = this.describeRuleThreshold(rule);
+    const prefix = rule.passed ? passPrefix : failPrefix;
+    return thresholdText ? `${prefix}: ${currentValueText}, ngưỡng ${thresholdText}.` : `${prefix}: ${currentValueText}.`;
+  }
+
+  private describeRuleThreshold(rule: StrategyRuleResult): string {
+    if (!rule.parameters?.length) {
+      return '';
+    }
+    const parameter = rule.parameters[0];
+    const valueLabel = this.getParameterValueLabel(parameter);
+    if (!valueLabel || valueLabel === 'Chưa đặt') {
+      return '';
+    }
+    return `${parameter.label.toLowerCase()} = ${valueLabel}`;
   }
 
   private escapeRegExp(value: string): string {
@@ -626,5 +1338,126 @@ export class StrategyHubPage implements OnInit {
 
   private getSettingsCardKey(section: StrategySettingsSection, entity: StrategyConfigEntity): string {
     return `${section}:${this.trackByCode(0, entity as any)}`;
+  }
+
+  private prefillJournalFromScoreItem(item: StrategyScoredItem): void {
+    const suggestion = this.buildJournalSuggestion(item);
+    this.journalSuggestion = suggestion;
+    this.editingJournalId = null;
+    this.journalForm = {
+      symbol: suggestion.symbol,
+      trade_date: new Date().toISOString().slice(0, 10),
+      classification: suggestion.classification,
+      trade_side: suggestion.tradeSide,
+      entry_price: suggestion.entryPrice,
+      exit_price: suggestion.exitPrice,
+      stop_loss_price: suggestion.stopLossPrice,
+      take_profit_price: suggestion.takeProfitPrice,
+      quantity: null,
+      position_size: suggestion.positionSize,
+      total_capital: null,
+      strategy_name: suggestion.strategyName,
+      psychology: suggestion.psychology,
+      notes: suggestion.notes,
+      mistake_tags_json: [],
+    };
+  }
+
+  private buildJournalSuggestion(item: StrategyScoredItem): StrategyJournalSuggestion {
+    const currentPrice = this.preferredNumber(item.currentPrice, item.price);
+    const execution = item.executionPlan;
+    const volume = item.volumeIntelligence;
+    const tradeSide: 'buy' | 'sell' = execution?.takeProfitSignal ? 'sell' : 'buy';
+    const classification =
+      execution?.addBuy70 ? 'retest' :
+      execution?.probeBuy30 ? 'breakout' :
+      volume?.noSupply ? 'retest' :
+      item.passedAllLayers ? 'position' :
+      'swing';
+
+    const positionSize =
+      execution?.standAside ? 0 :
+      execution?.addBuy70 ? 70 :
+      execution?.probeBuy30 ? 30 :
+      50;
+
+    const stopLossPctCandidates = [execution?.stopLossMin, execution?.stopLossMax]
+      .filter((value): value is number => typeof value === 'number' && isFinite(value) && value > 0);
+    const stopLossPct = stopLossPctCandidates.length
+      ? stopLossPctCandidates.reduce((sum, value) => sum + value, 0) / stopLossPctCandidates.length / 100
+      : 0.06;
+
+    const stopLossPrice =
+      tradeSide === 'buy' && currentPrice !== null
+        ? this.roundPrice(currentPrice * (1 - stopLossPct))
+        : null;
+    const takeProfitBase = Math.max(stopLossPct * 2, 0.1);
+    const takeProfitPrice =
+      tradeSide === 'buy' && currentPrice !== null
+        ? this.roundPrice(currentPrice * (1 + takeProfitBase))
+        : currentPrice;
+    const exitPrice = tradeSide === 'sell' ? currentPrice : null;
+
+    const primaryCandle = this.getPrimaryCandlestickSignal(item);
+    const reasons = [
+      `Winning Score ${item.winningScore.toFixed(2)} theo profile hiện tại.`,
+      volume?.smartMoneyInflow ? 'Smart Money Inflow đang bật.' : 'Smart Money Inflow chưa xác nhận.',
+      primaryCandle !== 'strategyHub.state.none' ? `Mẫu nến chính: ${primaryCandle}.` : 'Chưa có mẫu nến chính nổi bật.',
+      execution?.probeBuy30 ? 'Execution engine cho phép mua thăm dò 30%.' : '',
+      execution?.addBuy70 ? 'Execution engine cho phép mua gia tăng 70%.' : '',
+      execution?.standAside ? 'Execution engine đang khuyến nghị đứng ngoài.' : '',
+      execution?.takeProfitSignal ? 'Execution engine đang phát hiện tín hiệu chốt lời.' : '',
+      ...(execution?.rationale || []).slice(0, 3),
+    ].filter(Boolean);
+
+    const strategyName =
+      execution?.takeProfitSignal ? 'Exit by Volume Divergence' :
+      execution?.addBuy70 ? 'Add 70 - Pullback Retest' :
+      execution?.probeBuy30 ? 'Buy 30 - Breakout Probe' :
+      volume?.noSupply ? 'No Supply Retest' :
+      volume?.smartMoneyInflow ? 'Smart Money Inflow Scan' :
+      `${this.overview?.activeProfile?.name || 'Strategy'} Review`;
+
+    const psychology =
+      execution?.standAside
+        ? 'Đứng ngoài và quan sát thêm, tránh FOMO vì setup chưa đủ xác nhận.'
+        : tradeSide === 'sell'
+          ? 'Chủ động khóa lợi nhuận và bán theo kế hoạch, không nuôi kỳ vọng thêm.'
+          : execution?.addBuy70
+            ? 'Có thể gia tăng vị thế nhưng vẫn phải giữ kỷ luật stop-loss.'
+            : execution?.probeBuy30
+              ? 'Chỉ mua thăm dò để kiểm định setup, tránh vào full vị thế quá sớm.'
+              : 'Theo dõi kỷ luật và đợi thêm xác nhận trước khi tăng vị thế.';
+
+    return {
+      symbol: item.symbol,
+      classification,
+      tradeSide,
+      entryPrice: tradeSide === 'buy' ? currentPrice : null,
+      exitPrice,
+      stopLossPrice,
+      takeProfitPrice,
+      positionSize,
+      strategyName,
+      psychology,
+      notes: reasons.join('\n'),
+      reasons,
+    };
+  }
+
+  private preferredNumber(...values: Array<number | null | undefined>): number | null {
+    for (const value of values) {
+      if (typeof value === 'number' && isFinite(value)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private roundPrice(value: number | null): number | null {
+    if (value === null || !isFinite(value)) {
+      return null;
+    }
+    return Math.round(value * 100) / 100;
   }
 }

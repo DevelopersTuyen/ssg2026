@@ -121,6 +121,25 @@
   border: 1px solid rgba(136, 168, 201, 0.14);
 }
 
+.financial-toggle-panel {
+  background: rgba(9, 31, 38, 0.48);
+  border-color: rgba(87, 211, 182, 0.2);
+}
+
+.queue-status-panel {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(11, 24, 42, 0.52);
+  border: 1px solid rgba(121, 178, 255, 0.16);
+}
+
+.queue-status-panel strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1rem;
+  color: #f7fbff;
+}
+
 .auto-header {
   display: flex;
   align-items: center;
@@ -595,6 +614,18 @@
 .analysis-card h3 {
   margin: 0 0 10px;
   color: #10253d;
+}
+
+.outlook-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.outlook-topline h3 {
+  margin: 0;
 }
 
 .analysis-card p {

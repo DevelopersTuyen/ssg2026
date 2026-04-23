@@ -1,4 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
+import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
+import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 import {
   AiActivityItem,
   AiAgentChatHistoryItem,
@@ -9,6 +13,7 @@ import {
   AiLocalFinancialReport,
   AiLocalNewsItem,
   AiLocalOverviewResponse,
+  AiLocalSymbolOutlook,
   AiLocalStorageStatus,
   AiStatusItem,
   ExchangeTab,
@@ -25,9 +30,16 @@ interface ChatMessage {
 
 interface PromptTemplate {
   key: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   prompt: string;
+}
+
+interface PendingAnalysisJob {
+  prompt: string;
+  mode: 'manual' | 'auto';
+  exchange: ExchangeTab;
+  includeFinancialAnalysis: boolean;
 }
 
 @Component({
@@ -36,14 +48,17 @@ interface PromptTemplate {
   styleUrls: ['./ai-local.page.scss'],
   standalone: false,
 })
-export class AiLocalPage implements OnInit {
+export class AiLocalPage implements OnInit, OnDestroy {
+  private readonly pageLoadKey = 'ai-local';
   private readonly autoAnalyzeStorageKey = 'ai-local.auto-analyze-enabled';
+  private readonly financialAnalysisStorageKey = 'ai-local.financial-analysis-enabled';
   readonly newsPageSize = 5;
 
   selectedTab: LocalTab = 'overview';
   selectedExchange: ExchangeTab = 'HSX';
   currentPrompt = '';
   autoAnalyzeEnabled = false;
+  financialAnalysisEnabled = false;
   currentNewsPage = 1;
 
   loadingOverview = false;
@@ -58,6 +73,7 @@ export class AiLocalPage implements OnInit {
   focusSymbols: string[] = [];
   newsItems: AiLocalNewsItem[] = [];
   financialReports: AiLocalFinancialReport[] = [];
+  symbolOutlooks: AiLocalSymbolOutlook[] = [];
   analysisSections: AiLocalAnalysisSection[] = [];
   cafefStorage: AiLocalStorageStatus | null = null;
 
@@ -68,57 +84,86 @@ export class AiLocalPage implements OnInit {
 
   chatMessages: ChatMessage[] = [];
   contextSummary: AiLocalDataStat[] = [];
+  private analysisQueue: PendingAnalysisJob[] = [];
+  private backgroundSub?: Subscription;
+  private activeView = false;
+  private lastAutoAnalysisKey = '';
 
   readonly promptTemplates: PromptTemplate[] = [
     {
       key: 'market_snapshot',
-      title: 'Tong quan thi truong',
-      description: 'Tom tat index, dong tien, top tang giam va tinh hinh san hien tai.',
+      titleKey: 'aiLocal.template.marketSnapshot.title',
+      descriptionKey: 'aiLocal.template.marketSnapshot.description',
       prompt:
         'Hay phan tich tong quan san dang xem: index, dong tien, top tang, top giam, tin hieu can chu y va du bao ngan han.',
     },
     {
       key: 'watchlist_risk',
-      title: 'Rui ro watchlist',
-      description: 'Tap trung vao cac ma dang theo doi, ma nao yeu hon thi truong va ma nao dang hut dong tien.',
+      titleKey: 'aiLocal.template.watchlistRisk.title',
+      descriptionKey: 'aiLocal.template.watchlistRisk.description',
       prompt:
         'Hay phan tich watchlist hien tai, chi ra ma nao dang manh hon thi truong, ma nao dang co rui ro va canh bao ngan han.',
     },
     {
       key: 'cafef_digest',
-      title: 'Digest tin CafeF',
-      description: 'Tom tat tin tuc gan nhat tu CafeF va noi voi bien dong co phieu.',
+      titleKey: 'aiLocal.template.cafefDigest.title',
+      descriptionKey: 'aiLocal.template.cafefDigest.description',
       prompt:
         'Hay doc cac tin CafeF moi nhat trong local context, tom tat 3 y chinh va lien he voi nhom co phieu hoac dong tien thi truong.',
     },
     {
       key: 'liquidity_scan',
-      title: 'Quet thanh khoan',
-      description: 'Loc ma dang hut volume va giao dich bat thuong.',
+      titleKey: 'aiLocal.template.liquidityScan.title',
+      descriptionKey: 'aiLocal.template.liquidityScan.description',
       prompt:
         'Hay quet cac ma dang hut thanh khoan trong san nay, chi ra ma dang noi bat ve volume va vi sao can theo doi.',
     },
     {
       key: 'symbol_compare',
-      title: 'So sanh ma',
-      description: 'So sanh 2 ma co phieu trong local context theo bien dong, volume va xung luc.',
+      titleKey: 'aiLocal.template.symbolCompare.title',
+      descriptionKey: 'aiLocal.template.symbolCompare.description',
       prompt:
         'Hay so sanh 2 ma toi dang quan tam trong context hien tai, neu thieu ma cu the thi goi y nhung ma noi bat de so sanh.',
     },
     {
       key: 'trading_plan',
-      title: 'Ke hoach quan sat',
-      description: 'Tao checklist can theo doi trong phien cho trader/analyst.',
+      titleKey: 'aiLocal.template.tradingPlan.title',
+      descriptionKey: 'aiLocal.template.tradingPlan.description',
       prompt:
         'Hay tao mot checklist quan sat trong phien gom: index, nhom nganh, watchlist, ma can chu y va tin tuc can doc tiep.',
     },
   ];
 
-  constructor(private api: MarketApiService) {}
+  constructor(
+    private api: MarketApiService,
+    private i18n: AppI18nService,
+    private backgroundRefresh: BackgroundRefreshService,
+    private pageLoadState: PageLoadStateService
+  ) {}
 
   ngOnInit(): void {
+    this.pageLoadState.registerPage(this.pageLoadKey, 'aiLocal.title');
+    this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
+      if (!this.activeView) return;
+      if (domains.some((item) => ['quotes', 'intraday', 'news', 'financial'].includes(item))) {
+        this.loadOverview(true);
+      }
+    });
     this.restoreLocalPreferences();
     this.loadOverview();
+  }
+
+  ionViewDidEnter(): void {
+    this.activeView = true;
+    this.pageLoadState.setActivePage(this.pageLoadKey);
+  }
+
+  ionViewDidLeave(): void {
+    this.activeView = false;
+  }
+
+  ngOnDestroy(): void {
+    this.backgroundSub?.unsubscribe();
   }
 
   selectTab(tab: LocalTab): void {
@@ -126,7 +171,7 @@ export class AiLocalPage implements OnInit {
   }
 
   onExchangeChange(): void {
-    this.loadOverview();
+    this.loadOverview(false, true, 'doi san giao dich');
   }
 
   usePrompt(prompt: string): void {
@@ -150,74 +195,21 @@ export class AiLocalPage implements OnInit {
     }
   }
 
+  onFinancialAnalysisChange(): void {
+    localStorage.setItem(this.financialAnalysisStorageKey, String(this.financialAnalysisEnabled));
+    this.loadOverview(false, true, 'doi che do phan tich BCTC');
+  }
+
   refreshOverview(): void {
-    this.loadOverview();
+    this.loadOverview(false, true, 'lam moi du lieu');
   }
 
   sendPrompt(): void {
     const text = this.currentPrompt.trim();
-    if (!text || this.sendingPrompt) return;
-
-    const history: AiAgentChatHistoryItem[] = this.chatMessages.slice(-8).map((item) => ({
-      role: item.role,
-      content: item.content,
-    }));
-
-    this.chatMessages = [
-      ...this.chatMessages,
-      {
-        role: 'user',
-        content: text,
-        time: this.formatNow(),
-      },
-    ];
-
+    if (!text) return;
     this.currentPrompt = '';
-    this.sendingPrompt = true;
     this.selectedTab = 'chat';
-
-    this.api
-      .chatWithAiLocal({
-        prompt: text,
-        exchange: this.selectedExchange,
-        history,
-      })
-      .subscribe({
-        next: (res) => {
-          const data = res.data;
-          const message = data?.message;
-
-          this.contextSummary = data?.context_summary || this.contextSummary;
-          this.connected = data?.connected ?? this.connected;
-          this.modelAvailable = data?.model_available ?? this.modelAvailable;
-          this.provider = data?.provider || this.provider;
-          this.model = data?.model || this.model;
-
-          this.chatMessages = [
-            ...this.chatMessages,
-            {
-              role: 'assistant',
-              content:
-                message?.content ||
-                'AI Local chua tra loi. Kiem tra Ollama local va model qwen3:8b.',
-              time: message?.time || this.formatNow(),
-            },
-          ];
-
-          this.sendingPrompt = false;
-        },
-        error: () => {
-          this.chatMessages = [
-            ...this.chatMessages,
-            {
-              role: 'assistant',
-              content: 'Khong ket noi duoc toi AI Local.',
-              time: this.formatNow(),
-            },
-          ];
-          this.sendingPrompt = false;
-        },
-      });
+    this.enqueueAnalysis(text, 'manual');
   }
 
   trackByLabel(_: number, item: AiStatusItem | AiLocalDataStat | AiLocalFinancialMetric): string {
@@ -248,6 +240,10 @@ export class AiLocalPage implements OnInit {
     return item.symbol;
   }
 
+  trackBySymbolOutlook(_: number, item: AiLocalSymbolOutlook): string {
+    return item.symbol;
+  }
+
   trackByNews(_: number, item: AiLocalNewsItem): string {
     return `${item.source}-${item.title}`;
   }
@@ -273,6 +269,10 @@ export class AiLocalPage implements OnInit {
     return `${end}/${this.newsItems.length}`;
   }
 
+  get pendingAnalysisCount(): number {
+    return this.analysisQueue.length;
+  }
+
   statusToneClass(item: AiStatusItem): string {
     if (item.tone === 'positive') return 'positive';
     if (item.tone === 'warning') return 'warning';
@@ -287,26 +287,44 @@ export class AiLocalPage implements OnInit {
     this.currentNewsPage = Math.min(Math.max(page, 1), this.totalNewsPages);
   }
 
-  private loadOverview(): void {
-    this.loadingOverview = true;
+  private loadOverview(
+    silent = false,
+    triggerAutoAnalysis = false,
+    autoReason = 'lam moi du lieu'
+  ): void {
+    if (!silent) {
+      this.loadingOverview = true;
+      this.pageLoadState.start(this.pageLoadKey);
+    } else {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
     this.overviewError = '';
 
-    this.api.getAiLocalOverview(this.selectedExchange).subscribe({
+    this.api
+      .getAiLocalOverview(this.selectedExchange, {
+        includeFinancialAnalysis: this.financialAnalysisEnabled,
+      })
+      .subscribe({
       next: (res) => {
         const data = res.data;
         if (!data) {
-          this.overviewError = 'Chua lay duoc du lieu AI Local tu backend.';
+          this.overviewError = this.t('aiLocal.error.noOverview');
           this.loadingOverview = false;
+          this.pageLoadState.fail(this.pageLoadKey, this.overviewError);
           return;
         }
 
         this.applyOverview(data);
         this.loadingOverview = false;
-        this.runAutoAnalysis('lam moi du lieu');
+        this.pageLoadState.finish(this.pageLoadKey);
+        if (triggerAutoAnalysis) {
+          this.runAutoAnalysis(autoReason);
+        }
       },
       error: () => {
-        this.overviewError = 'Khong ket noi duoc toi backend AI Local.';
+        this.overviewError = this.t('aiLocal.error.backend');
         this.loadingOverview = false;
+        this.pageLoadState.fail(this.pageLoadKey, this.overviewError);
       },
     });
   }
@@ -321,6 +339,7 @@ export class AiLocalPage implements OnInit {
     this.newsItems = data.news_items || [];
     this.currentNewsPage = 1;
     this.financialReports = data.financial_reports || [];
+    this.symbolOutlooks = data.symbol_outlooks || [];
     this.analysisSections = data.analysis_sections || [];
     this.cafefStorage = data.cafef_storage || null;
     this.connected = data.connected;
@@ -344,16 +363,125 @@ export class AiLocalPage implements OnInit {
 
   private restoreLocalPreferences(): void {
     this.autoAnalyzeEnabled = localStorage.getItem(this.autoAnalyzeStorageKey) === 'true';
+    this.financialAnalysisEnabled = localStorage.getItem(this.financialAnalysisStorageKey) === 'true';
   }
 
   private runAutoAnalysis(reason: string): void {
-    if (!this.autoAnalyzeEnabled || this.sendingPrompt) return;
+    if (!this.autoAnalyzeEnabled) return;
+    const nextKey = `${this.selectedExchange}:${this.financialAnalysisEnabled ? 1 : 0}:${reason}`;
+    if (this.lastAutoAnalysisKey === nextKey && (this.sendingPrompt || this.analysisQueue.some((item) => item.mode === 'auto'))) {
+      return;
+    }
+    this.lastAutoAnalysisKey = nextKey;
 
-    this.currentPrompt =
-      `Hay tu dong phan tich toan bo bo du lieu local hien co cho san ${this.selectedExchange}. ` +
-      `Can bao gom: index, dong tien, top tang, top giam, watchlist, focus symbols, tin CafeF, ` +
-      `cac rui ro can theo doi va du bao ngan han. Ngu canh kich hoat: ${reason}.`;
-    this.sendPrompt();
+    const prompt = this.financialAnalysisEnabled
+      ? `Hay tu dong phan tich toan bo bo du lieu local hien co cho san ${this.selectedExchange}. ` +
+        `Can bao gom: index, dong tien, top tang, top giam, watchlist, focus symbols, tin CafeF, ` +
+        `bao cao tai chinh va du bao ngan han cho cac ma dang duoc focus. Ngu canh kich hoat: ${reason}.`
+      : `Hay tu dong phan tich toan bo bo du lieu local hien co cho san ${this.selectedExchange}. ` +
+        `Can bao gom: index, dong tien, top tang, top giam, watchlist, focus symbols, tin CafeF, ` +
+        `cac rui ro can theo doi va du bao ngan han. Ngu canh kich hoat: ${reason}.`;
+    this.enqueueAnalysis(prompt, 'auto');
+  }
+
+  private enqueueAnalysis(prompt: string, mode: 'manual' | 'auto'): void {
+    const job: PendingAnalysisJob = {
+      prompt,
+      mode,
+      exchange: this.selectedExchange,
+      includeFinancialAnalysis: this.financialAnalysisEnabled,
+    };
+
+    if (mode === 'auto') {
+      const existingAutoIndex = this.analysisQueue.findIndex((item) => item.mode === 'auto');
+      if (existingAutoIndex >= 0) {
+        this.analysisQueue[existingAutoIndex] = job;
+      } else {
+        this.analysisQueue.push(job);
+      }
+    } else {
+      this.analysisQueue.push(job);
+      this.chatMessages = [
+        ...this.chatMessages,
+        {
+          role: 'user',
+          content: prompt,
+          time: this.formatNow(),
+        },
+      ];
+    }
+
+    this.processNextAnalysis();
+  }
+
+  private processNextAnalysis(): void {
+    if (this.sendingPrompt || !this.analysisQueue.length) return;
+
+    const job = this.analysisQueue.shift();
+    if (!job) return;
+
+    if (job.mode === 'auto') {
+      this.chatMessages = [
+        ...this.chatMessages,
+        {
+          role: 'user',
+          content: job.prompt,
+          time: this.formatNow(),
+        },
+      ];
+    }
+
+    const history: AiAgentChatHistoryItem[] = this.chatMessages.slice(-8).map((item) => ({
+      role: item.role,
+      content: item.content,
+    }));
+
+    this.sendingPrompt = true;
+    this.selectedTab = 'chat';
+
+    this.api
+      .chatWithAiLocal({
+        prompt: job.prompt,
+        exchange: job.exchange,
+        history,
+        include_financial_analysis: job.includeFinancialAnalysis,
+      })
+      .subscribe({
+        next: (res) => {
+          const data = res.data;
+          const message = data?.message;
+
+          this.contextSummary = data?.context_summary || this.contextSummary;
+          this.connected = data?.connected ?? this.connected;
+          this.modelAvailable = data?.model_available ?? this.modelAvailable;
+          this.provider = data?.provider || this.provider;
+          this.model = data?.model || this.model;
+
+          this.chatMessages = [
+            ...this.chatMessages,
+            {
+              role: 'assistant',
+              content: message?.content || this.t('aiLocal.error.noReply'),
+              time: message?.time || this.formatNow(),
+            },
+          ];
+
+          this.sendingPrompt = false;
+          this.processNextAnalysis();
+        },
+        error: () => {
+          this.chatMessages = [
+            ...this.chatMessages,
+            {
+              role: 'assistant',
+              content: this.t('aiLocal.error.connect'),
+              time: this.formatNow(),
+            },
+          ];
+          this.sendingPrompt = false;
+          this.processNextAnalysis();
+        },
+      });
   }
 
   private formatNow(): string {
@@ -361,5 +489,17 @@ export class AiLocalPage implements OnInit {
     const hh = `${now.getHours()}`.padStart(2, '0');
     const mm = `${now.getMinutes()}`.padStart(2, '0');
     return `${hh}:${mm}`;
+  }
+
+  getTemplateTitle(item: PromptTemplate): string {
+    return this.t(item.titleKey);
+  }
+
+  getTemplateDescription(item: PromptTemplate): string {
+    return this.t(item.descriptionKey);
+  }
+
+  private t(key: string): string {
+    return this.i18n.translate(key);
   }
 }

@@ -89,6 +89,7 @@ class SyncStatusService:
             "quotes": self._to_job_payload(latest_by_job.get("collect_quotes")),
             "intraday": self._to_job_payload(latest_by_job.get("collect_intraday")),
             "indexDaily": self._to_job_payload(latest_by_job.get("collect_index_daily")),
+            "financial": self._to_job_payload(latest_by_job.get("collect_financial_statements")),
             "seedSymbols": self._to_job_payload(latest_by_job.get("seed_symbols")),
             "news": {
                 "status": "success" if latest_news else "idle",

@@ -6,19 +6,31 @@ ion-content.ai-content {
   --background: #f3f5fa;
 }
 
+.ai-page,
+.ai-shell,
+.ai-card,
+.panel,
+.chat-item,
+.forecast-item,
+.summary-item,
+.skill-card {
+  font-family: inherit;
+}
+
 .ai-breadcrumb {
   display: flex;
   align-items: center;
   gap: 8px;
   color: #7d8796;
-  font-size: 14px;
+  font-size: 13px;
 
   ion-icon {
-    font-size: 16px;
+    font-size: 14px;
   }
 
   .sep {
     color: #aeb7c3;
+    font-size: 13px;
   }
 }
 
@@ -38,8 +50,8 @@ ion-content.ai-content {
   border: none;
   background: #fff;
   color: #6b7280;
-  font-size: 14px;
-  padding: 12px 16px;
+  font-size: 13px;
+  padding: 10px 14px;
   border-bottom: 3px solid transparent;
 }
 
@@ -59,7 +71,7 @@ ion-content.ai-content {
 }
 
 .panel-title {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   color: #4b5563;
   text-transform: uppercase;
@@ -92,7 +104,7 @@ ion-content.ai-content {
   }
 
   .value {
-    font-size: 15px;
+    font-size: 13px;
     color: #243244;
     font-weight: 600;
   }
@@ -117,7 +129,7 @@ ion-content.ai-content {
     border-radius: 0;
     border-color: #d9e0e8;
     box-shadow: none;
-    font-size: 14px;
+    font-size: 13px;
   }
 }
 
@@ -168,12 +180,13 @@ ion-content.ai-content {
 }
 
 .forecast-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #243244;
 }
 
 .forecast-summary {
+  font-size: 13px;
   color: #5f6b7b;
   line-height: 1.55;
 }
@@ -218,7 +231,7 @@ ion-content.ai-content {
   }
 
   .text {
-    font-size: 14px;
+    font-size: 13px;
     color: #243244;
   }
 }
@@ -251,7 +264,7 @@ ion-content.ai-content {
     max-width: 860px;
     padding: 10px 12px;
     line-height: 1.55;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   &.assistant .bubble {
@@ -325,7 +338,7 @@ ion-content.ai-content {
 }
 
 .skill-title {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   color: #243244;
   margin-bottom: 8px;

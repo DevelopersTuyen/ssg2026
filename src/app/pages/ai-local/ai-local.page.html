@@ -1,23 +1,22 @@
-<ion-content [fullscreen]="true" class="ai-local-content">
+﻿<ion-content [fullscreen]="true" class="ai-local-content">
   <div class="ai-local-shell">
     <section class="hero-panel">
       <div class="hero-copy">
-        <span class="eyebrow">AI LOCAL / OLLAMA</span>
-        <h1>Phan tich chung khoan bang model local tren may</h1>
+        <span class="eyebrow">{{ 'aiLocal.eyebrow' | translate }}</span>
+        <h1>{{ 'aiLocal.title' | translate }}</h1>
         <p>
-          Su dung Ollama voi <strong>{{ model }}</strong> de doc du lieu thi truong, watchlist va tin
-          CafeF ngay tai local backend.
+          {{ 'aiLocal.subtitlePrefix' | translate }} <strong>{{ model }}</strong> {{ 'aiLocal.subtitleSuffix' | translate }}
         </p>
       </div>
 
       <div class="hero-side">
         <div class="status-pill" [class.ready]="connected && modelAvailable">
           <span class="dot"></span>
-          <span>{{ connected && modelAvailable ? 'Ollama san sang' : 'Dang fallback local' }}</span>
+          <span>{{ connected && modelAvailable ? ('aiLocal.ollamaReady' | translate) : ('aiLocal.fallback' | translate) }}</span>
         </div>
 
         <div class="control-row">
-          <label for="local-exchange">San giao dich</label>
+          <label for="local-exchange">{{ 'aiLocal.exchange' | translate }}</label>
           <ion-select
             id="local-exchange"
             interface="popover"
@@ -33,42 +32,67 @@
         <div class="auto-panel">
           <div class="auto-header">
             <div>
-              <span class="meta-label">Auto analysis</span>
-              <strong>{{ autoAnalyzeEnabled ? 'Dang bat' : 'Dang tat' }}</strong>
+              <span class="meta-label">{{ 'aiLocal.autoAnalysis' | translate }}</span>
+              <strong>{{ autoAnalyzeEnabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}</strong>
               <p class="auto-note">
-                Khi bat, AI Local tu phan tich toan bo market, watchlist va tin tuc moi khi doi san hoac lam moi.
+                {{ 'aiLocal.autoAnalysisNote' | translate }}
               </p>
             </div>
             <ion-toggle [(ngModel)]="autoAnalyzeEnabled" (ionChange)="onAutoAnalyzeChange()"></ion-toggle>
           </div>
         </div>
 
+        <div class="auto-panel financial-toggle-panel">
+          <div class="auto-header">
+            <div>
+              <span class="meta-label">{{ 'aiLocal.financialAnalysis' | translate }}</span>
+              <strong>{{ financialAnalysisEnabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}</strong>
+              <p class="auto-note">
+                {{ 'aiLocal.financialAnalysisNote' | translate }}
+              </p>
+            </div>
+            <ion-toggle [(ngModel)]="financialAnalysisEnabled" (ionChange)="onFinancialAnalysisChange()"></ion-toggle>
+          </div>
+        </div>
+
         <div class="meta-grid">
           <div class="meta-card">
-            <span class="meta-label">Provider</span>
+            <span class="meta-label">{{ 'aiLocal.provider' | translate }}</span>
             <strong>{{ provider }}</strong>
           </div>
           <div class="meta-card">
-            <span class="meta-label">Model</span>
+            <span class="meta-label">{{ 'aiLocal.model' | translate }}</span>
             <strong>{{ model }}</strong>
           </div>
           <div class="meta-card">
-            <span class="meta-label">Exchange</span>
+            <span class="meta-label">{{ 'aiLocal.exchange' | translate }}</span>
             <strong>{{ selectedExchange }}</strong>
           </div>
           <div class="meta-card">
-            <span class="meta-label">Mode</span>
-            <strong>{{ connected && modelAvailable ? 'Local live' : 'Fallback' }}</strong>
+            <span class="meta-label">{{ 'aiLocal.mode' | translate }}</span>
+            <strong>{{ connected && modelAvailable ? ('aiLocal.modeLive' | translate) : ('aiLocal.modeFallback' | translate) }}</strong>
           </div>
+        </div>
+
+        <div class="queue-status-panel" *ngIf="sendingPrompt || pendingAnalysisCount">
+          <span class="meta-label">{{ 'aiLocal.queue' | translate }}</span>
+          <strong>
+            {{ sendingPrompt ? ('aiLocal.queueProcessing' | translate) : ('aiLocal.queueWaiting' | translate) }}
+          </strong>
+          <p class="auto-note">
+            {{ 'aiLocal.queuePending' | translate }}: {{ pendingAnalysisCount }}
+          </p>
         </div>
       </div>
     </section>
 
+    <app-page-load-indicator pageId="ai-local"></app-page-load-indicator>
+
     <section class="segment-panel">
-      <button type="button" [class.active]="selectedTab === 'overview'" (click)="selectTab('overview')">Tong quan</button>
-      <button type="button" [class.active]="selectedTab === 'chat'" (click)="selectTab('chat')">Chat local</button>
-      <button type="button" [class.active]="selectedTab === 'data'" (click)="selectTab('data')">Du lieu local</button>
-      <button type="button" class="refresh-button" (click)="refreshOverview()">Lam moi</button>
+      <button type="button" [class.active]="selectedTab === 'overview'" (click)="selectTab('overview')">{{ 'aiLocal.tab.overview' | translate }}</button>
+      <button type="button" [class.active]="selectedTab === 'chat'" (click)="selectTab('chat')">{{ 'aiLocal.tab.chat' | translate }}</button>
+      <button type="button" [class.active]="selectedTab === 'data'" (click)="selectTab('data')">{{ 'aiLocal.tab.data' | translate }}</button>
+      <button type="button" class="refresh-button" (click)="refreshOverview()">{{ 'common.reload' | translate }}</button>
     </section>
 
     <p *ngIf="overviewError" class="error-banner">{{ overviewError }}</p>
@@ -90,8 +114,8 @@
         <article class="panel forecast-panel">
           <div class="panel-heading">
             <div>
-              <span class="panel-kicker">AI LOCAL INSIGHTS</span>
-              <h2>Phan tich nhanh tu qwen3:8b</h2>
+              <span class="panel-kicker">{{ 'aiLocal.insights' | translate }}</span>
+              <h2>{{ 'aiLocal.insightsTitle' | translate }}</h2>
             </div>
             <span class="panel-badge">{{ forecastCards.length }} the</span>
           </div>
@@ -102,7 +126,7 @@
               <h3>{{ card.title }}</h3>
               <p>{{ card.summary }}</p>
               <div class="confidence-row">
-                <span>Confidence</span>
+                <span>{{ 'aiLocal.confidence' | translate }}</span>
                 <strong>{{ card.confidence }}%</strong>
               </div>
             </article>
@@ -118,8 +142,8 @@
         <article class="panel stats-panel">
           <div class="panel-heading">
             <div>
-              <span class="panel-kicker">LOCAL DATASET</span>
-              <h2>Thong tin dang dua vao model</h2>
+              <span class="panel-kicker">{{ 'aiLocal.dataset' | translate }}</span>
+              <h2>{{ 'aiLocal.datasetTitle' | translate }}</h2>
             </div>
           </div>
 
@@ -137,8 +161,8 @@
         <article class="panel activity-panel">
           <div class="panel-heading">
             <div>
-              <span class="panel-kicker">ACTIVITY</span>
-              <h2>Tin hieu va su kien gan nhat</h2>
+              <span class="panel-kicker">{{ 'aiLocal.activity' | translate }}</span>
+              <h2>{{ 'aiLocal.activityTitle' | translate }}</h2>
             </div>
           </div>
 
@@ -153,13 +177,13 @@
         <article class="panel news-panel">
           <div class="panel-heading">
             <div>
-              <span class="panel-kicker">CAFEF LOCAL FEED</span>
-              <h2>Tin tuc dua vao local context</h2>
+              <span class="panel-kicker">{{ 'aiLocal.cafefFeed' | translate }}</span>
+              <h2>{{ 'aiLocal.cafefFeedTitle' | translate }}</h2>
             </div>
             <span class="panel-badge">{{ newsRangeLabel }}</span>
           </div>
 
-          <div class="empty-state" *ngIf="!newsItems.length">Chua co tin CafeF trong local context.</div>
+          <div class="empty-state" *ngIf="!newsItems.length">{{ 'aiLocal.emptyNews' | translate }}</div>
 
           <a
             class="news-item"
@@ -171,20 +195,20 @@
             <span class="source">{{ item.source }}</span>
             <h3>{{ item.title }}</h3>
             <p>{{ item.summary }}</p>
-            <small>{{ item.published_at || 'Moi cap nhat' }}</small>
+            <small>{{ item.published_at || ('aiLocal.justUpdated' | translate) }}</small>
           </a>
 
           <div class="pagination-row" *ngIf="newsItems.length > newsPageSize">
             <button type="button" (click)="goToNewsPage(currentNewsPage - 1)" [disabled]="currentNewsPage === 1">
-              Truoc
+              {{ 'dashboard.prev' | translate }}
             </button>
-            <span>Trang {{ currentNewsPage }}/{{ totalNewsPages }}</span>
+            <span>{{ 'dashboard.page' | translate }} {{ currentNewsPage }}/{{ totalNewsPages }}</span>
             <button
               type="button"
               (click)="goToNewsPage(currentNewsPage + 1)"
               [disabled]="currentNewsPage === totalNewsPages"
             >
-              Sau
+              {{ 'dashboard.next' | translate }}
             </button>
           </div>
         </article>
@@ -193,8 +217,8 @@
       <section class="panel full-width-panel">
         <div class="panel-heading">
           <div>
-            <span class="panel-kicker">DETAILED AI ANALYSIS</span>
-            <h2>Phan tich chi tiet tu toan bo du lieu local hien co</h2>
+            <span class="panel-kicker">{{ 'aiLocal.detailedAnalysis' | translate }}</span>
+            <h2>{{ 'aiLocal.detailedAnalysisTitle' | translate }}</h2>
           </div>
         </div>
 
@@ -209,13 +233,40 @@
         </div>
       </section>
 
-      <section class="panel full-width-panel" *ngIf="financialReports.length">
+      <section class="panel full-width-panel" *ngIf="financialAnalysisEnabled && symbolOutlooks.length">
         <div class="panel-heading">
           <div>
-            <span class="panel-kicker">FINANCIAL REPORTS</span>
-            <h2>Du lieu bao cao tai chinh dang dua vao AI Local</h2>
+            <span class="panel-kicker">{{ 'aiLocal.symbolOutlook' | translate }}</span>
+            <h2>{{ 'aiLocal.symbolOutlookTitle' | translate }}</h2>
           </div>
-          <span class="panel-badge">{{ financialReports.length }} doanh nghiep</span>
+          <span class="panel-badge">{{ symbolOutlooks.length }} mã</span>
+        </div>
+
+        <div class="analysis-grid">
+          <article class="analysis-card outlook-card" *ngFor="let item of symbolOutlooks; trackBy: trackBySymbolOutlook">
+            <div class="outlook-topline">
+              <h3>{{ item.symbol }} <span *ngIf="item.exchange">/ {{ item.exchange }}</span></h3>
+              <span class="direction-badge" [class]="item.direction">{{ item.direction }}</span>
+            </div>
+            <p>{{ item.summary }}</p>
+            <div class="confidence-row">
+              <span>{{ 'aiLocal.horizon' | translate }}: {{ item.horizon }}</span>
+              <strong>{{ item.confidence }}%</strong>
+            </div>
+            <ul *ngIf="item.basis.length" class="analysis-list">
+              <li *ngFor="let basis of item.basis; trackBy: trackByPrompt">{{ basis }}</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel full-width-panel" *ngIf="financialAnalysisEnabled && financialReports.length">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-kicker">{{ 'aiLocal.financialReports' | translate }}</span>
+            <h2>{{ 'aiLocal.financialReportsTitle' | translate }}</h2>
+          </div>
+          <span class="panel-badge">{{ financialReports.length }} doanh nghiệp</span>
         </div>
 
         <div class="analysis-grid">
@@ -237,14 +288,14 @@
         <article class="panel chat-panel">
           <div class="panel-heading">
             <div>
-              <span class="panel-kicker">CHAT LOCAL</span>
-              <h2>Hoi qwen3:8b ve thi truong</h2>
+            <span class="panel-kicker">{{ 'aiLocal.chatLocal' | translate }}</span>
+            <h2>{{ 'aiLocal.chatLocalTitle' | translate }}</h2>
             </div>
           </div>
 
           <div class="chat-stream">
             <article class="chat-bubble" *ngFor="let message of chatMessages; trackBy: trackByChat" [class.user]="message.role === 'user'">
-              <span class="bubble-role">{{ message.role === 'user' ? 'Ban' : 'AI Local' }}</span>
+              <span class="bubble-role">{{ message.role === 'user' ? ('aiAgent.you' | translate) : ('tabs.aiLocal' | translate) }}</span>
               <p>{{ message.content }}</p>
               <small>{{ message.time }}</small>
             </article>
@@ -254,21 +305,21 @@
             <div class="template-board">
               <div class="template-header">
                 <div>
-                  <span class="panel-kicker">CHAT TEMPLATES</span>
-                  <h3>Mau phan tich chon nhanh</h3>
+                  <span class="panel-kicker">{{ 'aiLocal.chatTemplates' | translate }}</span>
+                  <h3>{{ 'aiLocal.chatTemplatesTitle' | translate }}</h3>
                 </div>
               </div>
 
               <div class="template-grid">
                 <article class="template-card" *ngFor="let template of promptTemplates; trackBy: trackByTemplate">
                   <div class="template-copy">
-                    <strong>{{ template.title }}</strong>
-                    <p>{{ template.description }}</p>
+                    <strong>{{ getTemplateTitle(template) }}</strong>
+                    <p>{{ getTemplateDescription(template) }}</p>
                   </div>
 
                   <div class="template-actions">
-                    <button type="button" class="ghost-button" (click)="useTemplate(template)">Nap mau</button>
-                    <button type="button" class="solid-button" (click)="sendTemplate(template)">Chay ngay</button>
+                    <button type="button" class="ghost-button" (click)="useTemplate(template)">{{ 'aiLocal.loadTemplate' | translate }}</button>
+                    <button type="button" class="solid-button" (click)="sendTemplate(template)">{{ 'aiLocal.runNow' | translate }}</button>
                   </div>
                 </article>
               </div>
@@ -278,10 +329,10 @@
               [(ngModel)]="currentPrompt"
               autoGrow="true"
               fill="outline"
-              placeholder="Vi du: Phan tich watchlist va tom tat tin CafeF lien quan ngan hang..."
+              [placeholder]="'aiLocal.chatPlaceholder' | translate"
             ></ion-textarea>
             <button type="button" (click)="sendPrompt()" [disabled]="sendingPrompt">
-              {{ sendingPrompt ? 'Dang gui...' : 'Gui AI Local' }}
+              {{ sendingPrompt ? ('aiAgent.sending' | translate) : ('aiLocal.send' | translate) }}
             </button>
           </div>
         </article>
@@ -289,8 +340,8 @@
         <article class="panel context-panel">
           <div class="panel-heading">
             <div>
-              <span class="panel-kicker">CONTEXT SNAPSHOT</span>
-              <h2>Du lieu dang dua vao phien chat</h2>
+              <span class="panel-kicker">{{ 'aiLocal.contextSnapshot' | translate }}</span>
+              <h2>{{ 'aiLocal.contextSnapshotTitle' | translate }}</h2>
             </div>
           </div>
 
@@ -303,7 +354,7 @@
           </div>
 
           <div class="focus-box">
-            <span class="focus-title">Focus symbols</span>
+            <span class="focus-title">{{ 'aiLocal.focusSymbols' | translate }}</span>
             <div class="focus-tags">
               <span *ngFor="let symbol of focusSymbols; trackBy: trackByPrompt">{{ symbol }}</span>
             </div>
@@ -317,8 +368,8 @@
         <article class="panel focus-panel">
           <div class="panel-heading">
             <div>
-              <span class="panel-kicker">FOCUS SYMBOLS</span>
-              <h2>Danh sach ma local AI uu tien</h2>
+              <span class="panel-kicker">{{ 'aiLocal.focusSymbols' | translate }}</span>
+              <h2>{{ 'aiLocal.focusSymbolsTitle' | translate }}</h2>
             </div>
           </div>
 
@@ -330,8 +381,8 @@
         <article class="panel dataset-panel">
           <div class="panel-heading">
             <div>
-              <span class="panel-kicker">DATA COVERAGE</span>
-              <h2>Bo du lieu dang mo cho model</h2>
+              <span class="panel-kicker">{{ 'aiLocal.dataCoverage' | translate }}</span>
+              <h2>{{ 'aiLocal.dataCoverageTitle' | translate }}</h2>
             </div>
           </div>
 
@@ -348,31 +399,58 @@
       <section class="panel full-width-panel" *ngIf="cafefStorage">
         <div class="panel-heading">
           <div>
-            <span class="panel-kicker">CAFEF STORAGE STATUS</span>
-            <h2>Kiem tra trang thai luu tru tin CafeF</h2>
+            <span class="panel-kicker">{{ 'aiLocal.cafefStorage' | translate }}</span>
+            <h2>{{ 'aiLocal.cafefStorageTitle' | translate }}</h2>
           </div>
         </div>
 
         <div class="storage-grid">
           <article class="dataset-card">
-            <span>Stored in DB</span>
-            <strong>{{ cafefStorage.stored_in_db ? 'Co' : 'Chua' }}</strong>
+            <span>{{ 'aiLocal.storedInDb' | translate }}</span>
+            <strong>{{ cafefStorage.stored_in_db ? ('aiLocal.yes' | translate) : ('aiLocal.notYet' | translate) }}</strong>
             <small>{{ cafefStorage.detail }}</small>
           </article>
 
           <article class="dataset-card">
-            <span>Nguon hien tai</span>
+            <span>{{ 'aiLocal.currentSource' | translate }}</span>
             <strong>{{ cafefStorage.source }}</strong>
-            <small>Thoi diem kiem tra: {{ cafefStorage.checked_at }}</small>
+            <small>{{ 'aiLocal.checkedAt' | translate }}: {{ cafefStorage.checked_at }}</small>
           </article>
         </div>
       </section>
 
-      <section class="panel full-width-panel" *ngIf="financialReports.length">
+      <section class="panel full-width-panel" *ngIf="financialAnalysisEnabled && symbolOutlooks.length">
         <div class="panel-heading">
           <div>
-            <span class="panel-kicker">FINANCIAL COVERAGE</span>
-            <h2>Doanh nghiep dang co bao cao tai chinh trong local context</h2>
+            <span class="panel-kicker">{{ 'aiLocal.symbolOutlook' | translate }}</span>
+            <h2>{{ 'aiLocal.symbolOutlookTitle' | translate }}</h2>
+          </div>
+          <span class="panel-badge">{{ symbolOutlooks.length }} mã</span>
+        </div>
+
+        <div class="analysis-grid">
+          <article class="analysis-card outlook-card" *ngFor="let item of symbolOutlooks; trackBy: trackBySymbolOutlook">
+            <div class="outlook-topline">
+              <h3>{{ item.symbol }} <span *ngIf="item.exchange">/ {{ item.exchange }}</span></h3>
+              <span class="direction-badge" [class]="item.direction">{{ item.direction }}</span>
+            </div>
+            <p>{{ item.summary }}</p>
+            <div class="confidence-row">
+              <span>{{ 'aiLocal.horizon' | translate }}: {{ item.horizon }}</span>
+              <strong>{{ item.confidence }}%</strong>
+            </div>
+            <ul *ngIf="item.basis.length" class="analysis-list">
+              <li *ngFor="let basis of item.basis; trackBy: trackByPrompt">{{ basis }}</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel full-width-panel" *ngIf="financialAnalysisEnabled && financialReports.length">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-kicker">{{ 'aiLocal.financialCoverage' | translate }}</span>
+            <h2>{{ 'aiLocal.financialCoverageTitle' | translate }}</h2>
           </div>
         </div>
 
@@ -392,13 +470,13 @@
       <section class="panel full-width-panel">
         <div class="panel-heading">
           <div>
-            <span class="panel-kicker">NEWS CONTEXT</span>
-            <h2>Toan bo tin dang duoc AI Local doc</h2>
+            <span class="panel-kicker">{{ 'aiLocal.newsContext' | translate }}</span>
+            <h2>{{ 'aiLocal.newsContextTitle' | translate }}</h2>
           </div>
           <span class="panel-badge">{{ newsRangeLabel }}</span>
         </div>
 
-        <div class="empty-state" *ngIf="!newsItems.length">Chua co tin CafeF trong local context.</div>
+        <div class="empty-state" *ngIf="!newsItems.length">{{ 'aiLocal.emptyNews' | translate }}</div>
 
         <div class="news-grid" *ngIf="newsItems.length">
           <a
@@ -411,13 +489,13 @@
             <span class="source">{{ item.source }}</span>
             <h3>{{ item.title }}</h3>
             <p>{{ item.summary }}</p>
-            <small>{{ item.published_at || 'Moi cap nhat' }}</small>
+            <small>{{ item.published_at || 'Mới cập nhật' }}</small>
           </a>
         </div>
 
         <div class="pagination-row" *ngIf="newsItems.length > newsPageSize">
           <button type="button" (click)="goToNewsPage(currentNewsPage - 1)" [disabled]="currentNewsPage === 1">
-            Truoc
+            Trước
           </button>
           <span>Trang {{ currentNewsPage }}/{{ totalNewsPages }}</span>
           <button
@@ -432,3 +510,4 @@
     </ng-container>
   </div>
 </ion-content>
+

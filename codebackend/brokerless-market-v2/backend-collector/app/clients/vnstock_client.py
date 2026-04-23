@@ -17,6 +17,8 @@ logger = get_logger(__name__)
 class VnstockDataResult:
     rows: list[dict[str, Any]]
     raw: Any
+    source: str | None = None
+    errors: list[str] | None = None
 
 
 class VnstockClient:
@@ -44,6 +46,9 @@ class VnstockClient:
         try:
             if hasattr(self._vnstock, "config") and hasattr(self._vnstock.config, "set_api_key"):
                 self._vnstock.config.set_api_key(self.api_key)
+                return
+            if hasattr(self._vnstock, "change_api_key"):
+                self._vnstock.change_api_key(self.api_key)
         except Exception as exc:  # pragma: no cover
             logger.warning("cannot set vnstock api key automatically: %s", exc)
 
@@ -200,47 +205,77 @@ class VnstockClient:
         self._ensure_ready()
         self._apply_api_key_if_supported()
 
-        source_name = str(source or settings.financial_source or settings.vnstock_source or self.source).strip() or self.source
-        finance = self._make_finance(symbol=symbol, period=period, source=source_name)
-        method = getattr(finance, statement_type, None)
-        if not callable(method):
-            raise RuntimeError(f"vnstock Finance.{statement_type} is not available")
+        preferred_source = str(source or settings.financial_source or settings.vnstock_source or self.source).strip().upper() or self.source
+        sources_to_try = [preferred_source]
+        for fallback_source in ("KBS", "VCI"):
+            if fallback_source not in sources_to_try:
+                sources_to_try.append(fallback_source)
 
-        errors: list[str] = []
-        raw: Any = None
-        for kwargs in (
-            {"dropna": False},
-            {"dropna": True},
-            {},
-        ):
+        collected_errors: list[str] = []
+        latest_raw: Any = None
+
+        for source_name in sources_to_try:
+            if statement_type == "note":
+                collected_errors.append(f"{source_name}: Finance.note is not supported by installed vnstock package")
+                continue
+
             try:
-                raw = method(**kwargs)
-                rows = self._df_to_records(raw)
-                if rows:
-                    return VnstockDataResult(rows=rows, raw=raw)
-                if raw is not None:
-                    return VnstockDataResult(rows=rows, raw=raw)
-            except TypeError:
+                finance = self._make_finance(symbol=symbol, period=period, source=source_name)
+            except Exception as exc:
+                collected_errors.append(f"{source_name}:construct {exc}")
+                continue
+
+            method = getattr(finance, statement_type, None)
+            if not callable(method):
+                collected_errors.append(f"{source_name}: vnstock Finance.{statement_type} is not available")
+                continue
+
+            call_variants: list[dict[str, Any]]
+            if source_name == "KBS":
+                call_variants = [
+                    {"period": period, "display_mode": "std", "show_log": False},
+                    {"period": period, "show_log": False},
+                    {"period": period},
+                ]
+            else:
+                call_variants = [
+                    {"dropna": False},
+                    {"dropna": True},
+                    {},
+                ]
+
+            errors: list[str] = []
+            for kwargs in call_variants:
                 try:
-                    raw = method()
-                    rows = self._df_to_records(raw)
-                    if rows or raw is not None:
-                        return VnstockDataResult(rows=rows, raw=raw)
+                    latest_raw = method(**kwargs)
+                    rows = self._df_to_records(latest_raw)
+                    if rows:
+                        return VnstockDataResult(rows=rows, raw=latest_raw, source=source_name, errors=errors)
+                    if latest_raw is not None:
+                        return VnstockDataResult(rows=rows, raw=latest_raw, source=source_name, errors=errors)
+                except TypeError:
+                    try:
+                        latest_raw = method()
+                        rows = self._df_to_records(latest_raw)
+                        if rows or latest_raw is not None:
+                            return VnstockDataResult(rows=rows, raw=latest_raw, source=source_name, errors=errors)
+                    except Exception as exc:
+                        errors.append(str(exc))
+                        continue
                 except Exception as exc:
                     errors.append(str(exc))
-                    continue
-            except Exception as exc:
-                errors.append(str(exc))
 
-        if errors:
+            collected_errors.extend(f"{source_name}:{error}" for error in errors)
+
+        if collected_errors:
             logger.warning(
                 "financial statement fetch failed | symbol=%s | statement=%s | period=%s | err=%s",
                 symbol,
                 statement_type,
                 period,
-                " | ".join(errors[:3]),
+                " | ".join(collected_errors[:4]),
             )
-        return VnstockDataResult(rows=[], raw=raw)
+        return VnstockDataResult(rows=[], raw=latest_raw, source=preferred_source, errors=collected_errors)
 
     def _make_quote(self, symbol: str, source: str | None = None) -> Any:
         Quote = getattr(self._vnstock, "Quote")

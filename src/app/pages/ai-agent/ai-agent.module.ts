@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 
 import { AiAgentPageRoutingModule } from './ai-agent-routing.module';
+import { SharedModule } from '../../shared/shared.module';
 
 import { AiAgentPage } from './ai-agent.page';
 
@@ -13,6 +14,7 @@ import { AiAgentPage } from './ai-agent.page';
     CommonModule,
     FormsModule,
     IonicModule,
+    SharedModule,
     AiAgentPageRoutingModule
   ],
   declarations: [AiAgentPage]

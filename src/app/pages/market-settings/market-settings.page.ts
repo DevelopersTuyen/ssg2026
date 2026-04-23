@@ -1,7 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
 import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import { AuthService } from 'src/app/core/services/auth.service';
+import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
+import { ThemeService } from 'src/app/core/services/theme.service';
 import {
   MarketApiService,
   MarketSettingsData,
@@ -61,6 +65,61 @@ const VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
   journal_entries_today: { key: 'journal_entries_today', label: 'So entry journal hom nay', description: 'Dung cho checklist ky luat cuoi ngay.', kind: 'metric' },
 };
 
+const EXTENDED_VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
+  pe_current: { key: 'pe_current', label: 'P/E', description: 'He so P/E hien tai cua ma.', kind: 'metric' },
+  pb_current: { key: 'pb_current', label: 'P/B', description: 'He so P/B hien tai cua ma.', kind: 'metric' },
+  bv_current: { key: 'bv_current', label: 'Book value', description: 'Gia tri so sach tren moi co phan.', kind: 'metric' },
+  eps_current: { key: 'eps_current', label: 'EPS', description: 'EPS hien tai dung de loc tang truong.', kind: 'metric' },
+  eps_growth_year: { key: 'eps_growth_year', label: 'EPS growth nam', description: 'Tang truong EPS nam gan nhat so voi nam truoc.', kind: 'metric' },
+  eps_growth_quarter: { key: 'eps_growth_quarter', label: 'EPS growth quy', description: 'Tang truong EPS quy gan nhat so voi cung ky.', kind: 'metric' },
+  roe_current: { key: 'roe_current', label: 'ROE', description: 'ROE hien tai cua doanh nghiep.', kind: 'metric' },
+  dar_current: { key: 'dar_current', label: 'DAR', description: 'Ty le no tren tai san hien tai.', kind: 'metric' },
+  gross_margin_current: { key: 'gross_margin_current', label: 'Bien gop', description: 'Bien loi nhuan gop gan nhat.', kind: 'metric' },
+  gross_margin_change: { key: 'gross_margin_change', label: 'Bien dong bien gop', description: 'Muc cai thien hoac suy giam bien gop.', kind: 'metric' },
+  quality_flag_count: { key: 'quality_flag_count', label: 'So co chat luong', description: 'So tieu chi chat luong hien dang dat.', kind: 'metric' },
+  industry_pe_average: { key: 'industry_pe_average', label: 'P/E peer average', description: 'P/E trung binh nhom so sanh hien tai.', kind: 'metric' },
+  pe_gap_to_peer: { key: 'pe_gap_to_peer', label: 'P/E gap to peer', description: 'Khoang cach P/E so voi trung binh nhom.', kind: 'metric' },
+  industry_pb_average: { key: 'industry_pb_average', label: 'P/B peer average', description: 'P/B trung binh nhom so sanh hien tai.', kind: 'metric' },
+  pb_gap_to_peer: { key: 'pb_gap_to_peer', label: 'P/B gap to peer', description: 'Khoang cach P/B so voi trung binh nhom.', kind: 'metric' },
+  ma10_volume: { key: 'ma10_volume', label: 'MA10 volume', description: 'Khoi luong trung binh 10 phien.', kind: 'metric' },
+  ma20_volume: { key: 'ma20_volume', label: 'MA20 volume', description: 'Khoi luong trung binh 20 phien.', kind: 'metric' },
+  volume_spike_ratio: { key: 'volume_spike_ratio', label: 'Volume spike ratio', description: 'Ty le volume hien tai so voi MA10/MA20.', kind: 'metric' },
+  ema10: { key: 'ema10', label: 'EMA10', description: 'Duong EMA10 cua gia dong cua.', kind: 'metric' },
+  ema20: { key: 'ema20', label: 'EMA20', description: 'Duong EMA20 cua gia dong cua.', kind: 'metric' },
+  ema_gap_pct: { key: 'ema_gap_pct', label: 'EMA gap %', description: 'Khoang cach gia hien tai voi EMA10/EMA20.', kind: 'metric' },
+  close_above_ema10: { key: 'close_above_ema10', label: 'Dong tren EMA10', description: 'Co xac nhan gia dong cua dang tren EMA10.', kind: 'metric' },
+  close_above_ema20: { key: 'close_above_ema20', label: 'Dong tren EMA20', description: 'Co xac nhan gia dong cua dang tren EMA20.', kind: 'metric' },
+  smart_money_inflow: { key: 'smart_money_inflow', label: 'Smart money inflow', description: 'Dong tien lon vao voi volume xac nhan va gia vuot vung.', kind: 'metric' },
+  surge_trap: { key: 'surge_trap', label: 'Surge trap', description: 'Volume bung no nhung nen cho tin hieu xa hoac trap.', kind: 'metric' },
+  no_supply: { key: 'no_supply', label: 'No supply', description: 'Nhip keo ve voi volume can o ho tro.', kind: 'metric' },
+  volume_divergence: { key: 'volume_divergence', label: 'Volume divergence', description: 'Gia tang nhung volume suy yeu dan.', kind: 'metric' },
+  breakout_confirmation: { key: 'breakout_confirmation', label: 'Breakout confirmation', description: 'Ma dang xac nhan breakout voi gia va volume.', kind: 'metric' },
+  spring_shakeout: { key: 'spring_shakeout', label: 'Spring / Shakeout', description: 'Rut chan manh sau khi thung ho tro.', kind: 'metric' },
+  absorption: { key: 'absorption', label: 'Absorption', description: 'Chuoi nen hap thu nguon cung voi volume tang dan.', kind: 'metric' },
+  pullback_retest: { key: 'pullback_retest', label: 'Pullback retest', description: 'Nhip test lai breakout/EMA thanh cong.', kind: 'metric' },
+  bullish_pattern_score: { key: 'bullish_pattern_score', label: 'Bullish pattern score', description: 'Diem tong hop cua cac mau nen tang gia.', kind: 'metric' },
+  bearish_pattern_score: { key: 'bearish_pattern_score', label: 'Bearish pattern score', description: 'Diem tong hop cua cac mau nen giam gia.', kind: 'metric' },
+  stop_loss_pct: { key: 'stop_loss_pct', label: 'Stop-loss %', description: 'Ty le stop-loss goi y theo execution engine.', kind: 'metric' },
+  obv_value: { key: 'obv_value', label: 'OBV value', description: 'Gia tri OBV hien tai cua ma.', kind: 'metric' },
+  obv_ma10: { key: 'obv_ma10', label: 'OBV MA10', description: 'Duong trung binh 10 phien cua OBV.', kind: 'metric' },
+  obv_slope_pct: { key: 'obv_slope_pct', label: 'OBV slope %', description: 'Do doc gan day cua OBV.', kind: 'metric' },
+  obv_trend_score: { key: 'obv_trend_score', label: 'OBV trend score', description: 'Diem xu huong dong tien theo OBV.', kind: 'metric' },
+  obv_above_ma: { key: 'obv_above_ma', label: 'OBV tren MA', description: 'OBV dang nam tren duong trung binh tham chieu.', kind: 'metric' },
+  price_context_score: { key: 'price_context_score', label: 'Price context score', description: 'Diem boi canh gia: EMA, nen chat va gan break.', kind: 'metric' },
+  near_breakout_zone: { key: 'near_breakout_zone', label: 'Near breakout zone', description: 'Gia dang nam sat vung breakout.', kind: 'metric' },
+  base_tightness_pct: { key: 'base_tightness_pct', label: 'Base tightness %', description: 'Do chat cua nen gia gan day.', kind: 'metric' },
+  base_is_tight: { key: 'base_is_tight', label: 'Nen gia chat', description: 'Co xac nhan nen gia dang chat.', kind: 'metric' },
+  news_pressure_score: { key: 'news_pressure_score', label: 'News pressure score', description: 'Muc do tin tuc dang gay ap luc/hung phan len ma.', kind: 'metric' },
+  pre_news_accumulation: { key: 'pre_news_accumulation', label: 'Pre-news accumulation', description: 'Dong tien tich luy truoc khi tin bung no.', kind: 'metric' },
+  obv_breakout_confirmation: { key: 'obv_breakout_confirmation', label: 'OBV breakout confirmation', description: 'OBV xac nhan cho breakout.', kind: 'metric' },
+  smart_money_before_news: { key: 'smart_money_before_news', label: 'Smart money before news', description: 'Dong tien lon vao truoc khi news pressure tang.', kind: 'metric' },
+  obv_distribution: { key: 'obv_distribution', label: 'OBV distribution', description: 'Canh bao phan phoi som theo OBV.', kind: 'metric' },
+  weak_news_chase: { key: 'weak_news_chase', label: 'Weak news chase', description: 'Tin nhieu nhung dong tien khong dong thuan.', kind: 'metric' },
+  money_flow_score: { key: 'money_flow_score', label: 'Money flow score', description: 'Diem tong hop cua engine dong tien truoc tin.', kind: 'metric' },
+};
+
+Object.assign(VARIABLE_HINTS, EXTENDED_VARIABLE_HINTS);
+
 const EXPRESSION_RESERVED_WORDS = new Set([
   'and',
   'or',
@@ -107,13 +166,69 @@ const EXPRESSION_VARIABLE_ORDER = [
   'journal_entries_today',
 ];
 
+EXPRESSION_VARIABLE_ORDER.splice(
+  5,
+  0,
+  'pe_current',
+  'pb_current',
+  'bv_current',
+  'eps_current',
+  'eps_growth_year',
+  'eps_growth_quarter',
+  'roe_current',
+  'dar_current',
+  'gross_margin_current',
+  'gross_margin_change',
+  'quality_flag_count',
+  'industry_pe_average',
+  'pe_gap_to_peer',
+  'industry_pb_average',
+  'pb_gap_to_peer',
+  'ma10_volume',
+  'ma20_volume',
+  'volume_spike_ratio',
+  'ema10',
+  'ema20',
+  'ema_gap_pct',
+  'close_above_ema10',
+  'close_above_ema20',
+  'smart_money_inflow',
+  'surge_trap',
+  'no_supply',
+  'volume_divergence',
+  'breakout_confirmation',
+  'spring_shakeout',
+  'absorption',
+  'pullback_retest',
+  'bullish_pattern_score',
+  'bearish_pattern_score',
+  'stop_loss_pct',
+  'obv_value',
+  'obv_ma10',
+  'obv_slope_pct',
+  'obv_trend_score',
+  'obv_above_ma',
+  'price_context_score',
+  'near_breakout_zone',
+  'base_tightness_pct',
+  'base_is_tight',
+  'news_pressure_score',
+  'pre_news_accumulation',
+  'obv_breakout_confirmation',
+  'smart_money_before_news',
+  'obv_distribution',
+  'weak_news_chase',
+  'money_flow_score'
+);
+
 @Component({
   selector: 'app-market-settings',
   templateUrl: './market-settings.page.html',
   styleUrls: ['./market-settings.page.scss'],
   standalone: false,
 })
-export class MarketSettingsPage implements OnInit {
+export class MarketSettingsPage implements OnInit, OnDestroy {
+  private readonly pageLoadKey = 'market-settings';
   readonly expressionOperatorGroups = EXPRESSION_OPERATOR_GROUPS;
 
   selectedTab: SettingsTab = 'general';
@@ -140,6 +255,8 @@ export class MarketSettingsPage implements OnInit {
     name: '',
     description: '',
   };
+  private backgroundSub?: Subscription;
+  private activeView = false;
 
   readonly tabs: SettingsTabItem[] = [
     { key: 'general', labelKey: 'settings.tabs.general', helperKey: 'settings.tabs.generalHelp' },
@@ -155,18 +272,54 @@ export class MarketSettingsPage implements OnInit {
     private api: MarketApiService,
     private auth: AuthService,
     private router: Router,
-    private i18n: AppI18nService
+    private i18n: AppI18nService,
+    private theme: ThemeService,
+    private backgroundRefresh: BackgroundRefreshService,
+    private pageLoadState: PageLoadStateService
   ) {
     this.settings = this.buildEmptySettings();
   }
 
   ngOnInit(): void {
+    this.pageLoadState.registerPage(this.pageLoadKey, 'settings.title');
+    this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
+      if (!this.activeView) return;
+      if (domains.length && this.selectedTab === 'data') {
+        this.loadSyncStatus();
+      }
+    });
     this.loadSettings();
-    this.loadStrategyOverview();
+  }
+
+  ionViewDidEnter(): void {
+    this.activeView = true;
+    this.pageLoadState.setActivePage(this.pageLoadKey);
+    if (this.selectedTab === 'data' && !this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 12000)) {
+      this.loadSyncStatus();
+    }
+    if (
+      this.selectedTab === 'strategy' &&
+      !this.strategyConfig &&
+      !this.strategyLoading &&
+      !this.pageLoadState.isLoading(this.pageLoadKey)
+    ) {
+      this.loadStrategyOverview();
+    }
+  }
+
+  ionViewDidLeave(): void {
+    this.activeView = false;
+  }
+
+  ngOnDestroy(): void {
+    this.backgroundSub?.unsubscribe();
   }
 
   selectTab(tab: SettingsTab): void {
     this.selectedTab = tab;
+    if (tab === 'data') {
+      this.loadSyncStatus();
+    }
     if (tab === 'strategy' && !this.strategyConfig && !this.strategyLoading) {
       this.loadStrategyOverview();
     }
@@ -174,9 +327,9 @@ export class MarketSettingsPage implements OnInit {
 
   loadSettings(): void {
     this.loading = true;
+    this.pageLoadState.start(this.pageLoadKey);
     this.error = '';
     this.message = '';
-    this.loadSyncStatus();
 
     this.api.getMySettings().subscribe({
       next: (response) => {
@@ -187,10 +340,12 @@ export class MarketSettingsPage implements OnInit {
           this.auth.cacheSettings(response.data);
         }
         this.loading = false;
+        this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
         this.error = this.i18n.translate('settings.loadFailed');
         this.loading = false;
+        this.pageLoadState.fail(this.pageLoadKey, this.error);
       },
     });
   }
@@ -219,12 +374,15 @@ export class MarketSettingsPage implements OnInit {
   }
 
   loadSyncStatus(): void {
+    this.pageLoadState.startBackground(this.pageLoadKey);
     this.api.getSyncStatus().subscribe({
       next: (response) => {
         if (response.data) {
           this.syncStatus = response.data;
         }
+        this.pageLoadState.finish(this.pageLoadKey);
       },
+      error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được trạng thái đồng bộ.'),
     });
   }
 
@@ -256,31 +414,48 @@ export class MarketSettingsPage implements OnInit {
     });
   }
 
-  loadStrategyOverview(): void {
-    this.strategyLoading = true;
-    this.strategyError = '';
-    this.strategyMessage = '';
+  loadStrategyOverview(silent = false): void {
+    if (!silent) {
+      this.strategyLoading = true;
+      this.strategyError = '';
+      this.strategyMessage = '';
+      this.pageLoadState.start(this.pageLoadKey);
+    } else {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
 
-    this.api.getStrategyOverview(this.activeStrategyProfileId || undefined).subscribe({
+    this.api.listStrategyProfiles().subscribe({
       next: (response) => {
         this.strategyLoading = false;
-        if (!response.data) {
-          this.strategyError = 'Khong tai duoc cau hinh strategy.';
+        const profiles = response.data || [];
+        if (!profiles.length) {
+          if (!silent) {
+            this.strategyError = 'Khong tai duoc cau hinh strategy.';
+          }
           return;
         }
 
-        this.strategyProfiles = response.data.profiles || [];
-        this.activeStrategyProfileId = response.data.activeProfile?.id || this.strategyProfiles[0]?.id || null;
+        this.strategyProfiles = profiles;
+        this.activeStrategyProfileId =
+          this.strategyProfiles.find((item) => item.id === this.activeStrategyProfileId)?.id ||
+          this.strategyProfiles.find((item) => item.isDefault)?.id ||
+          this.strategyProfiles[0]?.id ||
+          null;
 
         if (this.activeStrategyProfileId) {
+          this.pageLoadState.setProgress(this.pageLoadKey, 55);
           this.loadStrategyConfig(this.activeStrategyProfileId);
         } else {
           this.strategyConfig = null;
+          this.pageLoadState.finish(this.pageLoadKey);
         }
       },
       error: () => {
         this.strategyLoading = false;
-        this.strategyError = 'Khong tai duoc Strategy settings.';
+        if (!silent) {
+          this.strategyError = 'Khong tai duoc Strategy settings.';
+        }
+        this.pageLoadState.fail(this.pageLoadKey, this.strategyError || 'Không tải được Strategy settings.');
       },
     });
   }
@@ -302,6 +477,7 @@ export class MarketSettingsPage implements OnInit {
   loadStrategyConfig(profileId: number): void {
     this.strategyLoading = true;
     this.strategyError = '';
+    this.pageLoadState.startBackground(this.pageLoadKey);
 
     this.api.getStrategyProfileConfig(profileId).subscribe({
       next: (response) => {
@@ -309,10 +485,12 @@ export class MarketSettingsPage implements OnInit {
         this.strategyConfig = response.data || null;
         this.strategySavedSnapshot = this.strategyConfig ? this.serializeStrategyConfig(this.strategyConfig) : '';
         this.ensureStrategyExpansion();
+        this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
         this.strategyLoading = false;
         this.strategyError = 'Khong tai duoc strategy config.';
+        this.pageLoadState.fail(this.pageLoadKey, this.strategyError);
       },
     });
   }
@@ -420,7 +598,7 @@ export class MarketSettingsPage implements OnInit {
         }
         this.activeStrategyProfileId = response.data.id;
         this.strategyMessage = `Da chuyen sang profile ${response.data.name}.`;
-        this.loadStrategyOverview();
+        this.loadStrategyConfig(this.activeStrategyProfileId);
       },
       error: () => {
         this.strategyError = 'Kich hoat profile that bai.';
@@ -549,6 +727,8 @@ export class MarketSettingsPage implements OnInit {
     const nextExpression = `${before}${token}${after}`;
 
     entity.expression = nextExpression;
+    editor.value = nextExpression;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
 
     const nextCaret = before.length + token.length;
     requestAnimationFrame(() => {
@@ -561,6 +741,46 @@ export class MarketSettingsPage implements OnInit {
     this.i18n.setLanguage(this.settings.language);
   }
 
+  onThemeChange(): void {
+    this.theme.applyTheme(this.settings.theme);
+  }
+
+  getThemePreviewIcon(): string {
+    if (this.settings.theme === 'dark') {
+      return 'moon';
+    }
+    if (this.settings.theme === 'auto') {
+      return 'contrast';
+    }
+    return 'sunny';
+  }
+
+  getThemePreviewLabel(): string {
+    if (this.settings.theme === 'dark') {
+      return this.i18n.translate('settings.themePreviewDarkLabel');
+    }
+    if (this.settings.theme === 'auto') {
+      return `${this.i18n.translate('settings.themePreviewAutoLabel')} (${this.getResolvedThemeLabel()})`;
+    }
+    return this.i18n.translate('settings.themePreviewLightLabel');
+  }
+
+  getThemePreviewDescription(): string {
+    if (this.settings.theme === 'dark') {
+      return this.i18n.translate('settings.themePreviewDarkDesc');
+    }
+    if (this.settings.theme === 'auto') {
+      return this.i18n.translate('settings.themePreviewAutoDesc');
+    }
+    return this.i18n.translate('settings.themePreviewLightDesc');
+  }
+
+  getResolvedThemeLabel(): string {
+    return this.theme.getResolvedMode(this.settings.theme) === 'dark'
+      ? this.i18n.translate('settings.themeResolvedDark')
+      : this.i18n.translate('settings.themeResolvedLight');
+  }
+
   logout(): void {
     const confirmed = window.confirm(this.i18n.translate('settings.logoutConfirm'));
     if (!confirmed) {
@@ -569,6 +789,10 @@ export class MarketSettingsPage implements OnInit {
 
     this.auth.logout();
     this.router.navigateByUrl('/login');
+  }
+
+  openUserGuide(): void {
+    this.router.navigateByUrl('/tabs/user-guide');
   }
 
   formatSyncTime(value: string | null | undefined): string {
@@ -731,6 +955,7 @@ export class MarketSettingsPage implements OnInit {
       quotes: emptyJob(),
       intraday: emptyJob(),
       indexDaily: emptyJob(),
+      financial: emptyJob(),
       seedSymbols: emptyJob(),
       news: emptyJob(),
       checkedAt: null,

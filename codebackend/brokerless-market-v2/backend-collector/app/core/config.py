@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     financial_symbols_per_run: int = Field(default=1, alias="FINANCIAL_SYMBOLS_PER_RUN")
     financial_rotate_batches: bool = Field(default=True, alias="FINANCIAL_ROTATE_BATCHES")
     financial_periods: str = Field(default="quarter,year", alias="FINANCIAL_PERIODS")
+    cafef_financial_timeout_seconds: int = Field(default=20, alias="CAFEF_FINANCIAL_TIMEOUT_SECONDS")
+    cafef_financial_user_agent: str = Field(
+        default=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/135.0.0.0 Safari/537.36"
+        ),
+        alias="CAFEF_FINANCIAL_USER_AGENT",
+    )
 
     @staticmethod
     def _split_csv(value: str) -> List[str]:

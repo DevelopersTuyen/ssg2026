@@ -16,6 +16,9 @@
         </div>
 
         <div class="header-actions">
+          <button type="button" class="btn btn-outline-secondary" (click)="openUserGuide()">
+            {{ 'settings.guideButton' | translate }}
+          </button>
           <button type="button" class="btn btn-outline-secondary" (click)="loadSettings()" [disabled]="loading || saving">
             {{ 'common.reload' | translate }}
           </button>
@@ -30,6 +33,8 @@
           </button>
         </div>
       </div>
+
+      <app-page-load-indicator pageId="market-settings"></app-page-load-indicator>
 
       <div class="status-row" *ngIf="message || error || loading">
         <div class="status-pill loading" *ngIf="loading">{{ 'settings.loading' | translate }}</div>
@@ -52,7 +57,7 @@
 
       <div class="settings-card" [ngSwitch]="selectedTab">
         <div *ngSwitchCase="'general'" class="settings-section">
-          <div class="section-title">Cai dat chung</div>
+          <div class="section-title">{{ 'settings.generalTitle' | translate }}</div>
           <div class="form-grid">
             <div class="form-item">
               <label>{{ 'settings.language' | translate }}</label>
@@ -64,7 +69,7 @@
             </div>
 
             <div class="form-item">
-              <label>San mac dinh</label>
+              <label>{{ 'settings.defaultExchange' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.defaultExchange">
                 <option value="HSX">HSX</option>
                 <option value="HNX">HNX</option>
@@ -73,7 +78,7 @@
             </div>
 
             <div class="form-item">
-              <label>Landing page</label>
+              <label>{{ 'settings.landingPage' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.defaultLandingPage">
                 <option value="dashboard">Dashboard</option>
                 <option value="market-watch">Market Watch</option>
@@ -84,7 +89,7 @@
             </div>
 
             <div class="form-item">
-              <label>Startup page</label>
+              <label>{{ 'settings.startupPage' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.startupPage">
                 <option value="dashboard">Dashboard</option>
                 <option value="market-watch">Market Watch</option>
@@ -95,31 +100,40 @@
             </div>
 
             <div class="form-item">
-              <label>Khung thoi gian mac dinh</label>
+              <label>{{ 'settings.defaultTimeRange' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.defaultTimeRange">
-                <option value="1d">1 ngay</option>
-                <option value="1w">1 tuan</option>
-                <option value="1m">1 thang</option>
-                <option value="1y">1 nam</option>
+                <option value="1d">{{ 'settings.range1d' | translate }}</option>
+                <option value="1w">{{ 'settings.range1w' | translate }}</option>
+                <option value="1m">{{ 'settings.range1m' | translate }}</option>
+                <option value="1y">{{ 'settings.range1y' | translate }}</option>
               </select>
             </div>
           </div>
         </div>
 
         <div *ngSwitchCase="'display'" class="settings-section">
-          <div class="section-title">Hien thi va bang gia</div>
+          <div class="section-title">{{ 'settings.displayTitle' | translate }}</div>
           <div class="form-grid">
             <div class="form-item">
-              <label>Theme</label>
-              <select class="form-select" [(ngModel)]="settings.theme">
-                <option value="light">Sang</option>
-                <option value="dark">Toi</option>
-                <option value="auto">Tu dong</option>
+              <label>{{ 'settings.theme' | translate }}</label>
+              <select class="form-select" [(ngModel)]="settings.theme" (ngModelChange)="onThemeChange()">
+                <option value="light">{{ 'settings.themeLight' | translate }}</option>
+                <option value="dark">{{ 'settings.themeDark' | translate }}</option>
+                <option value="auto">{{ 'settings.themeAuto' | translate }}</option>
               </select>
+              <div class="theme-preview-card" [attr.data-theme-choice]="settings.theme">
+                <div class="theme-preview-icon">
+                  <ion-icon [name]="getThemePreviewIcon()"></ion-icon>
+                </div>
+                <div class="theme-preview-copy">
+                  <strong>{{ getThemePreviewLabel() }}</strong>
+                  <span>{{ getThemePreviewDescription() }}</span>
+                </div>
+              </div>
             </div>
 
             <div class="form-item">
-              <label>Ty le chu</label>
+              <label>{{ 'settings.fontScale' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.fontScale">
                 <option value="90">90%</option>
                 <option value="100">100%</option>
@@ -131,63 +145,63 @@
 
           <div class="toggle-list">
             <div class="toggle-row">
-              <span>Compact table</span>
+              <span>{{ 'settings.compactTable' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.compactTable"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Show sparkline</span>
+              <span>{{ 'settings.showSparkline' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.showSparkline"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Flash khi gia thay doi</span>
+              <span>{{ 'settings.flashPriceChange' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.flashPriceChange"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Sticky header</span>
+              <span>{{ 'settings.stickyHeader' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.stickyHeader"></ion-toggle>
             </div>
           </div>
         </div>
 
         <div *ngSwitchCase="'alerts'" class="settings-section">
-          <div class="section-title">Canh bao</div>
+          <div class="section-title">{{ 'settings.alertsTitle' | translate }}</div>
           <div class="toggle-list">
             <div class="toggle-row">
-              <span>Push notification</span>
+              <span>{{ 'settings.pushAlerts' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.pushAlerts"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Email notification</span>
+              <span>{{ 'settings.emailAlerts' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.emailAlerts"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Sound notification</span>
+              <span>{{ 'settings.soundAlerts' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.soundAlerts"></ion-toggle>
             </div>
           </div>
 
           <div class="form-grid">
             <div class="form-item">
-              <label>Muc do canh bao</label>
+              <label>{{ 'settings.alertStrength' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.alertStrength">
-                <option value="light">Nhe</option>
-                <option value="normal">Binh thuong</option>
-                <option value="strict">Chat</option>
+                <option value="light">{{ 'settings.alertStrengthLight' | translate }}</option>
+                <option value="normal">{{ 'settings.alertStrengthNormal' | translate }}</option>
+                <option value="strict">{{ 'settings.alertStrengthStrict' | translate }}</option>
               </select>
             </div>
             <div class="form-item">
-              <label>Nguong volume dot bien (%)</label>
+              <label>{{ 'settings.volumeSpikeThreshold' | translate }}</label>
               <input class="form-control" [(ngModel)]="settings.volumeSpikeThreshold" />
             </div>
             <div class="form-item">
-              <label>Nguong bien dong gia (%)</label>
+              <label>{{ 'settings.priceMoveThreshold' | translate }}</label>
               <input class="form-control" [(ngModel)]="settings.priceMoveThreshold" />
             </div>
           </div>
         </div>
 
         <div *ngSwitchCase="'data'" class="settings-section">
-          <div class="section-title">Du lieu</div>
+          <div class="section-title">{{ 'settings.dataTitle' | translate }}</div>
           <div class="data-sync-hero">
             <div>
               <strong>{{ 'settings.dataSyncTitle' | translate }}</strong>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from math import isfinite
 from typing import Any
 
 try:
@@ -19,7 +20,16 @@ def to_jsonable(value: Any) -> Any:
     if value is None:
         return None
 
-    if isinstance(value, (str, int, float, bool)):
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, float):
+        return value if isfinite(value) else None
+
+    if isinstance(value, str):
         return value
 
     if isinstance(value, Decimal):
@@ -44,7 +54,8 @@ def to_jsonable(value: Any) -> Any:
         if isinstance(value, np.integer):
             return int(value)
         if isinstance(value, np.floating):
-            return float(value)
+            number = float(value)
+            return number if isfinite(number) else None
         if isinstance(value, np.bool_):
             return bool(value)
         if isinstance(value, np.ndarray):

@@ -2,12 +2,14 @@
   <div class="ai-page container-fluid py-3">
     <div class="ai-breadcrumb mb-3">
       <ion-icon name="sparkles-outline"></ion-icon>
-      <span>Market Watch</span>
+      <span>{{ 'tabs.market' | translate }}</span>
       <span class="sep">›</span>
-      <span>AI Agent</span>
+      <span>{{ 'tabs.aiAgent' | translate }}</span>
     </div>
 
     <div class="ai-shell">
+      <app-page-load-indicator pageId="ai-agent"></app-page-load-indicator>
+
       <div class="ai-tabs">
         <button
           type="button"
@@ -26,9 +28,9 @@
             <div class="col-12 col-xl-8">
               <div class="panel">
                 <div class="panel-title d-flex justify-content-between align-items-center">
-                  <span>TRANG THAI AI</span>
+                  <span>{{ 'aiAgent.statusTitle' | translate }}</span>
                   <button type="button" class="btn-refresh" (click)="refreshOverview()" [disabled]="loadingOverview">
-                    {{ loadingOverview ? 'Dang tai...' : 'Lam moi' }}
+                    {{ loadingOverview ? ('common.loading' | translate) : ('common.reload' | translate) }}
                   </button>
                 </div>
 
@@ -45,7 +47,7 @@
               </div>
 
               <div class="panel mt-3">
-                <div class="panel-title">GOI Y NHANH</div>
+                <div class="panel-title">{{ 'aiAgent.quickPrompts' | translate }}</div>
 
                 <div class="prompt-list">
                   <button
@@ -62,12 +64,12 @@
                   <textarea
                     rows="4"
                     class="form-control"
-                    placeholder="Nhap cau hoi cho AI..."
+                    [placeholder]="'aiAgent.askPlaceholder' | translate"
                     [(ngModel)]="currentPrompt"
                   ></textarea>
                   <div class="prompt-actions">
                     <button type="button" class="btn-send" (click)="sendPrompt()" [disabled]="sendingPrompt">
-                      {{ sendingPrompt ? 'Dang gui...' : 'Gui cho AI' }}
+                      {{ sendingPrompt ? ('aiAgent.sending' | translate) : ('aiAgent.sendToAi' | translate) }}
                     </button>
                   </div>
                 </div>
@@ -76,7 +78,7 @@
 
             <div class="col-12 col-xl-4">
               <div class="panel">
-                <div class="panel-title">KET QUA AI GAN NHAT</div>
+                <div class="panel-title">{{ 'aiAgent.latestResult' | translate }}</div>
 
                 <div class="forecast-list" *ngIf="forecastCards.length; else activityList">
                   <div class="forecast-item" *ngFor="let item of forecastCards; trackBy: trackForecast">
@@ -113,7 +115,7 @@
                 [class.assistant]="msg.role === 'assistant'"
               >
                 <div class="meta">
-                  <span class="role">{{ msg.role === 'user' ? 'Ban' : 'AI Agent' }}</span>
+                  <span class="role">{{ msg.role === 'user' ? ('aiAgent.you' | translate) : ('tabs.aiAgent' | translate) }}</span>
                   <span class="time">{{ msg.time }}</span>
                 </div>
                 <div class="bubble">{{ msg.content }}</div>
@@ -124,12 +126,12 @@
               <textarea
                 rows="4"
                 class="form-control"
-                placeholder="Vi du: Vi sao ma dan dau tang hom nay?"
+                [placeholder]="'aiAgent.chatPlaceholder' | translate"
                 [(ngModel)]="currentPrompt"
               ></textarea>
               <div class="chat-input-actions">
                 <button type="button" class="btn-send" (click)="sendPrompt()" [disabled]="sendingPrompt">
-                  {{ sendingPrompt ? 'Dang gui...' : 'Gui' }}
+                  {{ sendingPrompt ? ('aiAgent.sending' | translate) : ('aiAgent.send' | translate) }}
                 </button>
               </div>
             </div>
@@ -137,16 +139,16 @@
         </div>
 
         <div *ngSwitchCase="'tasks'">
-          <div class="panel-title mb-2">TAC VU AI TU DONG</div>
+          <div class="panel-title mb-2">{{ 'aiAgent.tasksTitle' | translate }}</div>
 
           <div class="table-responsive">
             <table class="table ai-table align-middle mb-0">
               <thead>
                 <tr>
-                  <th>TAC VU</th>
-                  <th>LICH CHAY</th>
-                  <th>TRANG THAI</th>
-                  <th>PHAM VI</th>
+                  <th>{{ 'aiAgent.table.task' | translate }}</th>
+                  <th>{{ 'aiAgent.table.schedule' | translate }}</th>
+                  <th>{{ 'aiAgent.table.status' | translate }}</th>
+                  <th>{{ 'aiAgent.table.scope' | translate }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,7 +178,7 @@
         </div>
 
         <div *ngSwitchCase="'history'">
-          <div class="panel-title mb-2">NHAT KY AI</div>
+          <div class="panel-title mb-2">{{ 'aiAgent.historyTitle' | translate }}</div>
 
           <div class="history-list">
             <div class="history-item" *ngFor="let item of historyItems; trackBy: trackActivity">

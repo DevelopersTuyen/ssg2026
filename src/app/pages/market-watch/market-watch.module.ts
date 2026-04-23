@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 
 import { MarketWatchPageRoutingModule } from './market-watch-routing.module';
+import { SharedModule } from '../../shared/shared.module';
 
 import { MarketWatchPage } from './market-watch.page';
 
@@ -13,6 +14,7 @@ import { MarketWatchPage } from './market-watch.page';
     CommonModule,
     FormsModule,
     IonicModule,
+    SharedModule,
     MarketWatchPageRoutingModule
   ],
   declarations: [MarketWatchPage]

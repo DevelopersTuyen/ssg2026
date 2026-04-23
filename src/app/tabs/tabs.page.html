@@ -1,43 +1,78 @@
-<ion-tabs>
-  <ion-tab-bar slot="bottom">
-    <ion-tab-button *ngIf="can('dashboard.view')" tab="dashboard" href="/tabs/dashboard">
-      <ion-icon aria-hidden="true" name="grid-outline"></ion-icon>
-      <ion-label>{{ 'tabs.dashboard' | translate }}</ion-label>
-    </ion-tab-button>
+<div class="tabs-shell">
+  <!-- <section class="global-load-strip" *ngIf="globalLoadState">
+    <div class="global-load-top">
+      <div class="global-load-copy">
+        <strong>{{ globalLoadState.titleKey | translate }}</strong>
+        <span
+          class="global-load-badge"
+          [class.loading]="globalLoadState.status === 'loading'"
+          [class.background]="globalLoadState.status === 'background'"
+          [class.updated]="globalLoadState.status === 'updated'"
+          [class.error]="globalLoadState.status === 'error'"
+        >
+          {{ globalBadgeText() }}
+        </span>
+      </div>
+      <div class="global-load-progress">{{ globalLoadState.progress }}%</div>
+    </div>
 
-    <ion-tab-button *ngIf="can('market-watch.view')" tab="market-watch" href="/tabs/market-watch">
-      <ion-icon name="stats-chart-outline"></ion-icon>
-      <ion-label>{{ 'tabs.market' | translate }}</ion-label>
-    </ion-tab-button>
+    <div class="global-load-track">
+      <div
+        class="global-load-bar"
+        [class.loading]="globalLoadState.status === 'loading'"
+        [class.background]="globalLoadState.status === 'background'"
+        [class.updated]="globalLoadState.status === 'updated'"
+        [class.error]="globalLoadState.status === 'error'"
+        [style.width.%]="globalLoadState.progress"
+      ></div>
+    </div>
 
-    <ion-tab-button *ngIf="can('market-alerts.view')" tab="market-alerts" href="/tabs/market-alerts">
-      <ion-icon name="notifications-outline"></ion-icon>
-      <ion-label>{{ 'tabs.alerts' | translate }}</ion-label>
-    </ion-tab-button>
+    <div class="global-load-bottom">
+      <span *ngIf="globalLoadState.lastUpdatedAt">Cập nhật gần nhất: {{ globalUpdatedText() }}</span>
+    </div>
+  </section> -->
 
-    <ion-tab-button *ngIf="can('ai-agent.view')" tab="ai-agent" href="/tabs/ai-agent">
-      <ion-icon name="sparkles-outline"></ion-icon>
-      <ion-label>{{ 'tabs.aiAgent' | translate }}</ion-label>
-    </ion-tab-button>
+  <ion-tabs>
+    <ion-tab-bar slot="bottom">
+      <ion-tab-button *ngIf="can('dashboard.view')" tab="dashboard" href="/tabs/dashboard">
+        <ion-icon aria-hidden="true" name="grid-outline"></ion-icon>
+        <ion-label>{{ 'tabs.dashboard' | translate }}</ion-label>
+      </ion-tab-button>
 
-    <ion-tab-button *ngIf="can('ai-local.view')" tab="ai-local" href="/tabs/ai-local">
-      <ion-icon name="hardware-chip-outline"></ion-icon>
-      <ion-label>{{ 'tabs.aiLocal' | translate }}</ion-label>
-    </ion-tab-button>
+      <ion-tab-button *ngIf="can('market-watch.view')" tab="market-watch" href="/tabs/market-watch">
+        <ion-icon name="stats-chart-outline"></ion-icon>
+        <ion-label>{{ 'tabs.market' | translate }}</ion-label>
+      </ion-tab-button>
 
-    <ion-tab-button *ngIf="canViewStrategy" tab="strategy-hub" href="/tabs/strategy-hub">
-      <ion-icon name="layers-outline"></ion-icon>
-      <ion-label>{{ 'tabs.strategy' | translate }}</ion-label>
-    </ion-tab-button>
+      <ion-tab-button *ngIf="can('market-alerts.view')" tab="market-alerts" href="/tabs/market-alerts">
+        <ion-icon name="notifications-outline"></ion-icon>
+        <ion-label>{{ 'tabs.alerts' | translate }}</ion-label>
+      </ion-tab-button>
 
-    <ion-tab-button *ngIf="can('market-settings.view')" tab="market-settings" href="/tabs/market-settings">
-      <ion-icon name="settings-outline"></ion-icon>
-      <ion-label>{{ 'tabs.settings' | translate }}</ion-label>
-    </ion-tab-button>
+      <ion-tab-button *ngIf="can('ai-agent.view')" tab="ai-agent" href="/tabs/ai-agent">
+        <ion-icon name="sparkles-outline"></ion-icon>
+        <ion-label>{{ 'tabs.aiAgent' | translate }}</ion-label>
+      </ion-tab-button>
 
-    <ion-tab-button *ngIf="canViewPermissions" tab="role-permissions" href="/tabs/role-permissions">
-      <ion-icon name="shield-checkmark-outline"></ion-icon>
-      <ion-label>{{ 'tabs.permissions' | translate }}</ion-label>
-    </ion-tab-button>
-  </ion-tab-bar>
-</ion-tabs>
+      <ion-tab-button *ngIf="can('ai-local.view')" tab="ai-local" href="/tabs/ai-local">
+        <ion-icon name="hardware-chip-outline"></ion-icon>
+        <ion-label>{{ 'tabs.aiLocal' | translate }}</ion-label>
+      </ion-tab-button>
+
+      <ion-tab-button *ngIf="canViewStrategy" tab="strategy-hub" href="/tabs/strategy-hub">
+        <ion-icon name="layers-outline"></ion-icon>
+        <ion-label>{{ 'tabs.strategy' | translate }}</ion-label>
+      </ion-tab-button>
+
+      <ion-tab-button *ngIf="can('market-settings.view')" tab="market-settings" href="/tabs/market-settings">
+        <ion-icon name="settings-outline"></ion-icon>
+        <ion-label>{{ 'tabs.settings' | translate }}</ion-label>
+      </ion-tab-button>
+
+      <ion-tab-button *ngIf="canViewPermissions" tab="role-permissions" href="/tabs/role-permissions">
+        <ion-icon name="shield-checkmark-outline"></ion-icon>
+        <ion-label>{{ 'tabs.permissions' | translate }}</ion-label>
+      </ion-tab-button>
+    </ion-tab-bar>
+  </ion-tabs>
+</div>

@@ -620,6 +620,231 @@ ion-content.alerts-content {
   }
 }
 
+html[data-theme-mode='dark'] {
+  ion-content.alerts-content {
+    --background: linear-gradient(180deg, #07111b 0%, #0b1522 100%);
+  }
+
+  .alerts-shell {
+    color: #cad7e6;
+  }
+
+  .hero-card,
+  .panel-card,
+  .summary-card,
+  .outlook-card,
+  .watchlist-card,
+  .news-card,
+  .featured-alert,
+  .alert-card {
+    background: #111c2b;
+    border-color: #253549;
+    color: #cad7e6;
+    box-shadow: 0 18px 36px rgba(2, 8, 18, 0.34);
+  }
+
+  .hero-card {
+    background:
+      radial-gradient(circle at top right, rgba(45, 212, 191, 0.16), transparent 34%),
+      linear-gradient(135deg, #0c1626 0%, #10253a 52%, #13455a 100%);
+    color: #f8fbff;
+  }
+
+  .hero-copy p,
+  .hero-meta {
+    color: #b6c7da;
+  }
+
+  .provider-chip {
+    background: rgba(255, 255, 255, 0.08);
+    color: #c8fff3;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .provider-chip.fallback {
+    color: #ffe9a8;
+  }
+
+  .exchange-switch button,
+  .alerts-top-tab {
+    background: #152234;
+    color: #cad7e6;
+    border: 1px solid #26384f;
+  }
+
+  .exchange-switch button.active {
+    background: #e6edf7;
+    color: #0f172a;
+  }
+
+  .refresh-btn {
+    background: linear-gradient(135deg, #c2410c, #ea580c);
+    color: #fff7ed;
+  }
+
+  .summary-label,
+  .summary-helper,
+  .news-meta,
+  .metric span,
+  .alert-meta,
+  .toggle-line,
+  .confidence-box,
+  .setting-block p,
+  .empty-text {
+    color: #97aac1;
+  }
+
+  .summary-value,
+  .outlook-card h2,
+  .watchlist-card h2,
+  .news-title,
+  .featured-alert h3,
+  .alert-title,
+  .alert-symbol,
+  .metric strong,
+  .setting-title,
+  .empty-title {
+    color: #f8fbff;
+  }
+
+  .outlook-card p,
+  .watchlist-card p,
+  .featured-alert p,
+  .alert-message {
+    color: #c5d3e3;
+  }
+
+  .alert-prediction {
+    color: #67e8cf;
+  }
+
+  .direction-pill,
+  .scope-pill,
+  .confidence-pill,
+  .severity-pill,
+  .watchlist-pill {
+    border: 1px solid transparent;
+  }
+
+  .direction-pill,
+  .scope-pill,
+  .confidence-pill {
+    background: #1a2a3d;
+    color: #dbe7f4;
+    border-color: #2c435d;
+  }
+
+  .watchlist-pill {
+    background: rgba(20, 184, 166, 0.16);
+    color: #99f6e4;
+    border-color: rgba(45, 212, 191, 0.22);
+  }
+
+  .severity-pill {
+    background: #1a2a3d;
+    color: #cbd5e1;
+    border-color: #30455f;
+  }
+
+  .severity-pill.warning {
+    background: rgba(245, 158, 11, 0.12);
+    color: #fcd34d;
+    border-color: rgba(245, 158, 11, 0.18);
+  }
+
+  .severity-pill.critical {
+    background: rgba(239, 68, 68, 0.12);
+    color: #fda4af;
+    border-color: rgba(239, 68, 68, 0.18);
+  }
+
+  .watchlist-tags span {
+    background: rgba(56, 189, 248, 0.14);
+    color: #bae6fd;
+    border: 1px solid rgba(56, 189, 248, 0.16);
+  }
+
+  .news-item,
+  .metric,
+  .setting-block,
+  .empty-state {
+    background: #0f1724;
+    border-color: #253549;
+  }
+
+  .news-item:hover {
+    border-color: rgba(45, 212, 191, 0.36);
+  }
+
+  .alerts-top-tab.active,
+  .scope-tabs button.active {
+    background: #134e4a;
+    color: #ecfeff;
+  }
+
+  .ghost-btn {
+    background: rgba(249, 115, 22, 0.12);
+    color: #fdba74;
+    border: 1px solid rgba(249, 115, 22, 0.18);
+  }
+
+  .search-box ion-icon {
+    color: #8ea3bd;
+  }
+
+  .search-box input {
+    background: #0b1522;
+    border-color: #2a3b52;
+    color: #f8fbff;
+  }
+
+  .search-box input::placeholder {
+    color: #7f93ad;
+  }
+
+  .scope-tabs button {
+    background: #162538;
+    color: #bfd0e6;
+    border: 1px solid #27405b;
+  }
+
+  .scope-tabs span {
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+  }
+
+  .featured-alert {
+    background: linear-gradient(180deg, rgba(17, 28, 43, 0.98), rgba(12, 32, 24, 0.96));
+    border-color: rgba(16, 185, 129, 0.2);
+  }
+
+  .featured-alert.critical {
+    background: linear-gradient(180deg, rgba(17, 28, 43, 0.98), rgba(44, 16, 22, 0.96));
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .alert-card {
+    background: #111c2b;
+  }
+
+  .alert-card.watchlist {
+    border-left-color: #14b8a6;
+  }
+
+  .alert-card.critical {
+    border-left-color: #f87171;
+  }
+
+  .alert-footer a {
+    color: #7dd3fc;
+  }
+
+  .empty-state.error {
+    background: rgba(249, 115, 22, 0.08);
+    border-color: rgba(249, 115, 22, 0.18);
+  }
+}
+
 @media (max-width: 599px) {
   .alerts-shell {
     padding: 12px;

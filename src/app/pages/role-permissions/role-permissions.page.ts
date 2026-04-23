@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription, interval } from 'rxjs';
 import {
   MarketApiService,
   RolePermissionLog,
@@ -7,6 +8,7 @@ import {
   RolePermissionUser,
   RolePermissionsOverviewResponse,
 } from 'src/app/core/services/market-api.service';
+import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 
 type PermissionTab = 'users' | 'roles' | 'matrix' | 'logs';
 
@@ -36,7 +38,8 @@ interface NewRoleForm {
   styleUrls: ['./role-permissions.page.scss'],
   standalone: false,
 })
-export class RolePermissionsPage implements OnInit {
+export class RolePermissionsPage implements OnInit, OnDestroy {
+  private readonly pageLoadKey = 'role-permissions';
   selectedTab: PermissionTab = 'users';
   searchKeyword = '';
   selectedRoleFilter = 'all';
@@ -51,6 +54,8 @@ export class RolePermissionsPage implements OnInit {
   showAddRoleForm = false;
   newUser: NewUserForm = this.buildNewUserForm();
   newRole: NewRoleForm = this.buildNewRoleForm();
+  private autoRefreshSub?: Subscription;
+  private activeView = false;
 
   readonly tabs: PermissionTabItem[] = [
     { key: 'users', labelKey: 'permissions.tabs.users' },
@@ -59,10 +64,32 @@ export class RolePermissionsPage implements OnInit {
     { key: 'logs', labelKey: 'permissions.tabs.logs' },
   ];
 
-  constructor(private api: MarketApiService) {}
+  constructor(
+    private api: MarketApiService,
+    private pageLoadState: PageLoadStateService
+  ) {}
 
   ngOnInit(): void {
+    this.pageLoadState.registerPage(this.pageLoadKey, 'permissions.title');
     this.loadOverview();
+  }
+
+  ionViewDidEnter(): void {
+    this.activeView = true;
+    this.pageLoadState.setActivePage(this.pageLoadKey);
+    this.startAutoRefresh();
+    if (!this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 15000)) {
+      this.loadOverview(undefined, true);
+    }
+  }
+
+  ionViewDidLeave(): void {
+    this.activeView = false;
+    this.stopAutoRefresh();
+  }
+
+  ngOnDestroy(): void {
+    this.stopAutoRefresh();
   }
 
   get canManage(): boolean {
@@ -103,24 +130,35 @@ export class RolePermissionsPage implements OnInit {
     this.selectedTab = tab;
   }
 
-  loadOverview(roleKey?: string): void {
-    this.loading = true;
-    this.error = '';
+  loadOverview(roleKey?: string, silent = false): void {
+    if (!silent) {
+      this.loading = true;
+      this.error = '';
+      this.pageLoadState.start(this.pageLoadKey);
+    } else {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    }
 
     this.api.getRolePermissionsOverview(roleKey || this.selectedMatrixRole || undefined).subscribe({
       next: (response) => {
         this.overview = response.data;
         if (!response.data) {
-          this.error = 'Khong tai duoc role-permissions tu backend.';
+          if (!silent) {
+            this.error = 'Khong tai duoc role-permissions tu backend.';
+          }
         } else {
           this.selectedMatrixRole = response.data.selected_role_key;
           this.syncNewUserRole();
         }
         this.loading = false;
+        this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
         this.loading = false;
-        this.error = 'Khong tai duoc role-permissions tu backend.';
+        if (!silent) {
+          this.error = 'Khong tai duoc role-permissions tu backend.';
+        }
+        this.pageLoadState.fail(this.pageLoadKey, this.error || 'Không tải được role-permissions.');
       },
     });
   }
@@ -397,5 +435,20 @@ export class RolePermissionsPage implements OnInit {
       name: '',
       description: '',
     };
+  }
+
+  private startAutoRefresh(): void {
+    this.stopAutoRefresh();
+    this.autoRefreshSub = interval(120000).subscribe(() => {
+      if (!this.activeView || this.saving) {
+        return;
+      }
+      this.loadOverview(undefined, true);
+    });
+  }
+
+  private stopAutoRefresh(): void {
+    this.autoRefreshSub?.unsubscribe();
+    this.autoRefreshSub = undefined;
   }
 }
