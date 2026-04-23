@@ -64,8 +64,11 @@ class CollectorScheduler:
 
     async def stop(self) -> None:
         self._running = False
-        for task in self.tasks:
+        active_tasks = list(self.tasks)
+        for task in active_tasks:
             task.cancel()
+        if active_tasks:
+            await asyncio.gather(*active_tasks, return_exceptions=True)
         self.tasks = []
 
     async def _run_loop(self, job_name: str, func, interval_seconds: int, initial_delay: int = 0) -> None:
@@ -76,13 +79,20 @@ class CollectorScheduler:
             initial_delay,
         )
 
-        if initial_delay > 0:
-            await asyncio.sleep(initial_delay)
+        try:
+            if initial_delay > 0:
+                await asyncio.sleep(initial_delay)
 
-        while self._running:
-            try:
-                await func()
-            except BaseException as exc:
-                logger.exception("scheduler job failed | job=%s | err=%s", job_name, exc)
+            while self._running:
+                try:
+                    await func()
+                except asyncio.CancelledError:
+                    logger.info("scheduler job cancelled | job=%s", job_name)
+                    raise
+                except Exception as exc:
+                    logger.exception("scheduler job failed | job=%s | err=%s", job_name, exc)
 
-            await asyncio.sleep(interval_seconds)
+                await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            logger.info("scheduler loop stopped | job=%s", job_name)
+            raise

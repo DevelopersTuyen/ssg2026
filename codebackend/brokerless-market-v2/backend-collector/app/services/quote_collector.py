@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import datetime
 from math import ceil
@@ -139,7 +140,7 @@ class QuoteCollector:
                 for exchange, batch in selected_batches:
                     try:
                         result = self.client.get_price_board(batch)
-                    except BaseException as exc:
+                    except Exception as exc:
                         errors.append(f"{exchange}:{len(batch)} {exc}")
                         logger.warning("price_board failed | exchange=%s | symbols=%s | err=%s", exchange, len(batch), exc)
                         continue
@@ -203,7 +204,11 @@ class QuoteCollector:
                     total_resolved_batches,
                 )
 
-            except BaseException as exc:
+            except asyncio.CancelledError:
+                await session.rollback()
+                logger.info("collect_quotes cancelled")
+                raise
+            except Exception as exc:
                 await session.rollback()
                 await repo.create_sync_log(
                     job_name="collect_quotes",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from math import ceil
 
@@ -90,7 +91,7 @@ class IntradayCollector:
                 for symbol in batch_symbols:
                     try:
                         result = self.client.get_intraday(symbol)
-                    except BaseException as exc:
+                    except Exception as exc:
                         message = str(exc)
                         errors.append(f"{symbol}: {message}")
                         if "Rate limit exceeded" in message:
@@ -156,7 +157,11 @@ class IntradayCollector:
                     len(symbols),
                 )
 
-            except BaseException as exc:
+            except asyncio.CancelledError:
+                await session.rollback()
+                logger.info("collect_intraday cancelled")
+                raise
+            except Exception as exc:
                 await session.rollback()
                 await repo.create_sync_log(
                     job_name="collect_intraday",
