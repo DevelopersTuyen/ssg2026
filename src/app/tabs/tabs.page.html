@@ -1,4 +1,4 @@
-<div class="tabs-shell">
+<div class="tabs-shell" [class.sidebar-collapsed]="sidebarCollapsed">
   <!-- <section class="global-load-strip" *ngIf="globalLoadState">
     <div class="global-load-top">
       <div class="global-load-copy">
@@ -32,47 +32,61 @@
     </div>
   </section> -->
 
-  <ion-tabs>
-    <ion-tab-bar slot="bottom">
-      <ion-tab-button *ngIf="can('dashboard.view')" tab="dashboard" href="/tabs/dashboard">
-        <ion-icon aria-hidden="true" name="grid-outline"></ion-icon>
-        <ion-label>{{ 'tabs.dashboard' | translate }}</ion-label>
-      </ion-tab-button>
+  <button
+    type="button"
+    class="desktop-floating-toggle"
+    (click)="toggleSidebar()"
+    [attr.aria-expanded]="!sidebarCollapsed"
+    aria-label="Toggle menu"
+  >
+    <ion-icon [name]="sidebarCollapsed ? 'menu-outline' : 'menu-sharp'"></ion-icon>
+  </button>
 
-      <ion-tab-button *ngIf="can('market-watch.view')" tab="market-watch" href="/tabs/market-watch">
-        <ion-icon name="stats-chart-outline"></ion-icon>
-        <ion-label>{{ 'tabs.market' | translate }}</ion-label>
-      </ion-tab-button>
+  <aside class="desktop-sidebar" [class.is-collapsed]="sidebarCollapsed">
+    <div class="desktop-sidebar-head">
+      <div class="desktop-sidebar-brand" *ngIf="!sidebarCollapsed">
+        <div class="brand-kicker">Market</div>
+        <div class="brand-title">Workspace</div>
+      </div>
+    </div>
 
-      <ion-tab-button *ngIf="can('market-alerts.view')" tab="market-alerts" href="/tabs/market-alerts">
-        <ion-icon name="notifications-outline"></ion-icon>
-        <ion-label>{{ 'tabs.alerts' | translate }}</ion-label>
-      </ion-tab-button>
+    <nav class="desktop-sidebar-nav">
+      <ng-container *ngFor="let item of menuItems">
+        <a
+          *ngIf="can(item.permission)"
+          class="desktop-nav-link"
+          [routerLink]="item.href"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+          [attr.aria-label]="item.labelKey | translate"
+        >
+          <span class="desktop-nav-icon">
+            <ion-icon [name]="item.icon"></ion-icon>
+          </span>
+          <span class="desktop-nav-label" *ngIf="!sidebarCollapsed">{{ item.labelKey | translate }}</span>
+        </a>
+      </ng-container>
+    </nav>
+  </aside>
 
-      <ion-tab-button *ngIf="can('ai-agent.view')" tab="ai-agent" href="/tabs/ai-agent">
-        <ion-icon name="sparkles-outline"></ion-icon>
-        <ion-label>{{ 'tabs.aiAgent' | translate }}</ion-label>
-      </ion-tab-button>
+  <div class="tabs-stage">
+    <ion-tabs class="tabs-host">
+      <ion-tab-bar slot="bottom" class="mobile-tab-bar">
+        <ion-tab-button *ngIf="can('dashboard.view')" tab="dashboard-v2" href="/tabs/dashboard-v2">
+          <ion-icon aria-hidden="true" name="grid-outline"></ion-icon>
+          <ion-label>{{ 'tabs.dashboardV2' | translate }}</ion-label>
+        </ion-tab-button>
 
-      <ion-tab-button *ngIf="can('ai-local.view')" tab="ai-local" href="/tabs/ai-local">
-        <ion-icon name="hardware-chip-outline"></ion-icon>
-        <ion-label>{{ 'tabs.aiLocal' | translate }}</ion-label>
-      </ion-tab-button>
+        <ion-tab-button *ngIf="canViewStrategy" tab="strategy-hub" href="/tabs/strategy-hub">
+          <ion-icon name="layers-outline"></ion-icon>
+          <ion-label>{{ 'tabs.strategy' | translate }}</ion-label>
+        </ion-tab-button>
 
-      <ion-tab-button *ngIf="canViewStrategy" tab="strategy-hub" href="/tabs/strategy-hub">
-        <ion-icon name="layers-outline"></ion-icon>
-        <ion-label>{{ 'tabs.strategy' | translate }}</ion-label>
-      </ion-tab-button>
-
-      <ion-tab-button *ngIf="can('market-settings.view')" tab="market-settings" href="/tabs/market-settings">
-        <ion-icon name="settings-outline"></ion-icon>
-        <ion-label>{{ 'tabs.settings' | translate }}</ion-label>
-      </ion-tab-button>
-
-      <ion-tab-button *ngIf="canViewPermissions" tab="role-permissions" href="/tabs/role-permissions">
-        <ion-icon name="shield-checkmark-outline"></ion-icon>
-        <ion-label>{{ 'tabs.permissions' | translate }}</ion-label>
-      </ion-tab-button>
-    </ion-tab-bar>
-  </ion-tabs>
+        <ion-tab-button *ngIf="can('market-settings.view')" tab="market-settings" href="/tabs/market-settings">
+          <ion-icon name="settings-outline"></ion-icon>
+          <ion-label>{{ 'tabs.settings' | translate }}</ion-label>
+        </ion-tab-button>
+      </ion-tab-bar>
+    </ion-tabs>
+  </div>
 </div>

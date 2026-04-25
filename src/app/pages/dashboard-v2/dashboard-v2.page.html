@@ -1,0 +1,387 @@
+<ion-content [fullscreen]="true" class="dashboard-v2-page">
+  <div
+    class="dashboard-v2-shell container-fluid"
+    [class.compact-mode]="compactTableEnabled"
+    [class.sticky-table]="stickyHeaderEnabled"
+  >
+    <div class="dashboard-v2-frame">
+      <header class="dashboard-v2-topbar">
+        <div class="dashboard-v2-actions">
+          <div class="btn-group dashboard-v2-exchanges" role="group" [attr.aria-label]="'dashboardV2.exchangeSelector' | translate">
+            <button
+              *ngFor="let exchange of exchangeOptions; trackBy: trackByExchange"
+              type="button"
+              class="btn btn-sm"
+              [class.btn-dark]="selectedExchange === exchange.value"
+              [class.btn-outline-dark]="selectedExchange !== exchange.value"
+              (click)="changeExchange(exchange.value)"
+            >
+              {{ exchange.label }}
+            </button>
+          </div>
+
+          <button type="button" class="btn btn-sm btn-outline-secondary dashboard-v2-refresh" (click)="refreshData()">
+            <ion-icon name="refresh-outline"></ion-icon>
+            <span>{{ loading ? ('common.loading' | translate) : ('common.reload' | translate) }}</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="dashboard-v2-insight-strip" *ngIf="insightPanel.title || insightPanel.body">
+        <div class="dashboard-v2-insight-copy">
+          <strong>{{ insightPanel.title }}</strong>
+          <span>{{ insightPanel.body }}</span>
+        </div>
+        <div class="dashboard-v2-insight-meta">
+          <span *ngIf="insightPanel.meta">{{ insightPanel.meta }}</span>
+          <span *ngIf="dataHealthIssues.length" class="insight-warning">{{ dataHealthIssues.length }} {{ 'dashboardV2.dataHealth.issues' | translate }}</span>
+        </div>
+      </section>
+
+      <section class="dashboard-v2-main">
+        <article class="dashboard-panel journal-panel">
+          <div class="dashboard-panel-head">
+            <div>
+              <div class="dashboard-panel-kicker">{{ 'dashboardV2.section.journal' | translate }}</div>
+              <h2 class="dashboard-panel-title mb-1">{{ journalHeadline }}</h2>
+              <p class="dashboard-panel-subtitle mb-0">{{ journalSubtitle }}</p>
+            </div>
+            <div class="dashboard-panel-chip">
+              <span class="chip-dot"></span>
+              <span>{{ activeProfileLabel }}</span>
+            </div>
+          </div>
+
+          <div class="dashboard-panel-body journal-scroll">
+            <div *ngIf="error" class="alert alert-danger py-2 px-3 mb-3 small">{{ error }}</div>
+            <div class="table-responsive journal-table-wrap">
+              <table class="table table-sm table-hover align-middle journal-table mb-0">
+                <thead>
+                  <tr>
+                    <th>{{ 'dashboardV2.table.date' | translate }}</th>
+                    <th>{{ 'dashboardV2.table.trade' | translate }}</th>
+                    <th>{{ 'dashboardV2.table.side' | translate }}</th>
+                    <th>{{ 'dashboardV2.table.capital' | translate }}</th>
+                    <th>{{ 'dashboardV2.table.pnl' | translate }}</th>
+                    <th>{{ 'dashboardV2.table.status' | translate }}</th>
+                    <th class="text-center">{{ 'dashboardV2.table.why' | translate }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="!journalRows.length">
+                    <td colspan="7" class="empty-state">{{ 'dashboardV2.empty.journal' | translate }}</td>
+                  </tr>
+                  <tr
+                    *ngFor="let row of journalRows; trackBy: trackByJournal"
+                    (mouseenter)="showJournalInsight(row)"
+                    (focusin)="showJournalInsight(row)"
+                    (click)="showJournalInsight(row)"
+                    (mouseleave)="resetInsightPanel()"
+                  >
+                    <td class="text-nowrap">{{ row.date }}</td>
+                    <td>
+                      <div class="journal-symbol">{{ row.symbol }}</div>
+                      <div class="journal-meta">{{ row.tradeLabel }}</div>
+                      <div class="journal-note">{{ row.note }}</div>
+                    </td>
+                    <td>
+                      <span class="journal-side" [attr.data-side]="row.sideLabel.toLowerCase()">{{ row.sideLabel }}</span>
+                    </td>
+                    <td class="text-nowrap">{{ row.capitalLabel }}</td>
+                    <td class="text-nowrap" [attr.data-pnl-tone]="row.pnlTone">{{ row.pnlLabel }}</td>
+                    <td>
+                      <span class="journal-result" [attr.data-result]="row.resultLabel.toLowerCase()">
+                        {{ row.resultLabel }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <button type="button" class="icon-button" (click)="openJournalDetail(row)" [attr.aria-label]="'dashboardV2.table.openDetail' | translate">
+                        <ion-icon name="sparkles-outline"></ion-icon>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </article>
+
+        <article class="dashboard-panel insights-panel">
+          <div class="dashboard-panel-head">
+            <div>
+              <div class="dashboard-panel-kicker">{{ 'dashboardV2.section.charts' | translate }}</div>
+              <h2 class="dashboard-panel-title mb-1">{{ currentChartTitle() }}</h2>
+              <p class="dashboard-panel-subtitle mb-0">{{ currentChartDescription() }}</p>
+            </div>
+          </div>
+
+          <div class="dashboard-panel-body insights-body">
+            <div class="panel-tabs">
+              <button
+                *ngFor="let item of chartTabItems()"
+                type="button"
+                class="panel-tab"
+                [class.active]="selectedChartTab === item.key"
+                (click)="changeChartTab(item.key)"
+                (mouseenter)="setInsightPanel(item.label, currentChartDescription(), currentChartTitle())"
+                (mouseleave)="resetInsightPanel()"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+
+            <div class="metric-chip-row">
+              <article class="metric-chip" *ngFor="let metric of currentChartMetrics()" [attr.data-tone]="metric.tone" (mouseenter)="showMetricInsight(metric)" (click)="showMetricInsight(metric)" (mouseleave)="resetInsightPanel()">
+                <div class="metric-chip-label">{{ metric.label }}</div>
+                <div class="metric-chip-value">{{ metric.value }}</div>
+              </article>
+            </div>
+
+            <div class="chart-stage">
+              <div id="dashboard-v2-chart-host" class="dashboard-chart"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="dashboard-panel alerts-panel">
+          <div class="dashboard-panel-head">
+            <div>
+              <div class="dashboard-panel-kicker">{{ 'dashboardV2.section.signals' | translate }}</div>
+              <h2 class="dashboard-panel-title mb-1">{{ outlookTitle }}</h2>
+              <p class="dashboard-panel-subtitle mb-0">{{ outlookSummary }}</p>
+            </div>
+            <div class="outlook-badge" [attr.data-direction]="outlookDirection">
+              <span>{{ outlookConfidence | number:'1.0-0' }}%</span>
+            </div>
+          </div>
+
+          <div class="dashboard-panel-body alerts-scroll">
+            <div class="panel-tabs">
+              <button
+                *ngFor="let item of alertTabItems()"
+                type="button"
+                class="panel-tab"
+                [class.active]="selectedAlertTab === item.key"
+                (click)="changeAlertTab(item.key)"
+                (mouseenter)="setInsightPanel(item.label, alertTabHelp(item.key), selectedExchange)"
+                (mouseleave)="resetInsightPanel()"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+
+            <ng-container [ngSwitch]="selectedAlertTab">
+              <div *ngSwitchCase="'priority'" class="priority-list">
+                <article class="priority-item" *ngFor="let item of priorityItems; trackBy: trackByPriority" [attr.data-tone]="item.tone" (mouseenter)="showPriorityInsight(item)" (click)="showPriorityInsight(item)" (mouseleave)="resetInsightPanel()">
+                  <div class="priority-item-title">{{ item.title }}</div>
+                  <div class="priority-item-body">{{ item.body }}</div>
+                  <div class="priority-item-meta">{{ item.meta }}</div>
+                </article>
+
+                <div *ngIf="!priorityItems.length" class="empty-state-panel">
+                  <div class="empty-state-title">{{ 'dashboardV2.empty.priorityTitle' | translate }}</div>
+                  <div class="empty-state-copy">{{ 'dashboardV2.empty.priorityBody' | translate }}</div>
+                </div>
+              </div>
+
+              <div *ngSwitchCase="'alerts'" class="alerts-tab-body">
+                <div class="alerts-list" *ngIf="alertItems.length; else noAlertState">
+                  <article class="alert-item" *ngFor="let item of alertItems; trackBy: trackByAlert" [attr.data-severity]="item.severity" (mouseenter)="showAlertInsight(item)" (click)="showAlertInsight(item)" (mouseleave)="resetInsightPanel()">
+                    <div class="alert-item-head">
+                      <div>
+                        <div class="alert-item-symbol">{{ item.symbol }}</div>
+                        <h3 class="alert-item-title mb-1">{{ item.title }}</h3>
+                      </div>
+                      <div class="alert-item-time">{{ item.timeLabel }}</div>
+                    </div>
+
+                    <p class="alert-item-message mb-2">{{ item.message }}</p>
+
+                    <div class="alert-item-meta">
+                      <span>{{ item.directionLabel }}</span>
+                      <span>{{ item.changeLabel }}</span>
+                      <span>{{ item.priceLabel }}</span>
+                      <span>{{ item.confidenceLabel }}</span>
+                    </div>
+
+                    <div class="alert-item-tags" *ngIf="item.tags.length">
+                      <span class="alert-tag" *ngFor="let tag of item.tags">{{ tag }}</span>
+                    </div>
+                  </article>
+                </div>
+
+                <ng-template #noAlertState>
+                  <div class="empty-state-panel">
+                    <div class="empty-state-title">{{ 'dashboardV2.empty.alertsTitle' | translate }}</div>
+                    <div class="empty-state-copy">{{ 'dashboardV2.empty.alertsBody' | translate }}</div>
+                  </div>
+                </ng-template>
+              </div>
+
+              <div *ngSwitchCase="'news'" class="news-strip-list">
+                <article class="news-strip-item" *ngFor="let news of newsItems | slice:0:6; trackBy: trackByNews" (mouseenter)="showNewsInsight(news)" (click)="showNewsInsight(news)" (mouseleave)="resetInsightPanel()">
+                  <div class="news-strip-item-title">{{ news.title }}</div>
+                  <div class="news-strip-item-meta">
+                    <span>{{ newsScopeLabel(news) }}</span>
+                    <span>{{ news.published_at || '--' }}</span>
+                  </div>
+                </article>
+
+                <div *ngIf="!newsItems.length" class="empty-state-panel">
+                  <div class="empty-state-title">{{ 'dashboardV2.empty.newsTitle' | translate }}</div>
+                  <div class="empty-state-copy">{{ 'dashboardV2.empty.newsBody' | translate }}</div>
+                </div>
+              </div>
+            </ng-container>
+          </div>
+        </article>
+      </section>
+    </div>
+  </div>
+
+  <div class="journal-detail-overlay" *ngIf="journalDetailOpen" (click)="closeJournalDetail()">
+    <section class="journal-detail-modal" (click)="$event.stopPropagation()">
+      <header class="journal-detail-head">
+        <div>
+          <div class="dashboard-panel-kicker">{{ 'dashboardV2.detail.kicker' | translate }}</div>
+          <h2 class="dashboard-panel-title mb-1">
+            {{ journalDetailEntry?.symbol || ('dashboardV2.detail.tradeFallback' | translate) }} - {{ 'dashboardV2.detail.title' | translate }}
+          </h2>
+          <p class="dashboard-panel-subtitle mb-0">
+            {{ 'dashboardV2.detail.subtitle' | translate }}
+          </p>
+        </div>
+
+        <button type="button" class="icon-button close" (click)="closeJournalDetail()" [attr.aria-label]="'common.close' | translate">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </header>
+
+      <div class="journal-detail-body">
+        <div *ngIf="journalDetailLoading" class="empty-state-panel">
+          <div class="empty-state-title">{{ 'dashboardV2.detail.loadingTitle' | translate }}</div>
+          <div class="empty-state-copy">{{ 'dashboardV2.detail.loadingBody' | translate }}</div>
+        </div>
+
+        <div *ngIf="journalDetailError" class="alert alert-danger py-2 px-3 small mb-0">{{ journalDetailError }}</div>
+
+        <ng-container *ngIf="!journalDetailLoading && !journalDetailError">
+          <section class="detail-section detail-section-summary">
+            <div class="metric-chip-row detail-summary-row" *ngIf="journalDetailCurrentMetrics.length">
+              <article class="metric-chip" *ngFor="let metric of journalDetailCurrentMetrics" [attr.data-tone]="metric.tone">
+                <div class="metric-chip-label">{{ metric.label }}</div>
+                <div class="metric-chip-value">{{ metric.value }}</div>
+              </article>
+            </div>
+          </section>
+
+          <div class="panel-tabs detail-tabs">
+            <button
+              *ngFor="let item of detailTabItems()"
+              type="button"
+              class="panel-tab"
+              [class.active]="selectedDetailTab === item.key"
+              (click)="changeDetailTab(item.key)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+
+          <ng-container [ngSwitch]="selectedDetailTab">
+            <section *ngSwitchCase="'overview'" class="detail-overview-grid">
+              <section class="detail-section">
+                <div class="detail-section-title">{{ 'dashboardV2.detail.decisionLogic' | translate }}</div>
+                <div class="narrative-list compact" *ngIf="journalDetailNarratives.length; else noNarrativeState">
+                  <article class="narrative-item" *ngFor="let item of journalDetailNarratives | slice:0:4" [attr.data-status]="item.status">
+                    <div class="narrative-item-label">{{ item.label }}</div>
+                    <div class="narrative-item-detail">{{ item.detail }}</div>
+                  </article>
+                </div>
+                <ng-template #noNarrativeState>
+                  <div class="empty-state-panel compact">
+                    <div class="empty-state-title">{{ 'dashboardV2.detail.emptyNarrativeTitle' | translate }}</div>
+                    <div class="empty-state-copy">{{ 'dashboardV2.detail.emptyNarrativeBody' | translate }}</div>
+                  </div>
+                </ng-template>
+              </section>
+
+              <section class="detail-section">
+                <div class="detail-section-title">{{ 'dashboardV2.detail.topDrivers' | translate }}</div>
+                <div class="driver-list compact" *ngIf="journalDetailScore?.explanation?.topDrivers?.length; else noDriverState">
+                  <article class="driver-item" *ngFor="let driver of journalDetailScore?.explanation?.topDrivers | slice:0:4">
+                    <div class="driver-item-label">{{ driver.label }}</div>
+                    <div class="driver-item-value">{{ driver.value | number:'1.1-1' }}</div>
+                  </article>
+                </div>
+                <ng-template #noDriverState>
+                  <div class="empty-state-panel compact">
+                    <div class="empty-state-title">{{ 'dashboardV2.detail.emptyDriversTitle' | translate }}</div>
+                    <div class="empty-state-copy">{{ 'dashboardV2.detail.emptyDriversBody' | translate }}</div>
+                  </div>
+                </ng-template>
+
+                <div class="detail-section-title mt-2">{{ 'dashboardV2.detail.executionRationale' | translate }}</div>
+                <div class="rationale-list" *ngIf="executionRationale().length; else noRationaleState">
+                  <article class="rationale-item" *ngFor="let item of executionRationale()">{{ item }}</article>
+                </div>
+                <ng-template #noRationaleState>
+                  <div class="empty-state-panel compact">
+                    <div class="empty-state-title">{{ 'dashboardV2.detail.emptyExecutionTitle' | translate }}</div>
+                    <div class="empty-state-copy">{{ 'dashboardV2.detail.emptyExecutionBody' | translate }}</div>
+                  </div>
+                </ng-template>
+              </section>
+            </section>
+
+            <section *ngSwitchCase="'rules'" class="detail-groups-grid">
+              <section class="detail-group-card" *ngFor="let group of journalDetailGroups">
+                <div class="detail-section-title">{{ group.title }}</div>
+                <div class="detail-config-list compact">
+                  <article class="detail-config-item" *ngFor="let item of group.items; trackBy: trackByDetailItem" [attr.data-status]="item.status">
+                    <div class="detail-config-top">
+                      <div>
+                        <div class="detail-config-label">{{ item.label }}</div>
+                        <div class="detail-config-kind">{{ item.kind }}</div>
+                      </div>
+                      <div class="detail-config-status">{{ detailStatusLabel(item.status) }}</div>
+                    </div>
+                    <div class="detail-config-expression">{{ item.expression }}</div>
+                    <div class="detail-config-detail">{{ item.detail }}</div>
+                  </article>
+                </div>
+              </section>
+            </section>
+
+            <section *ngSwitchCase="'snapshot'" class="detail-snapshot-grid">
+              <section class="detail-section">
+                <div class="detail-section-title">{{ 'dashboardV2.detail.currentVsSaved' | translate }}</div>
+                <div class="metric-chip-row compact" *ngIf="journalDetailSnapshotMetrics.length">
+                  <article class="metric-chip" *ngFor="let metric of journalDetailSnapshotMetrics" [attr.data-tone]="metric.tone">
+                    <div class="metric-chip-label">{{ 'dashboardV2.detail.savedPrefix' | translate }} {{ metric.label }}</div>
+                    <div class="metric-chip-value">{{ metric.value }}</div>
+                  </article>
+                </div>
+                <div class="metric-chip-row compact" *ngIf="journalDetailCurrentMetrics.length">
+                  <article class="metric-chip" *ngFor="let metric of journalDetailCurrentMetrics" [attr.data-tone]="metric.tone">
+                    <div class="metric-chip-label">{{ 'dashboardV2.detail.nowPrefix' | translate }} {{ metric.label }}</div>
+                    <div class="metric-chip-value">{{ metric.value }}</div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="detail-section">
+                <div class="detail-section-title">{{ 'dashboardV2.detail.tradeFacts' | translate }}</div>
+                <div class="detail-facts-grid">
+                  <article class="detail-fact" *ngFor="let item of detailFacts()">
+                    <div class="detail-fact-label">{{ item.label }}</div>
+                    <div class="detail-fact-value">{{ item.value }}</div>
+                  </article>
+                </div>
+              </section>
+            </section>
+          </ng-container>
+        </ng-container>
+      </div>
+    </section>
+  </div>
+</ion-content>

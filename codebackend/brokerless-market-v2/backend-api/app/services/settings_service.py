@@ -42,6 +42,8 @@ DEFAULT_MARKET_SETTINGS: dict[str, Any] = {
     "aiNewsDigest": True,
     "aiTaskSchedule": "08:30, 11:30, 14:45",
     "aiTone": "ngan gon",
+    "aiLocalAutoAnalysis": False,
+    "aiLocalFinancialAnalysis": False,
     "safeMode": True,
     "biometricLogin": False,
     "sessionTimeout": "30",

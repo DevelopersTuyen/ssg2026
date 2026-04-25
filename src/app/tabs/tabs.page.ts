@@ -4,6 +4,15 @@ import { Subscription } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { GlobalLoadState, PageLoadStateService } from '../core/services/page-load-state.service';
 
+const SIDEBAR_COLLAPSE_STORAGE_KEY = 'ssg2026:tabs-sidebar-collapsed';
+
+interface TabsMenuItem {
+  href: string;
+  icon: string;
+  labelKey: string;
+  permission: string;
+}
+
 @Component({
   selector: 'app-tabs',
   templateUrl: 'tabs.page.html',
@@ -11,7 +20,29 @@ import { GlobalLoadState, PageLoadStateService } from '../core/services/page-loa
   standalone: false,
 })
 export class TabsPage implements OnInit, OnDestroy {
+  readonly menuItems: TabsMenuItem[] = [
+    {
+      href: '/tabs/dashboard-v2',
+      icon: 'grid-outline',
+      labelKey: 'tabs.dashboardV2',
+      permission: 'dashboard.view',
+    },
+    {
+      href: '/tabs/strategy-hub',
+      icon: 'layers-outline',
+      labelKey: 'tabs.strategy',
+      permission: 'strategy-hub.view',
+    },
+    {
+      href: '/tabs/market-settings',
+      icon: 'settings-outline',
+      labelKey: 'tabs.settings',
+      permission: 'market-settings.view',
+    },
+  ];
+
   globalLoadState: GlobalLoadState | null = null;
+  sidebarCollapsed = false;
   private globalLoadSub?: Subscription;
 
   constructor(
@@ -20,6 +51,7 @@ export class TabsPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.sidebarCollapsed = this.readCollapsedState();
     this.globalLoadSub = this.pageLoadState.globalState$.subscribe((state) => {
       this.globalLoadState = state.visible ? state : null;
     });
@@ -27,6 +59,11 @@ export class TabsPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.globalLoadSub?.unsubscribe();
+  }
+
+  toggleSidebar(): void {
+    this.sidebarCollapsed = !this.sidebarCollapsed;
+    this.persistCollapsedState();
   }
 
   can(permission: string): boolean {
@@ -58,5 +95,13 @@ export class TabsPage implements OnInit, OnDestroy {
       minute: '2-digit',
       second: '2-digit',
     });
+  }
+
+  private readCollapsedState(): boolean {
+    return localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === '1';
+  }
+
+  private persistCollapsedState(): void {
+    localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, this.sidebarCollapsed ? '1' : '0');
   }
 }

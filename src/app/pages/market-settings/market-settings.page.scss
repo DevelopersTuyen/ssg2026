@@ -498,6 +498,14 @@ ion-content.settings-content {
   color: #10223d;
 }
 
+.empty-state {
+  padding: 18px;
+  border: 1px dashed #d4dce7;
+  border-radius: 16px;
+  background: #fafcfe;
+  color: #64748b;
+}
+
 .settings-section-head {
   display: flex;
   justify-content: space-between;
@@ -607,6 +615,255 @@ ion-content.settings-content {
 
 .create-profile-btn {
   justify-self: flex-start;
+}
+
+.journal-prefill-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 63, 103, 0.12);
+  background: linear-gradient(135deg, #f8fbff 0%, #edf5ff 100%);
+
+  strong {
+    color: #10223d;
+    font-size: 1rem;
+  }
+
+  p {
+    margin: 0;
+    color: #5b6472;
+    line-height: 1.55;
+  }
+}
+
+.journal-suggestion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.mini-stat-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+
+  span {
+    color: #64748b;
+    font-size: 0.82rem;
+  }
+
+  strong {
+    font-size: 0.95rem;
+  }
+}
+
+.journal-reason-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+}
+
+.journal-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 16px;
+}
+
+.journal-history-list {
+  display: grid;
+  gap: 12px;
+}
+
+.journal-history-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.journal-history-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+
+  p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.55;
+  }
+}
+
+.journal-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+
+  strong {
+    color: #10223d;
+  }
+
+  small {
+    color: #6b7280;
+  }
+}
+
+.journal-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: #eaf2ff;
+    color: #274c77;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+}
+
+.journal-item-actions {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.journal-hero,
+.journal-prefill-card,
+.journal-table-card {
+  border-radius: 20px;
+}
+
+.journal-kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #2563eb;
+  margin-bottom: 6px;
+}
+
+.journal-title {
+  color: #10223d;
+  font-weight: 800;
+}
+
+.journal-subtitle {
+  color: #64748b;
+  max-width: 64ch;
+}
+
+.journal-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.journal-mini-card {
+  height: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f3f7ff 100%);
+  border: 1px solid rgba(37, 99, 235, 0.1);
+  display: grid;
+  gap: 4px;
+}
+
+.journal-mini-card span {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.journal-mini-card strong {
+  color: #10223d;
+  font-size: 0.98rem;
+}
+
+.journal-reason-list {
+  padding-left: 1.1rem;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.journal-table-scroll {
+  overflow: auto;
+}
+
+.journal-table {
+  min-width: 1760px;
+}
+
+.journal-table thead th {
+  white-space: nowrap;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+.journal-table td {
+  vertical-align: middle;
+}
+
+.journal-table .form-control,
+.journal-table .form-select {
+  min-width: 88px;
+  border-radius: 10px;
+}
+
+.journal-table .form-control:focus,
+.journal-table .form-select:focus {
+  box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.12);
+}
+
+.journal-notes {
+  min-width: 210px;
+}
+
+.journal-action-cell {
+  width: 72px;
+}
+
+.journal-action-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+.journal-action-btn ion-icon {
+  font-size: 1rem;
+}
+
+.journal-empty-state .card-body {
+  min-height: 118px;
+}
+
+.journal-empty-state .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .toggle-inline {
@@ -803,6 +1060,10 @@ ion-content.settings-content {
 
   .settings-sidebar {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
+  .journal-settings-grid {
+    grid-template-columns: 1fr;
   }
 }
 

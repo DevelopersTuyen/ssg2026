@@ -9,12 +9,16 @@ const routes: Routes = [
     component: TabsPage,
     canActivate: [authGuard],
     children: [
-      
       {
-        path: 'dashboard',
+        path: 'dashboard-v2',
         canActivate: [permissionGuard],
         data: { permission: 'dashboard.view' },
-        loadChildren: () => import('../pages/dashboard/dashboard.module').then(m => m.DashboardPageModule)
+        loadChildren: () => import('../pages/dashboard-v2/dashboard-v2.module').then(m => m.DashboardV2PageModule)
+      },
+      {
+        path: 'dashboard',
+        redirectTo: 'dashboard-v2',
+        pathMatch: 'full'
       },
       {
         path: 'market-watch',
@@ -76,7 +80,7 @@ const routes: Routes = [
       },
       {
         path: '',
-        redirectTo: '/tabs/dashboard',
+        redirectTo: '/tabs/dashboard-v2',
         pathMatch: 'full'
       }
     ]

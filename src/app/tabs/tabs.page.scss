@@ -1,8 +1,153 @@
-
 .tabs-shell {
+  position: relative;
+  display: flex;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(17, 24, 39, 0.08), transparent 36%),
+    linear-gradient(180deg, #f7f4ee 0%, #f3efe7 100%);
+}
+
+.desktop-floating-toggle {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 40;
+  width: 2.8rem;
+  height: 2.8rem;
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  border-radius: 1rem;
+  background: rgba(250, 250, 248, 0.96);
+  color: #111827;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.desktop-floating-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.desktop-sidebar {
+  width: 17.5rem;
+  flex: 0 0 17.5rem;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  gap: 1rem;
+  padding: 1rem 0.85rem 1rem 1rem;
+  overflow: hidden;
+  border-right: 1px solid rgba(17, 24, 39, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(18px);
+  transition: width 220ms ease, flex-basis 220ms ease, padding 220ms ease;
+}
+
+.tabs-shell.sidebar-collapsed .desktop-sidebar,
+.desktop-sidebar.is-collapsed {
+  width: 5.4rem;
+  flex-basis: 5.4rem;
+  padding-right: 0.6rem;
+}
+
+.desktop-sidebar-head {
+  display: flex;
+  align-items: center;
+  min-height: 3rem;
+}
+
+.desktop-sidebar-brand {
+  min-width: 0;
+}
+
+.brand-kicker {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.brand-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+}
+
+.desktop-sidebar-nav {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.desktop-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 3.3rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 1rem;
+  color: #4b5563;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.tabs-shell.sidebar-collapsed .desktop-nav-link,
+.desktop-sidebar.is-collapsed .desktop-nav-link {
+  justify-content: center;
+  padding-inline: 0.4rem;
+}
+
+.desktop-nav-link:hover {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(17, 24, 39, 0.08);
+  color: #111827;
+  transform: translateX(1px);
+}
+
+.desktop-nav-link.active {
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(17, 24, 39, 0.18);
+}
+
+.desktop-nav-icon {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.desktop-nav-link.active .desktop-nav-icon {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.desktop-nav-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.tabs-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.tabs-host {
+  height: 100%;
+}
+
+.mobile-tab-bar {
+  display: none;
 }
 
 .global-load-strip {
@@ -108,4 +253,27 @@
 
 :host-context(body.dark) .global-load-bottom {
   color: rgba(226, 232, 240, 0.72);
+}
+
+@media (max-width: 991px) {
+  .tabs-shell {
+    min-height: 100%;
+    background: transparent;
+  }
+
+  .desktop-floating-toggle {
+    display: none;
+  }
+
+  .desktop-sidebar {
+    display: none;
+  }
+
+  .tabs-stage {
+    min-height: 100%;
+  }
+
+  .mobile-tab-bar {
+    display: flex;
+  }
 }

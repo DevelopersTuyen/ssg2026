@@ -16,6 +16,9 @@
         </div>
 
         <div class="header-actions">
+          <button type="button" class="btn btn-outline-secondary" (click)="openStrategyJournal()">
+            Journal
+          </button>
           <button type="button" class="btn btn-outline-secondary" (click)="openUserGuide()">
             {{ 'settings.guideButton' | translate }}
           </button>
@@ -80,7 +83,7 @@
             <div class="form-item">
               <label>{{ 'settings.landingPage' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.defaultLandingPage">
-                <option value="dashboard">Dashboard</option>
+                <option value="dashboard-v2">Dashboard V2</option>
                 <option value="market-watch">Market Watch</option>
                 <option value="market-alerts">Market Alerts</option>
                 <option value="ai-agent">AI Agent</option>
@@ -91,7 +94,7 @@
             <div class="form-item">
               <label>{{ 'settings.startupPage' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.startupPage">
-                <option value="dashboard">Dashboard</option>
+                <option value="dashboard-v2">Dashboard V2</option>
                 <option value="market-watch">Market Watch</option>
                 <option value="market-alerts">Market Alerts</option>
                 <option value="ai-agent">AI Agent</option>
@@ -356,6 +359,40 @@
               <input class="form-control" [(ngModel)]="settings.aiTaskSchedule" />
             </div>
           </div>
+
+          <div class="settings-subsection">
+            <div class="section-title">AI Local</div>
+            <p class="section-help">
+              Cac tuy chon cua AI Local duoc luu chung trong market settings va se duoc ap dung lai khi mo man hinh AI Local.
+            </p>
+          </div>
+
+          <div class="toggle-list">
+            <div class="toggle-row toggle-row-highlight">
+              <div class="toggle-copy">
+                <span>{{ 'aiLocal.autoAnalysis' | translate }}</span>
+                <small>{{ 'aiLocal.autoAnalysisNote' | translate }}</small>
+              </div>
+              <ion-toggle [(ngModel)]="settings.aiLocalAutoAnalysis"></ion-toggle>
+            </div>
+            <div class="toggle-row toggle-row-highlight">
+              <div class="toggle-copy">
+                <span>{{ 'aiLocal.financialAnalysis' | translate }}</span>
+                <small>{{ 'aiLocal.financialAnalysisNote' | translate }}</small>
+              </div>
+              <ion-toggle [(ngModel)]="settings.aiLocalFinancialAnalysis"></ion-toggle>
+            </div>
+          </div>
+
+          <div class="data-sync-hero">
+            <div>
+              <strong>Ollama local provider</strong>
+              <p>
+                Provider va model cua AI Local duoc lay tu cau hinh backend local. Man hinh nay chi quan ly hanh vi su dung
+                cua tung tai khoan.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div *ngSwitchCase="'strategy'" class="settings-section strategy-settings-section">
@@ -579,6 +616,143 @@
                   </div>
                 </div>
               </div>
+            </article>
+
+            <article class="settings-panel settings-detail-panel" *ngIf="false">
+              <div class="settings-section-head">
+                <div>
+                  <h3>Trade journal</h3>
+                  <p>Chuyen phan journal ve Settings de luu tap trung, sua truc tiep tren bang, them dong bang dau + va xoa bang nut xoa.</p>
+                </div>
+                <div class="toolbar">
+                  <button type="button" class="btn btn-outline-secondary" *ngIf="strategyJournalSuggestion" (click)="useStrategyJournalSuggestion()">
+                    <ion-icon name="sparkles-outline"></ion-icon>
+                    Them dong de xuat
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" (click)="reloadStrategyJournal()" [disabled]="strategyLoading">
+                    Tai lai
+                  </button>
+                </div>
+              </div>
+
+              <div class="journal-prefill-card" *ngIf="strategyJournalSuggestion as suggestion">
+                <strong>De xuat tu Strategy Hub cho {{ suggestion.symbol }}</strong>
+                <p>Du lieu da duoc dien san tu scoring, volume va execution engine. Co the them vao bang bang nut + hoac sua truc tiep tren dong nay.</p>
+                <div class="journal-suggestion-grid">
+                  <div class="mini-stat-card">
+                    <span>Loai setup</span>
+                    <strong>{{ suggestion.classification }}</strong>
+                  </div>
+                  <div class="mini-stat-card">
+                    <span>Huong giao dich</span>
+                    <strong>{{ suggestion.tradeSide | uppercase }}</strong>
+                  </div>
+                  <div class="mini-stat-card">
+                    <span>Ty trong vi the</span>
+                    <strong>{{ suggestion.positionSize !== null ? (suggestion.positionSize + '%') : '-' }}</strong>
+                  </div>
+                  <div class="mini-stat-card">
+                    <span>Chien luoc</span>
+                    <strong>{{ suggestion.strategyName }}</strong>
+                  </div>
+                </div>
+                <ul class="journal-reason-list">
+                  <li *ngFor="let reason of suggestion.reasons">{{ reason }}</li>
+                </ul>
+              </div>
+
+              <div class="journal-table-shell" *ngIf="strategyJournalRows.length; else emptyStrategyJournal">
+                <div class="table-shell journal-table-scroll">
+                  <table class="data-table journal-table">
+                    <thead>
+                      <tr>
+                        <th>Mã</th>
+                        <th>Ngày</th>
+                        <th>Loại</th>
+                        <th>Side</th>
+                        <th>Entry</th>
+                        <th>Exit</th>
+                        <th>SL</th>
+                        <th>TP</th>
+                        <th>Qty</th>
+                        <th>%</th>
+                        <th>Vốn</th>
+                        <th>Strategy</th>
+                        <th>Tâm lý</th>
+                        <th>Tags</th>
+                        <th>Notes</th>
+                        <th class="table-action-cell">Lưu</th>
+                        <th class="table-action-cell">Xóa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let row of strategyJournalRows; trackBy: trackByStrategyJournalRow">
+                        <td><input class="table-input" [(ngModel)]="row.symbol" /></td>
+                        <td><input class="table-input" type="date" [(ngModel)]="row.trade_date" /></td>
+                        <td>
+                          <select class="table-input table-select" [(ngModel)]="row.classification">
+                            <option value="swing">Swing</option>
+                            <option value="position">Position</option>
+                            <option value="breakout">Breakout</option>
+                            <option value="retest">Retest</option>
+                          </select>
+                        </td>
+                        <td>
+                          <select class="table-input table-select" [(ngModel)]="row.trade_side">
+                            <option value="buy">Buy</option>
+                            <option value="sell">Sell</option>
+                          </select>
+                        </td>
+                        <td><input class="table-input" type="number" [(ngModel)]="row.entry_price" /></td>
+                        <td><input class="table-input" type="number" [(ngModel)]="row.exit_price" /></td>
+                        <td><input class="table-input" type="number" [(ngModel)]="row.stop_loss_price" /></td>
+                        <td><input class="table-input" type="number" [(ngModel)]="row.take_profit_price" /></td>
+                        <td><input class="table-input" type="number" [(ngModel)]="row.quantity" /></td>
+                        <td><input class="table-input" type="number" [(ngModel)]="row.position_size" /></td>
+                        <td><input class="table-input" type="number" [(ngModel)]="row.total_capital" /></td>
+                        <td><input class="table-input" [(ngModel)]="row.strategy_name" /></td>
+                        <td><input class="table-input" [(ngModel)]="row.psychology" /></td>
+                        <td>
+                          <input
+                            class="table-input"
+                            [value]="row.mistake_tags_json.join(', ')"
+                            (change)="parseStrategyJournalRowTags(row, $any($event.target).value)"
+                            placeholder="tag1, tag2"
+                          />
+                        </td>
+                        <td><input class="table-input table-notes" [(ngModel)]="row.notes" /></td>
+                        <td class="table-action-cell">
+                          <button type="button" class="icon-action-btn" [disabled]="row.isSaving" (click)="saveStrategyJournalRow(row)">
+                            <ion-icon name="save-outline"></ion-icon>
+                          </button>
+                        </td>
+                        <td class="table-action-cell">
+                          <button type="button" class="icon-action-btn danger" (click)="deleteStrategyJournalRow(row)">
+                            <ion-icon name="trash-outline"></ion-icon>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="journal-add-row">
+                  <button type="button" class="btn btn-outline-secondary" (click)="addStrategyJournalRow()">
+                    <ion-icon name="add-circle-outline"></ion-icon>
+                    Them 1 dong moi
+                  </button>
+                </div>
+              </div>
+
+              <ng-template #emptyStrategyJournal>
+                <div class="empty-state journal-empty-state">
+                  <div>Chua co journal entry nao cho profile dang chon.</div>
+                  <button type="button" class="btn btn-outline-secondary" (click)="addStrategyJournalRow()">
+                    <ion-icon name="add-circle-outline"></ion-icon>
+                    Them dong dau tien
+                  </button>
+                </div>
+              </ng-template>
             </article>
 
             <article class="settings-panel settings-detail-panel" *ngIf="selectedStrategySection === 'screenRules' || selectedStrategySection === 'alertRules' || selectedStrategySection === 'checklists'">
@@ -824,6 +998,193 @@
               </div>
             </article>
           </div>
+        </div>
+
+        <div *ngSwitchCase="'journal'" class="settings-section">
+          <div class="card journal-hero shadow-sm border-0 mb-3">
+            <div class="card-body d-flex flex-wrap justify-content-between align-items-start gap-3">
+              <div class="pe-3">
+                <div class="journal-kicker">Trading Journal</div>
+                <h3 class="journal-title mb-1">Ghi nhanh giao dịch</h3>
+                <p class="journal-subtitle mb-0">
+                  Bảng BS5 cho nhập liệu nhanh: sửa trực tiếp từng dòng, lưu bằng icon, xóa bằng icon, thêm dòng bằng nút +.
+                </p>
+              </div>
+
+              <div class="journal-actions d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-primary btn-sm" *ngIf="strategyJournalSuggestion" (click)="useStrategyJournalSuggestion()">
+                  <ion-icon name="sparkles-outline"></ion-icon>
+                  Dùng đề xuất
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="reloadStrategyJournal()" [disabled]="strategyLoading">
+                  <ion-icon name="refresh-outline"></ion-icon>
+                  Tải lại
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" (click)="addStrategyJournalRow()">
+                  <ion-icon name="add-circle-outline"></ion-icon>
+                  Thêm dòng
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card journal-prefill-card shadow-sm border-primary mb-3" *ngIf="strategyJournalSuggestion as suggestion">
+            <div class="card-body">
+              <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                <div>
+                  <div class="text-uppercase small fw-semibold text-primary mb-1">Gợi ý từ Strategy Hub</div>
+                  <h5 class="mb-1">{{ suggestion.symbol }}</h5>
+                  <p class="text-body-secondary mb-0">Nội dung đã được điền sẵn từ scoring, volume và execution engine.</p>
+                </div>
+                <span class="badge bg-light text-primary border border-primary px-3 py-2">
+                  {{ suggestion.strategyName }}
+                </span>
+              </div>
+
+              <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3">
+                <div class="col">
+                  <div class="journal-mini-card">
+                    <span>Loại setup</span>
+                    <strong>{{ suggestion.classification }}</strong>
+                  </div>
+                </div>
+                <div class="col">
+                  <div class="journal-mini-card">
+                    <span>Hướng giao dịch</span>
+                    <strong>{{ suggestion.tradeSide | uppercase }}</strong>
+                  </div>
+                </div>
+                <div class="col">
+                  <div class="journal-mini-card">
+                    <span>Tỷ trọng</span>
+                    <strong>{{ suggestion.positionSize !== null ? (suggestion.positionSize + '%') : '-' }}</strong>
+                  </div>
+                </div>
+                <div class="col">
+                  <div class="journal-mini-card">
+                    <span>Strategy</span>
+                    <strong>{{ suggestion.strategyName }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-3">
+                <div class="small fw-semibold text-secondary mb-2">Lý do đề xuất</div>
+                <ul class="journal-reason-list mb-0">
+                  <li *ngFor="let reason of suggestion.reasons">{{ reason }}</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="card journal-table-card shadow-sm border-0">
+            <div class="card-header bg-white border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <div>
+                <h5 class="mb-0">Entries</h5>
+                <small class="text-body-secondary">{{ strategyJournalRows.length }} dòng</small>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge text-bg-light border">BS5 table</span>
+                <span class="badge text-bg-light border">Inline edit</span>
+              </div>
+            </div>
+
+            <div class="table-responsive journal-table-scroll">
+              <table class="table table-sm table-striped table-hover align-middle mb-0 journal-table">
+                <thead class="table-light">
+                  <tr>
+                    <th>Mã</th>
+                    <th>Ngày</th>
+                    <th>Loại</th>
+                    <th>Side</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>SL</th>
+                    <th>TP</th>
+                    <th>Qty</th>
+                    <th>%</th>
+                    <th>Vốn</th>
+                    <th>Strategy</th>
+                    <th>Tâm lý</th>
+                    <th>Tags</th>
+                    <th>Notes</th>
+                    <th class="text-center">Lưu</th>
+                    <th class="text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of strategyJournalRows; trackBy: trackByStrategyJournalRow">
+                    <td><input class="form-control form-control-sm journal-input" [(ngModel)]="row.symbol" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="date" [(ngModel)]="row.trade_date" /></td>
+                    <td>
+                      <select class="form-select form-select-sm journal-input" [(ngModel)]="row.classification">
+                        <option value="swing">Swing</option>
+                        <option value="position">Position</option>
+                        <option value="breakout">Breakout</option>
+                        <option value="retest">Retest</option>
+                      </select>
+                    </td>
+                    <td>
+                      <select class="form-select form-select-sm journal-input" [(ngModel)]="row.trade_side">
+                        <option value="buy">Buy</option>
+                        <option value="sell">Sell</option>
+                      </select>
+                    </td>
+                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.entry_price" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.exit_price" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.stop_loss_price" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.take_profit_price" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.quantity" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.position_size" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.total_capital" /></td>
+                    <td><input class="form-control form-control-sm journal-input" [(ngModel)]="row.strategy_name" /></td>
+                    <td><input class="form-control form-control-sm journal-input" [(ngModel)]="row.psychology" /></td>
+                    <td>
+                      <input
+                        class="form-control form-control-sm journal-input"
+                        [value]="row.mistake_tags_json.join(', ')"
+                        (change)="parseStrategyJournalRowTags(row, $any($event.target).value)"
+                        placeholder="tag1, tag2"
+                      />
+                    </td>
+                    <td><input class="form-control form-control-sm journal-input journal-notes" [(ngModel)]="row.notes" /></td>
+                    <td class="text-center journal-action-cell">
+                      <button type="button" class="btn btn-sm btn-success journal-action-btn" [disabled]="row.isSaving" (click)="saveStrategyJournalRow(row)">
+                        <ion-icon name="save-outline"></ion-icon>
+                      </button>
+                    </td>
+                    <td class="text-center journal-action-cell">
+                      <button type="button" class="btn btn-sm btn-outline-danger journal-action-btn" (click)="deleteStrategyJournalRow(row)">
+                        <ion-icon name="trash-outline"></ion-icon>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="card-footer bg-white border-0 d-flex justify-content-end">
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addStrategyJournalRow()">
+                <ion-icon name="add-circle-outline"></ion-icon>
+                Thêm 1 dòng mới
+              </button>
+            </div>
+          </div>
+
+          <ng-template #emptyJournalTab>
+            <div class="card empty-state journal-empty-state shadow-sm border-0">
+              <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                  <h5 class="mb-1">Chưa có journal entry nào</h5>
+                  <p class="text-body-secondary mb-0">Bấm nút thêm dòng để nhập nhanh một giao dịch mới.</p>
+                </div>
+                <button type="button" class="btn btn-primary" (click)="addStrategyJournalRow()">
+                  <ion-icon name="add-circle-outline"></ion-icon>
+                  Thêm dòng đầu tiên
+                </button>
+              </div>
+            </div>
+          </ng-template>
         </div>
 
         <div *ngSwitchCase="'security'" class="settings-section">

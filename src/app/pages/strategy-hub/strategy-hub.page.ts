@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subscription, forkJoin } from 'rxjs';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
 import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
@@ -20,7 +21,7 @@ import {
   MarketApiService,
 } from 'src/app/core/services/market-api.service';
 
-type StrategyTab = 'overview' | 'screener' | 'scoring' | 'risk' | 'journal';
+type StrategyTab = 'overview' | 'screener' | 'scoring' | 'risk';
 type StrategyConfigEntity = StrategyFormula | StrategyScreenRule | StrategyAlertRule | StrategyChecklistItem;
 type StrategySettingsSection = 'profiles' | 'formulas' | 'screenRules' | 'alertRules' | 'checklists' | 'versions';
 
@@ -281,7 +282,6 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     name: '',
     description: '',
   };
-
   journalForm = {
     symbol: '',
     trade_date: new Date().toISOString().slice(0, 10),
@@ -306,6 +306,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
   constructor(
     private api: MarketApiService,
+    private router: Router,
     private backgroundRefresh: BackgroundRefreshService,
     private pageLoadState: PageLoadStateService
   ) {}
@@ -374,9 +375,6 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     if (tab === 'risk' && (!this.risk || !(this.risk.highRiskItems?.length))) {
       this.reloadRisk();
       return;
-    }
-    if (tab === 'journal' && !this.journal.length) {
-      this.reloadJournal();
     }
   }
 
@@ -568,18 +566,17 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   openJournalFromItem(item: StrategyScoredItem, event?: Event): void {
     event?.preventDefault();
     event?.stopPropagation();
-    this.selectedTab = 'journal';
     this.selectedScoreItem = item;
     this.message = '';
 
     if (!this.activeProfileId || this.hasDetailedScoreItem(item)) {
-      this.prefillJournalFromScoreItem(item);
+      this.navigateToJournalSettings(item);
       return;
     }
 
     const symbol = item.symbol?.toUpperCase?.() || item.symbol;
     if (!symbol) {
-      this.prefillJournalFromScoreItem(item);
+      this.navigateToJournalSettings(item);
       return;
     }
 
@@ -594,7 +591,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
         }
         const detailedItem = response.data?.symbol === symbol ? response.data : item;
         this.selectedScoreItem = detailedItem;
-        this.prefillJournalFromScoreItem(detailedItem);
+        this.navigateToJournalSettings(detailedItem);
         this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
@@ -602,7 +599,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
         if (this.detailLoadingSymbol === symbol) {
           this.detailLoadingSymbol = null;
         }
-        this.prefillJournalFromScoreItem(item);
+        this.navigateToJournalSettings(item);
         this.pageLoadState.fail(this.pageLoadKey, 'Không tải được chi tiết công thức của mã.');
       },
     });
@@ -972,7 +969,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
           },
         });
         return;
-      case 'journal':
+      default:
         this.api.listStrategyJournal(12).subscribe({
           next: (response) => {
             this.journal = response.data || this.journal;
@@ -1338,6 +1335,17 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
   private getSettingsCardKey(section: StrategySettingsSection, entity: StrategyConfigEntity): string {
     return `${section}:${this.trackByCode(0, entity as any)}`;
+  }
+
+  private navigateToJournalSettings(item: StrategyScoredItem): void {
+    this.router.navigate(['/tabs/market-settings'], {
+      queryParams: {
+        tab: 'journal',
+      },
+      state: {
+        strategyJournalPrefill: item,
+      },
+    });
   }
 
   private prefillJournalFromScoreItem(item: StrategyScoredItem): void {

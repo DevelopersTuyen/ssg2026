@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
 import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
+import { AuthService } from 'src/app/core/services/auth.service';
 import {
   AiActivityItem,
   AiAgentChatHistoryItem,
@@ -50,8 +51,6 @@ interface PendingAnalysisJob {
 })
 export class AiLocalPage implements OnInit, OnDestroy {
   private readonly pageLoadKey = 'ai-local';
-  private readonly autoAnalyzeStorageKey = 'ai-local.auto-analyze-enabled';
-  private readonly financialAnalysisStorageKey = 'ai-local.financial-analysis-enabled';
   readonly newsPageSize = 5;
 
   selectedTab: LocalTab = 'overview';
@@ -138,7 +137,8 @@ export class AiLocalPage implements OnInit, OnDestroy {
     private api: MarketApiService,
     private i18n: AppI18nService,
     private backgroundRefresh: BackgroundRefreshService,
-    private pageLoadState: PageLoadStateService
+    private pageLoadState: PageLoadStateService,
+    private auth: AuthService
   ) {}
 
   ngOnInit(): void {
@@ -149,12 +149,21 @@ export class AiLocalPage implements OnInit, OnDestroy {
         this.loadOverview(true);
       }
     });
-    this.restoreLocalPreferences();
+    this.applyStoredSettings();
+    if (!this.auth.preferences && this.auth.isAuthenticated()) {
+      this.auth.refreshSettings().subscribe((settings) => {
+        if (!settings) {
+          return;
+        }
+        this.applyStoredSettings();
+      });
+    }
     this.loadOverview();
   }
 
   ionViewDidEnter(): void {
     this.activeView = true;
+    this.applyStoredSettings();
     this.pageLoadState.setActivePage(this.pageLoadKey);
   }
 
@@ -186,18 +195,6 @@ export class AiLocalPage implements OnInit, OnDestroy {
   sendTemplate(template: PromptTemplate): void {
     this.currentPrompt = template.prompt;
     this.sendPrompt();
-  }
-
-  onAutoAnalyzeChange(): void {
-    localStorage.setItem(this.autoAnalyzeStorageKey, String(this.autoAnalyzeEnabled));
-    if (this.autoAnalyzeEnabled && !this.loadingOverview) {
-      this.runAutoAnalysis('bat che do tu dong');
-    }
-  }
-
-  onFinancialAnalysisChange(): void {
-    localStorage.setItem(this.financialAnalysisStorageKey, String(this.financialAnalysisEnabled));
-    this.loadOverview(false, true, 'doi che do phan tich BCTC');
   }
 
   refreshOverview(): void {
@@ -361,9 +358,16 @@ export class AiLocalPage implements OnInit, OnDestroy {
     }
   }
 
-  private restoreLocalPreferences(): void {
-    this.autoAnalyzeEnabled = localStorage.getItem(this.autoAnalyzeStorageKey) === 'true';
-    this.financialAnalysisEnabled = localStorage.getItem(this.financialAnalysisStorageKey) === 'true';
+  private applyStoredSettings(): void {
+    const preferences = this.auth.preferences;
+    if (!preferences) {
+      return;
+    }
+    this.autoAnalyzeEnabled = !!preferences.aiLocalAutoAnalysis;
+    this.financialAnalysisEnabled = !!preferences.aiLocalFinancialAnalysis;
+    if (preferences.defaultExchange === 'HSX' || preferences.defaultExchange === 'HNX' || preferences.defaultExchange === 'UPCOM') {
+      this.selectedExchange = preferences.defaultExchange;
+    }
   }
 
   private runAutoAnalysis(reason: string): void {

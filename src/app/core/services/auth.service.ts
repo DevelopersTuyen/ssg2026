@@ -51,6 +51,7 @@ export class AuthService {
 
     const allowedPages = new Set([
       'dashboard',
+      'dashboard-v2',
       'market-watch',
       'market-alerts',
       'ai-agent',
@@ -59,7 +60,7 @@ export class AuthService {
       'role-permissions',
     ]);
 
-    return allowedPages.has(raw) ? raw : 'dashboard';
+    return allowedPages.has(raw) ? raw : 'dashboard-v2';
   }
 
   isAuthenticated(): boolean {

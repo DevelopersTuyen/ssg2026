@@ -34,11 +34,8 @@
             <div>
               <span class="meta-label">{{ 'aiLocal.autoAnalysis' | translate }}</span>
               <strong>{{ autoAnalyzeEnabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}</strong>
-              <p class="auto-note">
-                {{ 'aiLocal.autoAnalysisNote' | translate }}
-              </p>
+              <p class="auto-note">{{ 'aiLocal.autoAnalysisNote' | translate }}</p>
             </div>
-            <ion-toggle [(ngModel)]="autoAnalyzeEnabled" (ionChange)="onAutoAnalyzeChange()"></ion-toggle>
           </div>
         </div>
 
@@ -47,12 +44,15 @@
             <div>
               <span class="meta-label">{{ 'aiLocal.financialAnalysis' | translate }}</span>
               <strong>{{ financialAnalysisEnabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}</strong>
-              <p class="auto-note">
-                {{ 'aiLocal.financialAnalysisNote' | translate }}
-              </p>
+              <p class="auto-note">{{ 'aiLocal.financialAnalysisNote' | translate }}</p>
             </div>
-            <ion-toggle [(ngModel)]="financialAnalysisEnabled" (ionChange)="onFinancialAnalysisChange()"></ion-toggle>
           </div>
+        </div>
+
+        <div class="queue-status-panel">
+          <span class="meta-label">Settings</span>
+          <strong>Cac tuy chon AI Local duoc quan ly trong Market Settings</strong>
+          <p class="auto-note">Neu can doi auto analysis hoac bo sung phan tich BCTC, hay cap nhat trong tab AI cua Settings.</p>
         </div>
 
         <div class="meta-grid">

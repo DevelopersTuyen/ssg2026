@@ -522,6 +522,8 @@ export interface MarketSettingsData {
   aiNewsDigest: boolean;
   aiTaskSchedule: string;
   aiTone: string;
+  aiLocalAutoAnalysis: boolean;
+  aiLocalFinancialAnalysis: boolean;
   safeMode: boolean;
   biometricLogin: boolean;
   sessionTimeout: string;

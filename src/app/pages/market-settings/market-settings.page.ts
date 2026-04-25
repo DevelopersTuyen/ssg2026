@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
 import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
@@ -14,15 +14,17 @@ import {
   StrategyAlertRule,
   StrategyChecklistItem,
   StrategyFormula,
+  StrategyJournalEntry,
   StrategyParameter,
   StrategyProfile,
   StrategyProfileConfigResponse,
+  StrategyScoredItem,
   StrategyScreenRule,
 } from 'src/app/core/services/market-api.service';
 
-type SettingsTab = 'general' | 'display' | 'alerts' | 'data' | 'ai' | 'strategy' | 'security';
+type SettingsTab = 'general' | 'display' | 'alerts' | 'data' | 'ai' | 'strategy' | 'journal' | 'security';
 type StrategyConfigEntity = StrategyFormula | StrategyScreenRule | StrategyAlertRule | StrategyChecklistItem;
-type StrategySettingsSection = 'profiles' | 'formulas' | 'screenRules' | 'alertRules' | 'checklists' | 'versions';
+type StrategySettingsSection = 'profiles' | 'formulas' | 'screenRules' | 'alertRules' | 'checklists' | 'journal' | 'versions';
 
 interface SettingsTabItem {
   key: SettingsTab;
@@ -35,6 +37,45 @@ interface StrategyVariableHint {
   label: string;
   description: string;
   kind: 'metric' | 'parameter' | 'formula';
+}
+
+interface StrategyJournalSuggestion {
+  symbol: string;
+  classification: string;
+  tradeSide: 'buy' | 'sell';
+  entryPrice: number | null;
+  exitPrice: number | null;
+  stopLossPrice: number | null;
+  takeProfitPrice: number | null;
+  positionSize: number | null;
+  strategyName: string;
+  psychology: string;
+  notes: string;
+  reasons: string[];
+}
+
+interface StrategyJournalRow {
+  id?: number;
+  profileId?: number | null;
+  symbol: string;
+  trade_date: string;
+  classification: string;
+  trade_side: string;
+  entry_price: number | null;
+  exit_price: number | null;
+  stop_loss_price: number | null;
+  take_profit_price: number | null;
+  quantity: number | null;
+  position_size: number | null;
+  total_capital: number | null;
+  strategy_name: string;
+  psychology: string;
+  notes: string;
+  mistake_tags_json: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  isSaving?: boolean;
+  isNew?: boolean;
 }
 
 const VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
@@ -247,14 +288,21 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   strategyProfiles: StrategyProfile[] = [];
   activeStrategyProfileId: number | null = null;
   strategyConfig: StrategyProfileConfigResponse | null = null;
+  strategyJournal: StrategyJournalEntry[] = [];
+  strategyJournalRows: StrategyJournalRow[] = [];
+  strategyJournalSourceItem: StrategyScoredItem | null = null;
+  strategyJournalSuggestion: StrategyJournalSuggestion | null = null;
+  strategyJournalPrefillPending = false;
   strategySavedSnapshot = '';
   selectedStrategySection: StrategySettingsSection = 'formulas';
   expandedStrategyCardKey = '';
+  editingStrategyJournalId: number | null = null;
   newStrategyProfile = {
     code: '',
     name: '',
     description: '',
   };
+  strategyJournalForm = this.buildEmptyStrategyJournalForm();
   private backgroundSub?: Subscription;
   private activeView = false;
 
@@ -265,12 +313,14 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     { key: 'data', labelKey: 'settings.tabs.data', helperKey: 'settings.tabs.dataHelp' },
     { key: 'ai', labelKey: 'settings.tabs.ai', helperKey: 'settings.tabs.aiHelp' },
     { key: 'strategy', labelKey: 'Strategy', helperKey: 'Cong thuc, rule, checklist va version' },
+    { key: 'journal', labelKey: 'settings.tabs.journal', helperKey: 'settings.tabs.journalHelp' },
     { key: 'security', labelKey: 'settings.tabs.security', helperKey: 'settings.tabs.securityHelp' },
   ];
 
   constructor(
     private api: MarketApiService,
     private auth: AuthService,
+    private route: ActivatedRoute,
     private router: Router,
     private i18n: AppI18nService,
     private theme: ThemeService,
@@ -281,6 +331,8 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.applyRouteState();
+    this.consumeStrategyJournalPrefill();
     this.pageLoadState.registerPage(this.pageLoadKey, 'settings.title');
     this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
       if (!this.activeView) return;
@@ -289,21 +341,33 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       }
     });
     this.loadSettings();
+    if (this.selectedTab === 'strategy' || this.selectedTab === 'journal') {
+      this.loadStrategyOverview();
+    }
   }
 
   ionViewDidEnter(): void {
     this.activeView = true;
+    this.applyRouteState();
+    this.consumeStrategyJournalPrefill();
     this.pageLoadState.setActivePage(this.pageLoadKey);
     if (this.selectedTab === 'data' && !this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 12000)) {
       this.loadSyncStatus();
     }
     if (
-      this.selectedTab === 'strategy' &&
+      (this.selectedTab === 'strategy' || this.selectedTab === 'journal') &&
       !this.strategyConfig &&
       !this.strategyLoading &&
       !this.pageLoadState.isLoading(this.pageLoadKey)
     ) {
       this.loadStrategyOverview();
+    } else if (
+      (this.selectedTab === 'strategy' || this.selectedTab === 'journal') &&
+      this.selectedStrategySection === 'journal' &&
+      !this.strategyJournal.length &&
+      !this.strategyLoading
+    ) {
+      this.reloadStrategyJournal(true);
     }
   }
 
@@ -320,9 +384,20 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     if (tab === 'data') {
       this.loadSyncStatus();
     }
-    if (tab === 'strategy' && !this.strategyConfig && !this.strategyLoading) {
-      this.loadStrategyOverview();
+    if (tab === 'journal') {
+      this.selectedStrategySection = 'journal';
     }
+    if ((tab === 'strategy' || tab === 'journal') && !this.strategyConfig && !this.strategyLoading) {
+      this.loadStrategyOverview();
+      return;
+    }
+    if ((tab === 'strategy' || tab === 'journal') && this.selectedStrategySection === 'journal' && !this.strategyJournal.length && !this.strategyLoading) {
+      this.reloadStrategyJournal();
+    }
+  }
+
+  openStrategyJournal(): void {
+    this.selectTab('journal');
   }
 
   loadSettings(): void {
@@ -445,6 +520,9 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
         if (this.activeStrategyProfileId) {
           this.pageLoadState.setProgress(this.pageLoadKey, 55);
           this.loadStrategyConfig(this.activeStrategyProfileId);
+          if (this.selectedStrategySection === 'journal') {
+            this.reloadStrategyJournal(true);
+          }
         } else {
           this.strategyConfig = null;
           this.pageLoadState.finish(this.pageLoadKey);
@@ -465,6 +543,9 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       return;
     }
     this.loadStrategyConfig(this.activeStrategyProfileId);
+    if (this.selectedStrategySection === 'journal') {
+      this.reloadStrategyJournal(true);
+    }
   }
 
   get hasUnsavedStrategyChanges(): boolean {
@@ -609,6 +690,9 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   selectStrategySection(section: StrategySettingsSection): void {
     this.selectedStrategySection = section;
     this.ensureStrategyExpansion();
+    if (section === 'journal' && !this.strategyJournal.length && !this.strategyLoading) {
+      this.reloadStrategyJournal();
+    }
   }
 
   toggleStrategyCard(section: StrategySettingsSection, entity: StrategyConfigEntity): void {
@@ -622,7 +706,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
 
   getStrategySectionCount(section: StrategySettingsSection): number {
     if (!this.strategyConfig) {
-      return 0;
+      return section === 'journal' ? this.strategyJournalRows.length : 0;
     }
 
     switch (section) {
@@ -636,10 +720,267 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
         return this.strategyConfig.alertRules.length;
       case 'checklists':
         return this.strategyConfig.checklists.length;
+      case 'journal':
+        return this.strategyJournalRows.length;
       case 'versions':
         return this.strategyConfig.versions.length;
       default:
         return 0;
+    }
+  }
+
+  reloadStrategyJournal(silent = false): void {
+    if (!this.activeStrategyProfileId) {
+      return;
+    }
+
+    if (!silent) {
+      this.strategyLoading = true;
+      this.strategyError = '';
+      this.strategyMessage = '';
+    }
+    this.pageLoadState.startBackground(this.pageLoadKey);
+
+    this.api.listStrategyJournal(24).subscribe({
+      next: (response) => {
+        this.strategyJournal = response.data || [];
+        this.strategyJournalRows = this.strategyJournal.map((item) => this.mapJournalEntryToRow(item));
+        if (this.strategyJournalPrefillPending && this.strategyJournalSuggestion) {
+          this.strategyJournalRows.unshift(this.buildStrategyJournalRowFromSuggestion(this.strategyJournalSuggestion));
+          this.strategyJournalPrefillPending = false;
+        }
+        this.strategyLoading = false;
+        this.pageLoadState.finish(this.pageLoadKey);
+      },
+      error: () => {
+        this.strategyLoading = false;
+        this.strategyError = 'Khong tai duoc strategy journal.';
+        this.pageLoadState.fail(this.pageLoadKey, this.strategyError);
+      },
+    });
+  }
+
+  addStrategyJournalRow(prefill?: Partial<StrategyJournalRow>): void {
+    const row = this.buildEmptyStrategyJournalRow();
+    this.strategyJournalRows = [...this.strategyJournalRows, { ...row, ...prefill, isNew: true }];
+  }
+
+  saveStrategyJournalRow(row: StrategyJournalRow): void {
+    if (!this.activeStrategyProfileId || !row.symbol.trim()) {
+      this.strategyError = 'Can nhap ma giao dich.';
+      return;
+    }
+
+    const payload = this.buildJournalPayload(row);
+    const request$ = row.id
+      ? this.api.updateStrategyJournal(row.id, payload)
+      : this.api.createStrategyJournal(payload);
+
+    row.isSaving = true;
+    this.strategyError = '';
+    this.strategyMessage = '';
+
+    request$.subscribe({
+      next: (response) => {
+        row.isSaving = false;
+        if (!response.data) {
+          this.strategyError = row.id ? 'Khong cap nhat duoc journal.' : 'Khong luu duoc journal.';
+          return;
+        }
+
+        const savedRow = this.mapJournalEntryToRow(response.data);
+        const index = this.strategyJournalRows.indexOf(row);
+        if (index >= 0) {
+          this.strategyJournalRows.splice(index, 1, savedRow);
+          this.strategyJournalRows = [...this.strategyJournalRows];
+        } else {
+          this.strategyJournalRows = [...this.strategyJournalRows, savedRow];
+        }
+        this.strategyMessage = row.id ? 'Da cap nhat strategy journal.' : 'Da them strategy journal.';
+      },
+      error: () => {
+        row.isSaving = false;
+        this.strategyError = row.id ? 'Cap nhat strategy journal that bai.' : 'Luu strategy journal that bai.';
+      },
+    });
+  }
+
+  deleteStrategyJournalRow(row: StrategyJournalRow): void {
+    if (!row.id) {
+      this.strategyJournalRows = this.strategyJournalRows.filter((item) => item !== row);
+      return;
+    }
+
+    const confirmed = window.confirm(`Xoa nhat ky giao dich cho ma ${row.symbol}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    this.api.deleteStrategyJournal(row.id).subscribe({
+      next: (response) => {
+        if (!response.data) {
+          this.strategyError = 'Khong xoa duoc strategy journal.';
+          return;
+        }
+        this.strategyJournalRows = this.strategyJournalRows.filter((item) => item !== row);
+        this.strategyMessage = 'Da xoa strategy journal.';
+      },
+      error: () => {
+        this.strategyError = 'Xoa strategy journal that bai.';
+      },
+    });
+  }
+
+  parseStrategyJournalRowTags(row: StrategyJournalRow, input: string): void {
+    row.mistake_tags_json = input
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  trackByStrategyJournalRow(_: number, item: StrategyJournalRow): number | string {
+    return item.id || `${item.symbol}:${item.trade_date}:${item.createdAt || 'new'}`;
+  }
+
+  saveStrategyJournal(): void {
+    if (!this.activeStrategyProfileId || !this.strategyJournalForm.symbol.trim()) {
+      this.strategyError = 'Can nhap ma giao dich.';
+      return;
+    }
+
+    const payload = {
+      profile_id: this.activeStrategyProfileId,
+      symbol: this.strategyJournalForm.symbol.trim().toUpperCase(),
+      trade_date: this.strategyJournalForm.trade_date,
+      classification: this.strategyJournalForm.classification,
+      trade_side: this.strategyJournalForm.trade_side,
+      entry_price: this.strategyJournalForm.entry_price,
+      exit_price: this.strategyJournalForm.exit_price,
+      stop_loss_price: this.strategyJournalForm.stop_loss_price,
+      take_profit_price: this.strategyJournalForm.take_profit_price,
+      quantity: this.strategyJournalForm.quantity,
+      position_size: this.strategyJournalForm.position_size,
+      total_capital: this.strategyJournalForm.total_capital,
+      strategy_name: this.strategyJournalForm.strategy_name,
+      psychology: this.strategyJournalForm.psychology,
+      notes: this.strategyJournalForm.notes,
+      mistake_tags_json: this.strategyJournalForm.mistake_tags_json,
+      signal_snapshot_json: this.strategyJournalSourceItem
+        ? {
+            volumeIntelligence: this.strategyJournalSourceItem.volumeIntelligence,
+            candlestickSignals: this.strategyJournalSourceItem.candlestickSignals,
+            footprintSignals: this.strategyJournalSourceItem.footprintSignals,
+          }
+        : undefined,
+      result_snapshot_json: this.strategyJournalSourceItem
+        ? {
+            winningScore: this.strategyJournalSourceItem.winningScore,
+            qScore: this.strategyJournalSourceItem.qScore,
+            lScore: this.strategyJournalSourceItem.lScore,
+            mScore: this.strategyJournalSourceItem.mScore,
+            pScore: this.strategyJournalSourceItem.pScore,
+            riskScore: this.strategyJournalSourceItem.riskScore,
+            fairValue: this.strategyJournalSourceItem.fairValue,
+            marginOfSafety: this.strategyJournalSourceItem.marginOfSafety,
+            executionPlan: this.strategyJournalSourceItem.executionPlan,
+          }
+        : undefined,
+    };
+
+    const request$ = this.editingStrategyJournalId
+      ? this.api.updateStrategyJournal(this.editingStrategyJournalId, payload)
+      : this.api.createStrategyJournal(payload);
+
+    this.strategySaving = true;
+    this.strategyError = '';
+    this.strategyMessage = '';
+
+    request$.subscribe({
+      next: (response) => {
+        this.strategySaving = false;
+        if (!response.data) {
+          this.strategyError = this.editingStrategyJournalId
+            ? 'Khong cap nhat duoc journal.'
+            : 'Khong luu duoc journal.';
+          return;
+        }
+        this.strategyMessage = this.editingStrategyJournalId
+          ? 'Da cap nhat strategy journal.'
+          : 'Da them strategy journal.';
+        this.resetStrategyJournalForm();
+        this.reloadStrategyJournal(true);
+      },
+      error: () => {
+        this.strategySaving = false;
+        this.strategyError = this.editingStrategyJournalId
+          ? 'Cap nhat strategy journal that bai.'
+          : 'Luu strategy journal that bai.';
+      },
+    });
+  }
+
+  editStrategyJournal(item: StrategyJournalEntry): void {
+    this.strategyJournalSuggestion = null;
+    this.strategyJournalSourceItem = null;
+    this.editingStrategyJournalId = item.id;
+    this.strategyJournalForm = {
+      symbol: item.symbol || '',
+      trade_date: item.tradeDate || new Date().toISOString().slice(0, 10),
+      classification: item.classification || 'swing',
+      trade_side: item.tradeSide || 'buy',
+      entry_price: item.entryPrice ?? null,
+      exit_price: item.exitPrice ?? null,
+      stop_loss_price: item.stopLossPrice ?? null,
+      take_profit_price: item.takeProfitPrice ?? null,
+      quantity: item.quantity ?? null,
+      position_size: item.positionSize ?? null,
+      total_capital: item.totalCapital ?? null,
+      strategy_name: item.strategyName || '',
+      psychology: item.psychology || '',
+      notes: item.notes || '',
+      mistake_tags_json: [...(item.mistakeTags || [])],
+    };
+  }
+
+  cancelStrategyJournalEdit(): void {
+    this.resetStrategyJournalForm();
+  }
+
+  deleteStrategyJournal(item: StrategyJournalEntry): void {
+    const confirmed = window.confirm(`Xoa nhat ky giao dich cho ma ${item.symbol}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    this.api.deleteStrategyJournal(item.id).subscribe({
+      next: (response) => {
+        if (!response.data) {
+          this.strategyError = 'Khong xoa duoc strategy journal.';
+          return;
+        }
+        if (this.editingStrategyJournalId === item.id) {
+          this.resetStrategyJournalForm();
+        }
+        this.strategyMessage = 'Da xoa strategy journal.';
+        this.reloadStrategyJournal(true);
+      },
+      error: () => {
+        this.strategyError = 'Xoa strategy journal that bai.';
+      },
+    });
+  }
+
+  parseStrategyJournalTags(input: string): void {
+    this.strategyJournalForm.mistake_tags_json = input
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  useStrategyJournalSuggestion(): void {
+    if (this.strategyJournalSuggestion) {
+      this.strategyJournalRows = [...this.strategyJournalRows, this.buildStrategyJournalRowFromSuggestion(this.strategyJournalSuggestion)];
+      this.strategyJournalPrefillPending = false;
     }
   }
 
@@ -885,6 +1226,44 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     }
   }
 
+  private applyRouteState(): void {
+    const tab = this.route.snapshot.queryParamMap.get('tab');
+    const section = this.route.snapshot.queryParamMap.get('section');
+    if (tab === 'journal' || (tab === 'strategy' && section === 'journal')) {
+      this.selectedTab = 'journal';
+      this.selectedStrategySection = 'journal';
+    } else if (tab === 'strategy') {
+      this.selectedTab = 'strategy';
+    }
+
+    if (this.isStrategySection(section) && section !== 'journal') {
+      this.selectedStrategySection = section;
+    }
+  }
+
+  private consumeStrategyJournalPrefill(): void {
+    const state = (window.history.state || {}) as { strategyJournalPrefill?: StrategyScoredItem | null };
+    const item = state.strategyJournalPrefill;
+    if (!item?.symbol) {
+      return;
+    }
+
+    this.selectedTab = 'journal';
+    this.selectedStrategySection = 'journal';
+    this.prefillStrategyJournalFromScoreItem(item);
+    this.strategyJournalPrefillPending = true;
+
+    const nextState = { ...window.history.state };
+    delete nextState.strategyJournalPrefill;
+    window.history.replaceState(nextState, document.title);
+  }
+
+  private isStrategySection(value: string | null): value is StrategySettingsSection {
+    return ['profiles', 'formulas', 'screenRules', 'alertRules', 'checklists', 'journal', 'versions'].includes(
+      value || ''
+    );
+  }
+
   private getStrategyCardKey(section: StrategySettingsSection, entity: StrategyConfigEntity): string {
     return `${section}:${this.trackByStrategyCode(0, entity as any)}`;
   }
@@ -897,13 +1276,268 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.router.navigateByUrl('/tabs/strategy-hub');
   }
 
+  private resetStrategyJournalForm(): void {
+    this.editingStrategyJournalId = null;
+    this.strategyJournalSourceItem = null;
+    this.strategyJournalSuggestion = null;
+    this.strategyJournalForm = this.buildEmptyStrategyJournalForm();
+  }
+
+  private buildEmptyStrategyJournalForm() {
+    return {
+      symbol: '',
+      trade_date: new Date().toISOString().slice(0, 10),
+      classification: 'swing',
+      trade_side: 'buy',
+      entry_price: null as number | null,
+      exit_price: null as number | null,
+      stop_loss_price: null as number | null,
+      take_profit_price: null as number | null,
+      quantity: null as number | null,
+      position_size: null as number | null,
+      total_capital: null as number | null,
+      strategy_name: '',
+      psychology: '',
+      notes: '',
+      mistake_tags_json: [] as string[],
+    };
+  }
+
+  private prefillStrategyJournalFromScoreItem(item: StrategyScoredItem): void {
+    const suggestion = this.buildStrategyJournalSuggestion(item);
+    this.strategyJournalSourceItem = item;
+    this.strategyJournalSuggestion = suggestion;
+    this.editingStrategyJournalId = null;
+    this.strategyJournalForm = {
+      symbol: suggestion.symbol,
+      trade_date: new Date().toISOString().slice(0, 10),
+      classification: suggestion.classification,
+      trade_side: suggestion.tradeSide,
+      entry_price: suggestion.entryPrice,
+      exit_price: suggestion.exitPrice,
+      stop_loss_price: suggestion.stopLossPrice,
+      take_profit_price: suggestion.takeProfitPrice,
+      quantity: null,
+      position_size: suggestion.positionSize,
+      total_capital: null,
+      strategy_name: suggestion.strategyName,
+      psychology: suggestion.psychology,
+      notes: suggestion.notes,
+      mistake_tags_json: [],
+    };
+  }
+
+  private buildStrategyJournalSuggestion(item: StrategyScoredItem): StrategyJournalSuggestion {
+    const currentPrice = this.preferredNumber(item.currentPrice, item.price);
+    const execution = item.executionPlan;
+    const volume = item.volumeIntelligence;
+    const tradeSide: 'buy' | 'sell' = execution?.takeProfitSignal ? 'sell' : 'buy';
+    const classification =
+      execution?.addBuy70 ? 'retest' :
+      execution?.probeBuy30 ? 'breakout' :
+      volume?.noSupply ? 'retest' :
+      item.passedAllLayers ? 'position' :
+      'swing';
+
+    const positionSize =
+      execution?.standAside ? 0 :
+      execution?.addBuy70 ? 70 :
+      execution?.probeBuy30 ? 30 :
+      50;
+
+    const stopLossPctCandidates = [execution?.stopLossMin, execution?.stopLossMax]
+      .filter((value): value is number => typeof value === 'number' && isFinite(value) && value > 0);
+    const stopLossPct = stopLossPctCandidates.length
+      ? stopLossPctCandidates.reduce((sum, value) => sum + value, 0) / stopLossPctCandidates.length / 100
+      : 0.06;
+
+    const stopLossPrice =
+      tradeSide === 'buy' && currentPrice !== null
+        ? this.roundPrice(currentPrice * (1 - stopLossPct))
+        : null;
+    const takeProfitBase = Math.max(stopLossPct * 2, 0.1);
+    const takeProfitPrice =
+      tradeSide === 'buy' && currentPrice !== null
+        ? this.roundPrice(currentPrice * (1 + takeProfitBase))
+        : currentPrice;
+    const exitPrice = tradeSide === 'sell' ? currentPrice : null;
+
+    const reasons = [
+      `Winning Score ${item.winningScore.toFixed(2)} theo profile hien tai.`,
+      volume?.smartMoneyInflow ? 'Smart Money Inflow dang bat.' : 'Smart Money Inflow chua xac nhan.',
+      execution?.probeBuy30 ? 'Execution engine cho phep mua tham do 30%.' : '',
+      execution?.addBuy70 ? 'Execution engine cho phep mua gia tang 70%.' : '',
+      execution?.standAside ? 'Execution engine dang khuyen nghi dung ngoai.' : '',
+      execution?.takeProfitSignal ? 'Execution engine dang phat hien tin hieu chot loi.' : '',
+      ...(execution?.rationale || []).slice(0, 3),
+    ].filter(Boolean);
+
+    const strategyName =
+      execution?.takeProfitSignal ? 'Exit by Volume Divergence' :
+      execution?.addBuy70 ? 'Add 70 - Pullback Retest' :
+      execution?.probeBuy30 ? 'Buy 30 - Breakout Probe' :
+      volume?.noSupply ? 'No Supply Retest' :
+      volume?.smartMoneyInflow ? 'Smart Money Inflow Scan' :
+      `${this.strategyConfig?.profile?.name || 'Strategy'} Review`;
+
+    const psychology =
+      execution?.standAside
+        ? 'Dung ngoai va quan sat them, tranh FOMO vi setup chua du xac nhan.'
+        : tradeSide === 'sell'
+          ? 'Chu dong khoa loi nhuan va ban theo ke hoach, khong nuoi ky vong them.'
+          : execution?.addBuy70
+            ? 'Co the gia tang vi the nhung van phai giu ky luat stop-loss.'
+            : execution?.probeBuy30
+              ? 'Chi mua tham do de kiem dinh setup, tranh vao full vi the qua som.'
+              : 'Theo doi ky luat va doi them xac nhan truoc khi tang vi the.';
+
+    return {
+      symbol: item.symbol,
+      classification,
+      tradeSide,
+      entryPrice: tradeSide === 'buy' ? currentPrice : null,
+      exitPrice,
+      stopLossPrice,
+      takeProfitPrice,
+      positionSize,
+      strategyName,
+      psychology,
+      notes: reasons.join('\n'),
+      reasons,
+    };
+  }
+
+  private buildEmptyStrategyJournalRow(): StrategyJournalRow {
+    return {
+      symbol: '',
+      trade_date: new Date().toISOString().slice(0, 10),
+      classification: 'swing',
+      trade_side: 'buy',
+      entry_price: null,
+      exit_price: null,
+      stop_loss_price: null,
+      take_profit_price: null,
+      quantity: null,
+      position_size: null,
+      total_capital: null,
+      strategy_name: '',
+      psychology: '',
+      notes: '',
+      mistake_tags_json: [],
+      isNew: true,
+      isSaving: false,
+    };
+  }
+
+  private mapJournalEntryToRow(item: StrategyJournalEntry): StrategyJournalRow {
+    return {
+      id: item.id,
+      profileId: item.profileId ?? null,
+      symbol: item.symbol || '',
+      trade_date: item.tradeDate || new Date().toISOString().slice(0, 10),
+      classification: item.classification || 'swing',
+      trade_side: item.tradeSide || 'buy',
+      entry_price: item.entryPrice ?? null,
+      exit_price: item.exitPrice ?? null,
+      stop_loss_price: item.stopLossPrice ?? null,
+      take_profit_price: item.takeProfitPrice ?? null,
+      quantity: item.quantity ?? null,
+      position_size: item.positionSize ?? null,
+      total_capital: item.totalCapital ?? null,
+      strategy_name: item.strategyName || '',
+      psychology: item.psychology || '',
+      notes: item.notes || '',
+      mistake_tags_json: [...(item.mistakeTags || [])],
+      createdAt: item.createdAt ?? null,
+      updatedAt: item.updatedAt ?? null,
+      isSaving: false,
+      isNew: false,
+    };
+  }
+
+  private buildStrategyJournalRowFromSuggestion(suggestion: StrategyJournalSuggestion): StrategyJournalRow {
+    return {
+      ...this.buildEmptyStrategyJournalRow(),
+      symbol: suggestion.symbol,
+      classification: suggestion.classification,
+      trade_side: suggestion.tradeSide,
+      entry_price: suggestion.entryPrice,
+      exit_price: suggestion.exitPrice,
+      stop_loss_price: suggestion.stopLossPrice,
+      take_profit_price: suggestion.takeProfitPrice,
+      position_size: suggestion.positionSize,
+      strategy_name: suggestion.strategyName,
+      psychology: suggestion.psychology,
+      notes: suggestion.notes,
+      mistake_tags_json: [],
+      isNew: true,
+    };
+  }
+
+  private buildJournalPayload(row: StrategyJournalRow) {
+    return {
+      profile_id: this.activeStrategyProfileId,
+      symbol: row.symbol.trim().toUpperCase(),
+      trade_date: row.trade_date,
+      classification: row.classification,
+      trade_side: row.trade_side,
+      entry_price: row.entry_price,
+      exit_price: row.exit_price,
+      stop_loss_price: row.stop_loss_price,
+      take_profit_price: row.take_profit_price,
+      quantity: row.quantity,
+      position_size: row.position_size,
+      total_capital: row.total_capital,
+      strategy_name: row.strategy_name,
+      psychology: row.psychology,
+      notes: row.notes,
+      mistake_tags_json: row.mistake_tags_json,
+      signal_snapshot_json: this.strategyJournalSourceItem
+        ? {
+            volumeIntelligence: this.strategyJournalSourceItem.volumeIntelligence,
+            candlestickSignals: this.strategyJournalSourceItem.candlestickSignals,
+            footprintSignals: this.strategyJournalSourceItem.footprintSignals,
+          }
+        : undefined,
+      result_snapshot_json: this.strategyJournalSourceItem
+        ? {
+            winningScore: this.strategyJournalSourceItem.winningScore,
+            qScore: this.strategyJournalSourceItem.qScore,
+            lScore: this.strategyJournalSourceItem.lScore,
+            mScore: this.strategyJournalSourceItem.mScore,
+            pScore: this.strategyJournalSourceItem.pScore,
+            riskScore: this.strategyJournalSourceItem.riskScore,
+            fairValue: this.strategyJournalSourceItem.fairValue,
+            marginOfSafety: this.strategyJournalSourceItem.marginOfSafety,
+            executionPlan: this.strategyJournalSourceItem.executionPlan,
+          }
+        : undefined,
+    };
+  }
+
+  private preferredNumber(...values: Array<number | null | undefined>): number | null {
+    for (const value of values) {
+      if (typeof value === 'number' && isFinite(value)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private roundPrice(value: number | null): number | null {
+    if (value === null || !isFinite(value)) {
+      return null;
+    }
+    return Math.round(value * 100) / 100;
+  }
+
   private buildEmptySettings(): MarketSettingsData {
     return {
       language: 'vi',
       defaultExchange: 'HSX',
-      defaultLandingPage: 'market-watch',
+      defaultLandingPage: 'dashboard-v2',
       defaultTimeRange: '1d',
-      startupPage: 'dashboard',
+      startupPage: 'dashboard-v2',
       theme: 'light',
       compactTable: true,
       showSparkline: true,
@@ -931,6 +1565,8 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       aiNewsDigest: true,
       aiTaskSchedule: '08:30, 11:30, 14:45',
       aiTone: 'ngan gon',
+      aiLocalAutoAnalysis: false,
+      aiLocalFinancialAnalysis: false,
       safeMode: true,
       biometricLogin: false,
       sessionTimeout: '30',
