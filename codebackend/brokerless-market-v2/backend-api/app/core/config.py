@@ -35,6 +35,9 @@ class Settings(BaseSettings):
         alias="CAFEF_NEWS_USER_AGENT",
     )
     market_alerts_ttl_seconds: int = Field(default=60, alias="MARKET_ALERTS_TTL_SECONDS")
+    strategy_precompute_enabled: bool = Field(default=True, alias="STRATEGY_PRECOMPUTE_ENABLED")
+    strategy_precompute_initial_delay_seconds: int = Field(default=10, alias="STRATEGY_PRECOMPUTE_INITIAL_DELAY_SECONDS")
+    strategy_precompute_interval_seconds: int = Field(default=180, alias="STRATEGY_PRECOMPUTE_INTERVAL_SECONDS")
     auth_token_secret: str = Field(default="change-this-auth-secret", alias="AUTH_TOKEN_SECRET")
     auth_token_ttl_hours: int = Field(default=12, alias="AUTH_TOKEN_TTL_HOURS")
     auth_seed_demo_users: bool = Field(default=True, alias="AUTH_SEED_DEMO_USERS")

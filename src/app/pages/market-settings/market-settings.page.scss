@@ -1,14 +1,20 @@
 :host {
   display: block;
+  height: 100%;
 }
 
 ion-content.settings-content {
-  --background: #f3f5fa;
+  --background: #eef3f7;
+  --overflow: hidden;
 }
 
 .settings-page {
-  padding-left: 10px;
-  padding-right: 10px;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 12px;
+  overflow: hidden;
 }
 
 .settings-breadcrumb {
@@ -16,7 +22,8 @@ ion-content.settings-content {
   align-items: center;
   gap: 8px;
   color: #7d8796;
-  font-size: 14px;
+  font-size: 12px;
+  min-height: 24px;
 
   ion-icon {
     font-size: 16px;
@@ -28,57 +35,82 @@ ion-content.settings-content {
 }
 
 .settings-shell {
-  background: #fff;
-  border: 1px solid #e6ebf2;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(24, 55, 78, 0.1);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(42, 157, 143, 0.12), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #f8fbfc 54%, #f5f7f4 100%);
+  box-shadow: 0 22px 55px rgba(23, 43, 59, 0.12);
 }
 
 .settings-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 18px 16px 0;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(20, 42, 61, 0.08);
+  flex: 0 0 auto;
 
   h1 {
-    margin: 6px 0 8px;
-    font-size: 28px;
-    color: #1f2937;
-    font-weight: 800;
+    margin: 0;
+    font-size: clamp(18px, 1.6vw, 22px);
+    color: #18374e;
+    font-weight: 820;
+    letter-spacing: -0.03em;
   }
 
   p {
     margin: 0;
-    color: #6b7280;
-    line-height: 1.6;
+    color: #667585;
+    line-height: 1.45;
+    font-size: 13px;
+    max-width: 640px;
   }
 }
 
 .page-kicker {
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  color: #0f766e;
+  letter-spacing: 0.16em;
+  color: #2a9d8f;
 }
 
 .header-actions {
   display: flex;
-  align-items: start;
-  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   flex-wrap: wrap;
+  max-width: 620px;
+
+  .btn {
+    min-height: 34px;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+  }
 }
 
 .status-row,
 .strategy-status-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 14px 16px 0;
+  gap: 6px;
+  padding: 5px 14px 0;
+  flex: 0 0 auto;
 }
 
 .status-pill {
   display: inline-flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 5px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
@@ -99,34 +131,81 @@ ion-content.settings-content {
   }
 }
 
+.settings-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+}
+
 .settings-tabs {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  border-bottom: 1px solid #dfe5ec;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px 12px;
+  overflow-y: auto;
+  border-right: 1px solid rgba(20, 42, 61, 0.08);
+  background: rgba(247, 250, 252, 0.72);
 }
 
 .settings-tab {
-  border: none;
-  background: #fff;
-  color: #6b7280;
-  font-size: 14px;
-  padding: 12px 16px;
-  border-bottom: 3px solid transparent;
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: #657486;
+  font-size: 13px;
+  padding: 11px 12px;
+  text-align: left;
+  transition: 0.16s ease;
+
+  span {
+    color: #25384b;
+    font-weight: 800;
+  }
+
+  small {
+    min-height: 16px;
+    color: #798797;
+    line-height: 1.35;
+    font-size: 11px;
+  }
+
+  &:hover {
+    border-color: rgba(42, 157, 143, 0.16);
+    background: rgba(255, 255, 255, 0.78);
+    transform: translateX(2px);
+  }
 }
 
 .settings-tab.active {
-  color: #2b3543;
-  border-bottom-color: #20c7b7;
+  border-color: rgba(42, 157, 143, 0.22);
+  background: linear-gradient(135deg, #18374e 0%, #236072 100%);
+  box-shadow: 0 12px 24px rgba(24, 55, 78, 0.18);
+
+  span,
+  small {
+    color: #fff;
+  }
 }
 
 .settings-card {
-  padding: 18px 16px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  scroll-behavior: smooth;
 }
 
 .settings-section {
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .strategy-section-headline {
@@ -147,12 +226,12 @@ ion-content.settings-content {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
 }
 
 .form-grid.compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .form-item {
@@ -254,10 +333,12 @@ ion-content.settings-content {
 }
 
 .toggle-list {
-  margin-top: 8px;
-  margin-bottom: 18px;
+  margin-top: 0;
+  margin-bottom: 0;
   border: 1px solid #edf1f6;
+  border-radius: 18px;
   background: #fafbfd;
+  overflow: hidden;
 }
 
 .data-sync-hero,
@@ -289,13 +370,14 @@ ion-content.settings-content {
 
 .sync-status-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin-bottom: 0;
 }
 
 .sync-status-card {
   border: 1px solid #e4ebf4;
+  border-radius: 18px;
   background: #fbfdff;
   padding: 14px 16px;
 }
@@ -396,8 +478,8 @@ ion-content.settings-content {
   background: #2ba79b;
   border-color: #2ba79b;
   color: #fff;
-  border-radius: 0;
-  min-width: 130px;
+  border-radius: 999px;
+  min-width: 112px;
 }
 
 .btn-apply-strategy {
@@ -409,13 +491,13 @@ ion-content.settings-content {
 }
 
 .btn-reset {
-  border-radius: 0;
-  min-width: 150px;
+  border-radius: 999px;
+  min-width: 110px;
 }
 
 .btn-logout {
-  border-radius: 0;
-  min-width: 130px;
+  border-radius: 999px;
+  min-width: 110px;
 }
 
 .toolbar {
@@ -438,16 +520,145 @@ ion-content.settings-content {
   min-width: 220px;
 }
 
+.strategy-settings-section {
+  height: auto;
+  min-height: 100%;
+  display: grid;
+  gap: 10px;
+}
+
+.strategy-command-panel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-height: 58px;
+  padding: 7px 9px;
+  border: 1px solid rgba(24, 55, 78, 0.1);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 249, 248, 0.94) 100%),
+    radial-gradient(circle at top right, rgba(42, 157, 143, 0.12), transparent 36%);
+  box-shadow: 0 8px 20px rgba(24, 55, 78, 0.06);
+}
+
+.strategy-command-copy {
+  flex: 1 1 220px;
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  min-height: 42px;
+
+  strong {
+    color: #18374e;
+    font-size: 15px;
+    font-weight: 820;
+    letter-spacing: -0.02em;
+  }
+
+  span {
+    color: #667585;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+}
+
+.strategy-quick-stats {
+  flex: 1 1 300px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  align-items: center;
+
+  div {
+    display: grid;
+    gap: 2px;
+    align-content: center;
+    min-height: 42px;
+    height: 42px;
+    padding: 5px 8px;
+    border: 1px solid rgba(24, 55, 78, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.78);
+  }
+
+  span {
+    color: #7a8794;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  strong {
+    color: #18374e;
+    font-size: 14px;
+    line-height: 1;
+  }
+}
+
+.strategy-command-actions {
+  flex: 999 1 420px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+
+  .toolbar-select,
+  .toolbar-input {
+    flex: 0 1 210px;
+    height: 34px;
+    min-height: 30px;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 10px;
+    min-width: 150px;
+  }
+
+  .btn {
+    flex: 0 0 auto;
+    height: 34px;
+    min-height: 30px;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 10px;
+    font-weight: 800;
+  }
+}
+
+.strategy-search-input {
+  width: 210px;
+}
+
 .settings-layout {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 18px;
 }
 
+.strategy-workbench {
+  min-height: auto;
+  height: auto;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 10px;
+  overflow: visible;
+}
+
 .settings-sidebar {
   display: grid;
   align-content: start;
   gap: 10px;
+}
+
+.strategy-workbench .settings-sidebar {
+  position: sticky;
+  top: 0;
+  max-height: calc(100dvh - 170px);
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .settings-nav-item {
@@ -457,11 +668,12 @@ ion-content.settings-content {
   gap: 12px;
   width: 100%;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #f8fbff;
-  padding: 12px 14px;
+  padding: 10px 12px;
   color: #10223d;
   text-align: left;
+  transition: 0.16s ease;
 }
 
 .settings-nav-item strong {
@@ -474,7 +686,7 @@ ion-content.settings-content {
 }
 
 .settings-nav-item.active {
-  background: #10223d;
+  background: linear-gradient(135deg, #18374e 0%, #23566b 100%);
   color: #fff;
   box-shadow: 0 14px 32px rgba(16, 34, 61, 0.2);
 }
@@ -486,11 +698,19 @@ ion-content.settings-content {
 
 .settings-panel {
   display: grid;
-  gap: 16px;
+  align-content: start;
+  gap: 10px;
 }
 
 .settings-detail-panel {
   min-width: 0;
+}
+
+.strategy-workbench .settings-detail-panel {
+  min-height: auto;
+  max-height: none;
+  overflow: visible;
+  padding-right: 4px;
 }
 
 .settings-panel h3 {
@@ -509,19 +729,29 @@ ion-content.settings-content {
 .settings-section-head {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   align-items: flex-start;
 }
 
 .settings-section-head p {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: #6b7280;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.settings-section-head h3 {
+  font-size: 16px;
 }
 
 .profile-list,
 .version-list {
   display: grid;
   gap: 10px;
+}
+
+.strategy-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .profile-pill {
@@ -537,17 +767,48 @@ ion-content.settings-content {
   text-align: left;
 }
 
-.profile-pill small,
-.version-row span {
+.strategy-lite-card {
+  min-height: 74px;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.strategy-lite-card strong {
+  color: #18374e;
+  font-size: 14px;
+}
+
+.strategy-lite-card small,
+.strategy-lite-card span {
   color: #6b7280;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.profile-pill span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  background: #e7f7f4;
+  color: #0f766e;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.strategy-create-card {
+  gap: 14px;
 }
 
 .config-card {
   border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 18px;
+  border-radius: 15px;
   padding: 14px;
   display: grid;
   gap: 12px;
+  background: #fff;
 }
 
 .config-card.collapsible {
@@ -557,37 +818,69 @@ ion-content.settings-content {
 
 .config-card.collapsible.open {
   border-color: rgba(17, 63, 103, 0.18);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
 
 .config-header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start;
+  min-width: 0;
 }
 
 .config-toggle {
   width: 100%;
   border: 0;
   background: transparent;
-  padding: 16px 18px;
+  padding: 10px 12px;
   text-align: left;
+}
+
+.config-toggle > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.config-toggle strong {
+  display: block;
+  color: #18374e;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.config-toggle small {
+  display: block;
+  margin-top: 3px;
+  color: #738193;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .config-header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: flex-end;
+  gap: 7px;
+  flex: 0 0 auto;
+  max-width: 150px;
 }
 
 .config-status {
+  max-width: 92px;
   border-radius: 999px;
   background: #dcfce7;
   color: #166534;
-  padding: 6px 10px;
-  font-size: 0.8rem;
+  padding: 5px 9px;
+  font-size: 0.72rem;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .config-status.off {
@@ -596,8 +889,8 @@ ion-content.settings-content {
 }
 
 .config-arrow {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: #e2e8f0;
   display: inline-flex;
@@ -609,8 +902,50 @@ ion-content.settings-content {
 
 .config-body {
   display: grid;
+  grid-template-columns: minmax(210px, 0.85fr) minmax(300px, 1.15fr) minmax(116px, 0.42fr) minmax(220px, 0.85fr);
+  grid-template-areas:
+    "toggle toggle toggle toggle"
+    "readable editor operators variables"
+    "builder builder builder params";
+  align-items: start;
   gap: 12px;
-  padding: 0 18px 18px;
+  padding: 0 12px 12px;
+}
+
+.config-body > .toggle-inline {
+  grid-area: toggle;
+  justify-self: flex-start;
+}
+
+.config-body > .formula-readable {
+  grid-area: readable;
+  height: 100%;
+}
+
+.config-body > .formula-editor {
+  grid-area: editor;
+  height: 100%;
+}
+
+.config-body > .formula-operators {
+  grid-area: operators;
+}
+
+.config-body > .variable-help {
+  grid-area: variables;
+  height: 100%;
+}
+
+.config-body > .expression-builder {
+  grid-area: builder;
+}
+
+.config-body > .parameter-grid {
+  grid-area: params;
+}
+
+.config-body > input.form-control {
+  grid-column: 1 / -1;
 }
 
 .create-profile-btn {
@@ -804,6 +1139,7 @@ ion-content.settings-content {
 }
 
 .journal-table-scroll {
+  max-height: min(54dvh, 560px);
   overflow: auto;
 }
 
@@ -874,17 +1210,32 @@ ion-content.settings-content {
 }
 
 .formula-editor {
-  min-height: 92px;
+  min-height: 150px;
   font-family: "Consolas", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .expression-builder {
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  gap: 8px;
+  max-height: none;
+  overflow: visible;
+  padding: 12px;
   border-radius: 16px;
   background: linear-gradient(180deg, #fcfdff 0%, #f3f8ff 100%);
   border: 1px solid rgba(59, 130, 246, 0.12);
+}
+
+.formula-operators {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  height: 100%;
+  padding: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: #fbfdff;
 }
 
 .builder-title {
@@ -906,13 +1257,30 @@ ion-content.settings-content {
 }
 
 .builder-operator-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .builder-variables {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+}
+
+.builder-search {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  background: #fff;
+  color: #10223d;
+  padding: 7px 10px;
+  font-size: 12px;
+  outline: none;
+}
+
+.builder-search:focus {
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: 0 0 0 0.18rem rgba(37, 99, 235, 0.1);
 }
 
 .builder-chip {
@@ -920,9 +1288,10 @@ ion-content.settings-content {
   border-radius: 14px;
   background: #fff;
   color: #10223d;
-  padding: 8px 12px;
+  padding: 7px 9px;
   text-align: left;
   transition: 0.18s ease;
+  font-size: 11px;
 }
 
 .builder-chip:hover {
@@ -932,7 +1301,7 @@ ion-content.settings-content {
 
 .builder-chip.operator {
   font-weight: 700;
-  min-width: 54px;
+  min-width: 0;
   text-align: center;
 }
 
@@ -953,10 +1322,11 @@ ion-content.settings-content {
 .formula-readable {
   display: grid;
   gap: 6px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: 14px;
   background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
   border: 1px solid rgba(37, 99, 235, 0.12);
+  align-content: start;
 }
 
 .formula-readable span {
@@ -970,64 +1340,98 @@ ion-content.settings-content {
 .formula-readable strong {
   color: #10223d;
   line-height: 1.5;
+  font-size: 13px;
 }
 
 .variable-help {
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: #fbfdff;
+  min-width: 0;
 }
 
 .variable-help-title {
-  font-size: 0.9rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: #10223d;
 }
 
 .variable-list {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px;
+  max-height: none;
+  overflow: visible;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  min-width: 0;
 }
 
 .variable-item {
   display: grid;
-  gap: 6px;
-  padding: 12px;
-  border-radius: 14px;
+  gap: 3px;
+  padding: 7px 8px;
+  border-radius: 10px;
   background: #f8fafc;
   border: 1px solid rgba(15, 23, 42, 0.08);
+  min-width: 0;
 }
 
 .variable-label-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
   align-items: center;
+  min-width: 0;
 }
 
 .variable-label-row code,
 .parameter-meta code {
   border-radius: 999px;
   background: #e2e8f0;
-  padding: 3px 8px;
+  padding: 2px 6px;
   color: #0f172a;
-  font-size: 0.78rem;
+  font-size: 0.68rem;
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .variable-item small {
   color: #64748b;
-  line-height: 1.45;
+  line-height: 1.25;
+  font-size: 0.68rem;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.variable-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #10223d;
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .parameter-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .parameter-item {
   display: grid;
   gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: #f8fafc;
 }
 
 .parameter-meta {
@@ -1049,6 +1453,72 @@ ion-content.settings-content {
 }
 
 @media (max-width: 991.98px) {
+  ion-content.settings-content {
+    --overflow: auto;
+  }
+
+  .settings-page {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .settings-shell {
+    min-height: calc(100dvh - 44px);
+    overflow: visible;
+  }
+
+  .settings-workspace {
+    display: block;
+    overflow: visible;
+  }
+
+  .settings-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(20, 42, 61, 0.08);
+  }
+
+  .settings-tab {
+    min-width: 170px;
+  }
+
+  .settings-card {
+    overflow: visible;
+  }
+
+  .strategy-settings-section {
+    height: auto;
+    display: grid;
+  }
+
+  .strategy-command-panel {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .strategy-command-actions {
+    justify-content: flex-start;
+  }
+
+  .strategy-workbench {
+    height: auto;
+    overflow: visible;
+  }
+
+  .strategy-workbench .settings-sidebar,
+  .strategy-workbench .settings-detail-panel {
+    max-height: none;
+    overflow: visible;
+  }
+
   .strategy-hero-inline,
   .settings-layout {
     grid-template-columns: 1fr;
@@ -1067,17 +1537,56 @@ ion-content.settings-content {
   }
 }
 
+@media (min-width: 1400px) {
+  .strategy-workbench {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 767.98px) {
   .settings-header,
   .strategy-hero-inline {
     flex-direction: column;
   }
 
+  .settings-header {
+    padding: 12px;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+    max-width: none;
+
+    .btn {
+      flex: 1 1 auto;
+    }
+  }
+
   .form-grid,
+  .config-body,
   .parameter-grid,
   .sync-status-grid,
   .builder-variables,
   .variable-list {
     grid-template-columns: 1fr;
+  }
+
+  .config-body {
+    grid-template-areas:
+      "toggle"
+      "readable"
+      "editor"
+      "operators"
+      "variables"
+      "builder"
+      "params";
+  }
+
+  .variable-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .config-body > input.form-control {
+    grid-column: 1;
   }
 }

@@ -20,6 +20,8 @@ interface TabsMenuItem {
   standalone: false,
 })
 export class TabsPage implements OnInit, OnDestroy {
+  readonly sidebarExpandedWidth = 280;
+  readonly sidebarCollapsedWidth = 76;
   readonly menuItems: TabsMenuItem[] = [
     {
       href: '/tabs/dashboard-v2',
@@ -64,6 +66,10 @@ export class TabsPage implements OnInit, OnDestroy {
   toggleSidebar(): void {
     this.sidebarCollapsed = !this.sidebarCollapsed;
     this.persistCollapsedState();
+  }
+
+  get sidebarWidth(): number {
+    return this.sidebarCollapsed ? this.sidebarCollapsedWidth : this.sidebarExpandedWidth;
   }
 
   can(permission: string): boolean {

@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { Subscription, forkJoin } from 'rxjs';
+import { Subject, Subscription, forkJoin } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
 import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 
@@ -18,12 +19,14 @@ import {
   StrategyRiskOverviewResponse,
   StrategyScreenRule,
   StrategyScoredItem,
+  StrategySignalItem,
   MarketApiService,
 } from 'src/app/core/services/market-api.service';
 
 type StrategyTab = 'overview' | 'screener' | 'scoring' | 'risk';
 type StrategyConfigEntity = StrategyFormula | StrategyScreenRule | StrategyAlertRule | StrategyChecklistItem;
 type StrategySettingsSection = 'profiles' | 'formulas' | 'screenRules' | 'alertRules' | 'checklists' | 'versions';
+type StrategyRuleModalMode = 'passFail' | 'triggerOk' | 'mixed';
 
 interface StrategyVariableHint {
   key: string;
@@ -138,6 +141,8 @@ const EXTENDED_VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
 
 Object.assign(VARIABLE_HINTS, EXTENDED_VARIABLE_HINTS);
 
+const STRATEGY_SCORING_FORMULA_STORAGE_KEY = 'ssg2026:strategy-scoring-formulas';
+
 const EXPRESSION_RESERVED_WORDS = new Set([
   'and',
   'or',
@@ -248,7 +253,7 @@ EXPRESSION_VARIABLE_ORDER.splice(
 export class StrategyHubPage implements OnInit, OnDestroy {
   private readonly pageLoadKey = 'strategy-hub';
   readonly expressionOperatorGroups = EXPRESSION_OPERATOR_GROUPS;
-  selectedTab: StrategyTab = 'overview';
+  selectedTab: StrategyTab = 'scoring';
   selectedSettingsSection: StrategySettingsSection = 'formulas';
   expandedSettingsCardKey = '';
   loading = false;
@@ -268,11 +273,20 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   risk: StrategyRiskOverviewResponse | null = null;
   journal: StrategyJournalEntry[] = [];
   selectedScoreItem: StrategyScoredItem | null = null;
+  symbolDetailOpen = false;
+  symbolDetailSymbol = '';
   journalSuggestion: StrategyJournalSuggestion | null = null;
 
   scoringExchange = 'ALL';
   scoringKeyword = '';
   scoringWatchlistOnly = false;
+  scoringPage = 1;
+  readonly scoringPageSize = 12;
+  selectedScoringFormulaCodes: string[] = [];
+  ruleModalOpen = false;
+  ruleModalTitle = '';
+  ruleModalMode: StrategyRuleModalMode = 'passFail';
+  ruleModalItems: StrategyRuleResult[] = [];
   screenerExchange = 'ALL';
   screenerKeyword = '';
   screenerWatchlistOnly = false;
@@ -302,6 +316,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   editingJournalId: number | null = null;
 
   private backgroundSub?: Subscription;
+  private scoringSub?: Subscription;
+  private scoringKeywordSub?: Subscription;
+  private readonly scoringKeywordChanges = new Subject<string>();
+  private cachedAllScoringFirstPage: StrategyPagedResponse | null = null;
   private activeView = false;
 
   constructor(
@@ -312,7 +330,11 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.selectedScoringFormulaCodes = this.readStoredScoringFormulaCodes();
     this.pageLoadState.registerPage(this.pageLoadKey, 'tabs.strategy');
+    this.scoringKeywordSub = this.scoringKeywordChanges
+      .pipe(debounceTime(300), distinctUntilChanged())
+      .subscribe((keyword) => this.applyScoringKeyword(keyword));
     this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
       if (!this.activeView || !this.activeProfileId) return;
       if (domains.some((item) => ['quotes', 'intraday', 'news', 'financial', 'seedSymbols'].includes(item))) {
@@ -336,6 +358,8 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.backgroundSub?.unsubscribe();
+    this.scoringSub?.unsubscribe();
+    this.scoringKeywordSub?.unsubscribe();
   }
 
   private hasDetailedScoreItem(item: StrategyScoredItem | null | undefined): boolean {
@@ -354,6 +378,166 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
   get enabledFormulaLabels(): string[] {
     return this.enabledFormulas.map((item) => item.label);
+  }
+
+  get scoringTotalPages(): number {
+    return Math.max(1, Math.ceil((this.rankings?.total || 0) / this.scoringPageSize));
+  }
+
+  get scoringStartIndex(): number {
+    if (!this.rankings?.total) {
+      return 0;
+    }
+    return ((this.rankings.page || this.scoringPage) - 1) * this.scoringPageSize + 1;
+  }
+
+  get scoringEndIndex(): number {
+    if (!this.rankings?.total) {
+      return 0;
+    }
+    return Math.min((this.rankings.page || this.scoringPage) * this.scoringPageSize, this.rankings.total);
+  }
+
+  get selectableScoringFormulas(): StrategyFormula[] {
+    return this.enabledFormulas.filter((item) => item.formulaCode !== 'winning_score');
+  }
+
+  isScoringFormulaSelected(formulaCode: string): boolean {
+    return this.selectedScoringFormulaCodes.includes(formulaCode);
+  }
+
+  toggleScoringFormula(formulaCode: string): void {
+    if (this.isScoringFormulaSelected(formulaCode)) {
+      this.selectedScoringFormulaCodes = this.selectedScoringFormulaCodes.filter((item) => item !== formulaCode);
+    } else {
+      this.selectedScoringFormulaCodes = [...this.selectedScoringFormulaCodes, formulaCode];
+    }
+    this.persistScoringFormulaCodes();
+  }
+
+  getScoringFormulaValue(item: StrategyScoredItem, formulaCode: string): number | null {
+    switch (formulaCode) {
+      case 'q_score':
+        return item.qScore;
+      case 'l_score':
+        return item.lScore;
+      case 'm_score':
+        return item.mScore;
+      case 'p_score':
+        return item.pScore;
+      case 'winning_score':
+        return item.winningScore;
+      default:
+        return null;
+    }
+  }
+
+  getScoreRowToneClass(item: StrategyScoredItem): string {
+    if (item.riskScore >= 70 || (!item.passedAllLayers && item.winningScore < 50)) {
+      return 'score-row-bad';
+    }
+    if (item.passedAllLayers || item.winningScore >= 70 || item.isWatchlist) {
+      return 'score-row-good';
+    }
+    return 'score-row-watch';
+  }
+
+  getSymbolToneClass(item: StrategyScoredItem): string {
+    if (item.riskScore >= 70 || !item.passedLayer1) {
+      return 'symbol-bad';
+    }
+    if (item.passedAllLayers || item.isWatchlist) {
+      return 'symbol-good';
+    }
+    return 'symbol-watch';
+  }
+
+  getWinningToneClass(item: StrategyScoredItem): string {
+    if (item.passedAllLayers || item.winningScore >= 70) {
+      return 'metric-good';
+    }
+    if (item.winningScore < 50 || item.riskScore >= 70) {
+      return 'metric-bad';
+    }
+    return 'metric-watch';
+  }
+
+  getFormulaToneClass(item: StrategyScoredItem, formulaCode: string): string {
+    const value = this.getScoringFormulaValue(item, formulaCode);
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return 'metric-muted';
+    }
+    const numericValue = Number(value);
+    if (formulaCode === 'p_score') {
+      if (numericValue <= 35) {
+        return 'metric-good';
+      }
+      if (numericValue >= 65) {
+        return 'metric-bad';
+      }
+      return 'metric-watch';
+    }
+    if (numericValue >= 65) {
+      return 'metric-good';
+    }
+    if (numericValue < 45) {
+      return 'metric-bad';
+    }
+    return 'metric-watch';
+  }
+
+  getRiskToneClass(value: number | null | undefined): string {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return 'metric-muted';
+    }
+    if (numericValue >= 65) {
+      return 'metric-bad';
+    }
+    if (numericValue <= 35) {
+      return 'metric-good';
+    }
+    return 'metric-watch';
+  }
+
+  getChangeToneClass(value: number | null | undefined): string {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return 'metric-muted';
+    }
+    if (numericValue > 0) {
+      return 'metric-good';
+    }
+    if (numericValue < 0) {
+      return 'metric-bad';
+    }
+    return 'metric-muted';
+  }
+
+  getNewsToneClass(value: number | null | undefined): string {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      return 'metric-muted';
+    }
+    if (numericValue >= 3) {
+      return 'metric-watch';
+    }
+    return 'metric-info';
+  }
+
+  getScoringFormulaChipLabel(formulaCode: string, fallbackLabel: string): string {
+    switch (formulaCode) {
+      case 'q_score':
+        return 'Q';
+      case 'l_score':
+        return 'L';
+      case 'm_score':
+        return 'M';
+      case 'p_score':
+        return 'P';
+      default:
+        return fallbackLabel;
+    }
   }
 
   selectTab(tab: StrategyTab): void {
@@ -384,26 +568,60 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     this.error = '';
     this.message = '';
 
-    this.api.getStrategyOverview(this.activeProfileId || undefined).subscribe({
+    this.api.listStrategyProfiles().subscribe({
       next: (response) => {
-        this.loading = false;
-        if (!response.data) {
+        const profiles = response.data || [];
+        if (!profiles.length) {
+          this.loading = false;
           this.error = 'Backend strategy chưa trả dữ liệu.';
           return;
         }
 
-        this.overview = response.data;
-        this.profiles = response.data.profiles || [];
-        this.activeProfileId = response.data.activeProfile?.id || null;
-        this.rankings = response.data.rankings || null;
-        this.screener = response.data.screener || null;
-        this.risk = response.data.risk || null;
-        this.journal = response.data.journal || [];
-        if (this.activeProfileId) {
-          this.ensureProfileConfigLoaded(this.activeProfileId);
-        }
-        this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
-        this.pageLoadState.finish(this.pageLoadKey);
+        this.profiles = profiles;
+        this.activeProfileId =
+          profiles.find((item) => item.id === this.activeProfileId)?.id ||
+          profiles.find((item) => item.isDefault)?.id ||
+          profiles.find((item) => item.isActive)?.id ||
+          profiles[0].id;
+        this.pageLoadState.setProgress(this.pageLoadKey, 45);
+        this.screener = null;
+        this.risk = null;
+        this.journal = [];
+        this.overview = this.buildLightOverview(this.profiles, this.config, this.rankings);
+        this.loading = false;
+        this.loadConfig(this.activeProfileId!);
+        this.reloadScoring();
+        return;
+
+        forkJoin({
+          config: this.api.getStrategyProfileConfig(this.activeProfileId!),
+          rankings: this.api.getStrategyRankings({
+            profileId: this.activeProfileId!,
+            exchange: this.scoringExchange !== 'ALL' ? this.scoringExchange : undefined,
+            keyword: this.normalizedScoringKeyword || undefined,
+            watchlistOnly: this.scoringWatchlistOnly,
+            page: 1,
+            pageSize: this.scoringPageSize,
+          }),
+        }).subscribe({
+          next: ({ config, rankings }) => {
+            this.loading = false;
+            this.config = config.data || null;
+            this.rankings = rankings.data || null;
+            this.screener = null;
+            this.risk = null;
+            this.journal = [];
+            this.ensureScoringFormulaSelection();
+            this.ensureSettingsExpansion();
+            this.overview = this.buildLightOverview(this.profiles, this.config, this.rankings);
+            this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+            this.pageLoadState.finish(this.pageLoadKey);
+          },
+          error: () => {
+            this.error = 'KhĂ´ng táº£i Ä‘Æ°á»£c Strategy Hub.';
+            this.pageLoadState.fail(this.pageLoadKey, this.error);
+          },
+        });
       },
       error: () => {
         this.loading = false;
@@ -417,6 +635,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     if (!this.activeProfileId) return;
     this.config = null;
     this.selectedScoreItem = null;
+    this.cachedAllScoringFirstPage = null;
     this.loadOverview();
   }
 
@@ -425,6 +644,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     this.api.getStrategyProfileConfig(profileId).subscribe({
       next: (response) => {
         this.config = response.data || null;
+        this.ensureScoringFormulaSelection();
         this.ensureSettingsExpansion();
         this.pageLoadState.finish(this.pageLoadKey);
       },
@@ -432,26 +652,100 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     });
   }
 
-  reloadScoring(): void {
+  reloadScoring(page = this.scoringPage, background = false): void {
     if (!this.activeProfileId) return;
-    this.pageLoadState.start(this.pageLoadKey);
-    this.api
+    this.scoringPage = Math.max(1, page);
+    if (background) {
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    } else {
+      this.pageLoadState.start(this.pageLoadKey);
+    }
+    this.scoringSub?.unsubscribe();
+    this.scoringSub = this.api
       .getStrategyRankings({
         profileId: this.activeProfileId,
         exchange: this.scoringExchange !== 'ALL' ? this.scoringExchange : undefined,
-        keyword: this.scoringKeyword || undefined,
+        keyword: this.normalizedScoringKeyword || undefined,
         watchlistOnly: this.scoringWatchlistOnly,
-        page: 1,
-        pageSize: 24,
+        page: this.scoringPage,
+        pageSize: this.scoringPageSize,
       })
       .subscribe({
         next: (response) => {
           this.rankings = response.data || null;
+          this.scoringPage = this.rankings?.page || this.scoringPage;
+          this.overview = this.buildLightOverview(this.profiles, this.config, this.rankings);
           this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+          this.rememberAllScoringFirstPage();
           this.pageLoadState.finish(this.pageLoadKey);
         },
         error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được dữ liệu scoring.'),
       });
+  }
+
+  reloadScoringFromFirstPage(): void {
+    if (!this.normalizedScoringKeyword && this.applyCachedAllScoringFirstPage()) {
+      this.reloadScoring(1, true);
+      return;
+    }
+    this.reloadScoring(1);
+  }
+
+  onScoringKeywordChange(value: string): void {
+    const normalized = (value || '').trim().toUpperCase();
+    this.scoringKeyword = normalized;
+
+    if (!normalized && this.applyCachedAllScoringFirstPage()) {
+      this.scoringKeywordChanges.next('');
+      return;
+    }
+
+    this.scoringKeywordChanges.next(normalized);
+  }
+
+  private applyScoringKeyword(keyword: string): void {
+    this.scoringKeyword = (keyword || '').trim().toUpperCase();
+    this.reloadScoringFromFirstPage();
+  }
+
+  private get normalizedScoringKeyword(): string {
+    return (this.scoringKeyword || '').trim().toUpperCase();
+  }
+
+  private canUseAllScoringCache(): boolean {
+    return this.scoringExchange === 'ALL' && !this.scoringWatchlistOnly && !this.normalizedScoringKeyword;
+  }
+
+  private rememberAllScoringFirstPage(): void {
+    if (this.canUseAllScoringCache() && this.scoringPage === 1 && this.rankings) {
+      this.cachedAllScoringFirstPage = this.rankings;
+    }
+  }
+
+  private applyCachedAllScoringFirstPage(): boolean {
+    if (!this.cachedAllScoringFirstPage || !this.canUseAllScoringCache()) {
+      return false;
+    }
+
+    this.rankings = this.cachedAllScoringFirstPage;
+    this.scoringPage = this.rankings.page || 1;
+    this.overview = this.buildLightOverview(this.profiles, this.config, this.rankings);
+    this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+    return true;
+  }
+
+  goToPreviousScoringPage(): void {
+    if (this.scoringPage <= 1) {
+      return;
+    }
+    this.reloadScoring(this.scoringPage - 1);
+  }
+
+  goToNextScoringPage(): void {
+    if (this.scoringPage >= this.scoringTotalPages) {
+      return;
+    }
+    this.reloadScoring(this.scoringPage + 1);
   }
 
   reloadScreener(): void {
@@ -464,7 +758,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
         keyword: this.screenerKeyword || undefined,
         watchlistOnly: this.screenerWatchlistOnly,
         page: 1,
-        pageSize: 24,
+        pageSize: 12,
       })
       .subscribe({
         next: (response) => {
@@ -516,10 +810,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       rankings: this.api.getStrategyRankings({
         profileId: this.activeProfileId!,
         exchange: this.scoringExchange !== 'ALL' ? this.scoringExchange : undefined,
-        keyword: this.scoringKeyword || undefined,
+        keyword: this.normalizedScoringKeyword || undefined,
         watchlistOnly: this.scoringWatchlistOnly,
         page: 1,
-        pageSize: 24,
+        pageSize: this.scoringPageSize,
       }),
       screener: this.api.runStrategyScreener({
         profileId: this.activeProfileId!,
@@ -527,7 +821,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
         keyword: this.screenerKeyword || undefined,
         watchlistOnly: this.screenerWatchlistOnly,
         page: 1,
-        pageSize: 24,
+        pageSize: 12,
       }),
       risk: this.api.getStrategyRiskOverview(this.activeProfileId!),
       journal: this.api.listStrategyJournal(12),
@@ -610,6 +904,67 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       return;
     }
     this.loadConfig(profileId);
+  }
+
+  openSymbolDetail(symbol: string, event?: Event): void {
+    event?.stopPropagation();
+    const normalized = (symbol || '').trim().toUpperCase();
+    if (!normalized) {
+      return;
+    }
+    this.symbolDetailSymbol = normalized;
+    this.symbolDetailOpen = true;
+  }
+
+  closeSymbolDetail(): void {
+    this.symbolDetailOpen = false;
+  }
+
+  private buildLightOverview(
+    profiles: StrategyProfile[],
+    config: StrategyProfileConfigResponse | null,
+    rankings: StrategyPagedResponse | null
+  ): StrategyOverviewResponse | null {
+    const activeProfile =
+      profiles.find((item) => item.id === this.activeProfileId) ||
+      profiles.find((item) => item.isDefault) ||
+      profiles.find((item) => item.isActive) ||
+      profiles[0] ||
+      null;
+
+    if (!activeProfile) {
+      return null;
+    }
+
+    return {
+      profiles,
+      activeProfile,
+      configSummary: {
+        formulaCount: config?.formulas?.length || 0,
+        screenRuleCount: config?.screenRules?.length || 0,
+        alertRuleCount: config?.alertRules?.length || 0,
+        checklistCount: config?.checklists?.length || 0,
+        versionCount: config?.versions?.length || 0,
+      },
+      rankings: rankings || {
+        page: 1,
+        pageSize: 0,
+        total: 0,
+        items: [],
+      },
+      screener: this.screener || {
+        page: 1,
+        pageSize: 0,
+        total: 0,
+        items: [],
+      },
+      risk: this.risk || {
+        profile: activeProfile,
+        summaryCards: [],
+        highRiskItems: [],
+      },
+      journal: this.journal || [],
+    };
   }
 
   private syncSelectedScoreItem(
@@ -919,14 +1274,16 @@ export class StrategyHubPage implements OnInit, OnDestroy {
           .getStrategyRankings({
             profileId: this.activeProfileId,
             exchange: this.scoringExchange !== 'ALL' ? this.scoringExchange : undefined,
-            keyword: this.scoringKeyword || undefined,
+            keyword: this.normalizedScoringKeyword || undefined,
             watchlistOnly: this.scoringWatchlistOnly,
-            page: 1,
-            pageSize: 24,
+            page: this.scoringPage,
+            pageSize: this.scoringPageSize,
           })
           .subscribe({
             next: (response) => {
               this.rankings = response.data || this.rankings;
+              this.scoringPage = this.rankings?.page || this.scoringPage;
+              this.overview = this.buildLightOverview(this.profiles, this.config, this.rankings);
               this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
               complete();
             },
@@ -944,7 +1301,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
             keyword: this.screenerKeyword || undefined,
             watchlistOnly: this.screenerWatchlistOnly,
             page: 1,
-            pageSize: 24,
+            pageSize: 12,
           })
           .subscribe({
             next: (response) => {
@@ -1188,6 +1545,320 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     return 'strategyHub.state.wait';
   }
 
+  countPassedRules(items: StrategyRuleResult[] | null | undefined): number {
+    return (items || []).filter((item) => item.passed).length;
+  }
+
+  countFailedRules(items: StrategyRuleResult[] | null | undefined): number {
+    return (items || []).filter((item) => !item.passed).length;
+  }
+
+  countTriggeredAlerts(items: StrategyRuleResult[] | null | undefined): number {
+    return (items || []).filter((item) => item.passed).length;
+  }
+
+  openRuleModal(title: string, items: StrategyRuleResult[] | null | undefined, mode: StrategyRuleModalMode = 'passFail'): void {
+    this.ruleModalTitle = title;
+    this.ruleModalItems = items || [];
+    this.ruleModalMode = mode;
+    this.ruleModalOpen = true;
+  }
+
+  openDecisionBreakdownModal(item: StrategyScoredItem): void {
+    const items = this.getDecisionNarratives(item).map((narrative) =>
+      this.buildModalResult(
+        narrative.label,
+        narrative.status === 'pass',
+        narrative.detail,
+        narrative.label.toLowerCase().replace(/\s+/g, '_'),
+        narrative.status
+      )
+    );
+    this.openRuleModal(`Tổng hợp quyết định ${item.symbol}`, items, 'passFail');
+  }
+
+  openFundamentalBreakdownModal(item: StrategyScoredItem): void {
+    const fundamentals = item.fundamentalMetrics;
+    const items = (fundamentals?.qualityFlags || []).map((flag) =>
+      this.buildModalResult(
+        flag.label,
+        flag.passed,
+        `${flag.passed ? 'Đạt' : 'Chưa đạt'} tiêu chí cơ bản. P/E ${this.optionalNumberLabel(fundamentals?.pe, 1)}, ROE ${this.percentWholeLabel(fundamentals?.roe)}.`,
+        flag.code
+      )
+    );
+    if (!items.length) {
+      items.push(this.buildModalResult('Dữ liệu cơ bản', false, 'Chưa có đủ dữ liệu cơ bản để đánh giá pass/fail.', 'fundamental_missing'));
+    }
+    this.openRuleModal(`Cơ bản ${item.symbol}`, items, 'passFail');
+  }
+
+  openFlowBreakdownModal(item: StrategyScoredItem): void {
+    const volume = item.volumeIntelligence;
+    const moneyFlow = item.moneyFlowIntelligence;
+    const items: StrategyRuleResult[] = [
+      this.buildModalResult(
+        'Dòng tiền thông minh',
+        !!volume?.smartMoneyInflow,
+        volume?.smartMoneyInflow ? 'Có dấu hiệu dòng tiền lớn tham gia.' : 'Chưa thấy dòng tiền lớn xác nhận.',
+        'smart_money_inflow'
+      ),
+      this.buildModalResult(
+        'Volume spike',
+        Number(volume?.volumeSpikeRatio || 0) >= 1.5,
+        `Spike hiện tại ${this.optionalNumberLabel(volume?.volumeSpikeRatio, 2)}x.`,
+        'volume_spike_ratio'
+      ),
+      this.buildModalResult(
+        'Bẫy tăng tốc',
+        volume ? !volume.surgeTrap : false,
+        volume?.surgeTrap ? 'Có tín hiệu trap, cần tránh mua đuổi.' : 'Chưa phát hiện trap volume.',
+        'surge_trap'
+      ),
+      this.buildModalResult(
+        'Phân phối OBV',
+        moneyFlow ? !moneyFlow.obvDistribution : false,
+        moneyFlow?.obvDistribution ? 'OBV có dấu hiệu phân phối.' : 'Chưa thấy phân phối OBV rõ.',
+        'obv_distribution'
+      ),
+      this.buildModalResult(
+        'Dòng tiền trước tin',
+        !!moneyFlow?.smartMoneyBeforeNews,
+        moneyFlow?.smartMoneyBeforeNews ? 'Có tín hiệu dòng tiền đi trước tin.' : 'Chưa có tín hiệu dòng tiền trước tin.',
+        'smart_money_before_news'
+      ),
+    ];
+
+    for (const signal of [...(moneyFlow?.items || []), ...(item.candlestickSignals || []), ...(item.footprintSignals || [])]) {
+      items.push(
+        this.buildModalResult(
+          signal.label,
+          signal.detected && signal.bias !== 'bearish',
+          signal.detail || (signal.detected ? 'Đã phát hiện tín hiệu.' : 'Chưa phát hiện tín hiệu.'),
+          signal.code,
+          signal.bias
+        )
+      );
+    }
+
+    this.openRuleModal(`Dòng tiền ${item.symbol}`, items, 'passFail');
+  }
+
+  openRulesBreakdownModal(item: StrategyScoredItem): void {
+    const items = [
+      ...this.prefixRuleResults('Layer', item.layerResults),
+      ...this.prefixRuleResults('Alert', item.alertResults),
+      ...this.prefixRuleResults('Checklist', item.checklistResults),
+    ];
+    this.openRuleModal(`Luật & cảnh báo ${item.symbol}`, items, 'mixed');
+  }
+
+  openSignalOverviewModal(item: StrategyScoredItem): void {
+    const volume = item.volumeIntelligence;
+    const moneyFlow = item.moneyFlowIntelligence;
+    const items = [
+      this.buildModalResult(
+        'Smart Money',
+        this.getSmartMoneyBadgeState(item) === 'on',
+        volume?.smartMoneyInflow ? 'Dòng tiền lớn đang được hệ thống xác nhận.' : 'Chưa có xác nhận dòng tiền lớn.',
+        'smart_money'
+      ),
+      this.buildModalResult(
+        'No Supply',
+        !!volume?.noSupply,
+        volume?.noSupply ? 'Nhịp điều chỉnh có dấu hiệu cạn cung.' : 'Chưa có tín hiệu cạn cung rõ.',
+        'no_supply'
+      ),
+      this.buildModalResult(
+        'Tích lũy trước tin',
+        !!moneyFlow?.preNewsAccumulation,
+        moneyFlow?.preNewsAccumulation ? 'Có dấu hiệu tích lũy trước tin.' : 'Chưa thấy tích lũy trước tin.',
+        'pre_news_accumulation'
+      ),
+      this.buildModalResult(
+        'Đuổi giá theo tin yếu',
+        moneyFlow ? !moneyFlow.weakNewsChase : false,
+        moneyFlow?.weakNewsChase ? 'Có rủi ro đuổi giá theo tin yếu.' : 'Chưa phát hiện rủi ro đuổi giá theo tin yếu.',
+        'weak_news_chase'
+      ),
+    ];
+    this.openRuleModal(`Tín hiệu nhanh ${item.symbol}`, items, 'passFail');
+  }
+
+  openCandleSignalsModal(item: StrategyScoredItem): void {
+    const signals = [...(item.candlestickSignals || []), ...(item.footprintSignals || [])];
+    const items = signals.map((signal) =>
+      this.buildModalResult(
+        signal.label,
+        signal.detected,
+        signal.detail || (signal.detected ? 'Đã phát hiện tín hiệu.' : 'Chưa phát hiện tín hiệu.'),
+        signal.code,
+        signal.bias
+      )
+    );
+    if (!items.length) {
+      items.push(this.buildModalResult('Mẫu nến', false, 'Chưa có mẫu nến hoặc dấu chân tổ chức nào được phát hiện.', 'no_candle_signal'));
+    }
+    this.openRuleModal(`Mẫu nến & footprint ${item.symbol}`, items, 'passFail');
+  }
+
+  openExecutionPlanModal(item: StrategyScoredItem): void {
+    const plan = item.executionPlan;
+    const items = [
+      this.buildModalResult('Mua thăm dò 30%', !!plan?.probeBuy30, plan?.probeBuy30 ? 'Có thể cân nhắc mua thăm dò.' : 'Chưa đủ điều kiện mua thăm dò.', 'probe_buy_30'),
+      this.buildModalResult('Mua gia tăng 70%', !!plan?.addBuy70, plan?.addBuy70 ? 'Có thể cân nhắc mua gia tăng.' : 'Chưa đủ điều kiện mua gia tăng.', 'add_buy_70'),
+      this.buildModalResult('Chốt lời', plan ? !plan.takeProfitSignal : false, plan?.takeProfitSignal ? 'Có tín hiệu cần cân nhắc chốt lời.' : 'Chưa có tín hiệu chốt lời.', 'take_profit_signal'),
+      this.buildModalResult('Đứng ngoài', plan ? !plan.standAside : false, plan?.standAside ? 'Engine đang khuyến nghị đứng ngoài.' : 'Không có tín hiệu bắt buộc đứng ngoài.', 'stand_aside'),
+      this.buildModalResult(
+        'Vùng stop-loss',
+        !!plan && plan.stopLossMin !== null && plan.stopLossMax !== null,
+        `Stop-loss tham chiếu ${this.percentWholeLabel(plan?.stopLossMin)} đến ${this.percentWholeLabel(plan?.stopLossMax)}.`,
+        'stop_loss_zone'
+      ),
+    ];
+    for (const [index, note] of (plan?.rationale || []).entries()) {
+      items.push(this.buildModalResult(`Lý do ${index + 1}`, true, note, `execution_reason_${index + 1}`));
+    }
+    this.openRuleModal(`Kế hoạch thực thi ${item.symbol}`, items, 'passFail');
+  }
+
+  openValuationMetricModal(
+    item: StrategyScoredItem,
+    metric: 'fairValue' | 'marginOfSafety' | 'changePercent' | 'watchlist'
+  ): void {
+    const metricMap = {
+      fairValue: {
+        title: 'Giá trị hợp lý',
+        passed: item.fairValue !== null && item.currentPrice <= item.fairValue,
+        message: `Giá hiện tại ${this.optionalNumberLabel(item.currentPrice, 2)}, fair value ${this.optionalNumberLabel(item.fairValue, 2)}.`,
+      },
+      marginOfSafety: {
+        title: 'Biên an toàn',
+        passed: item.marginOfSafety > 0,
+        message: `Biên an toàn hiện tại ${(item.marginOfSafety * 100).toFixed(1)}%. Số dương nghĩa là giá đang thấp hơn fair value.`,
+      },
+      changePercent: {
+        title: 'Biến động',
+        passed: Math.abs(item.changePercent) <= 3,
+        message: `Biến động phiên hiện tại ${item.changePercent.toFixed(2)}%. Biến động quá mạnh cần kiểm tra thanh khoản và tin tức.`,
+      },
+      watchlist: {
+        title: 'Danh sách theo dõi',
+        passed: item.isWatchlist,
+        message: item.isWatchlist ? 'Mã đang nằm trong danh sách theo dõi nên được ưu tiên giám sát.' : 'Mã chưa nằm trong danh sách theo dõi.',
+      },
+    };
+    const selected = metricMap[metric];
+    const items = [
+      this.buildModalResult(selected.title, selected.passed, selected.message, metric),
+      this.buildModalResult('Rủi ro', item.riskScore < 65, `Risk score hiện tại ${item.riskScore.toFixed(2)}.`, 'risk_score'),
+      this.buildModalResult('Winning Score', item.winningScore >= 50, `Winning Score hiện tại ${item.winningScore.toFixed(2)}.`, 'winning_score'),
+    ];
+    this.openRuleModal(`${selected.title} ${item.symbol}`, items, 'passFail');
+  }
+
+  openScoreMetricModal(item: StrategyScoredItem, score: 'Q' | 'L' | 'M' | 'P' | 'Winning'): void {
+    const scoreMap = {
+      Q: {
+        title: 'Q Score',
+        value: item.qScore,
+        passed: item.qScore >= 50,
+        message: 'Đánh giá chất lượng doanh nghiệp, sức khỏe cơ bản và các cờ chất lượng.',
+      },
+      L: {
+        title: 'L Score',
+        value: item.lScore,
+        passed: item.lScore >= 50,
+        message: 'Đánh giá mức dẫn dắt, xu hướng thị trường và vị thế tương đối.',
+      },
+      M: {
+        title: 'M Score',
+        value: item.mScore,
+        passed: item.mScore >= 50,
+        message: 'Đánh giá động lượng giá, xác nhận volume và tín hiệu breakout.',
+      },
+      P: {
+        title: 'P Score',
+        value: item.pScore,
+        passed: item.pScore <= 35,
+        message: 'Đánh giá mức nóng của giá và rủi ro mua đuổi. P thấp thường tốt hơn.',
+      },
+      Winning: {
+        title: 'Winning Score',
+        value: item.winningScore,
+        passed: item.passedAllLayers,
+        message: 'Điểm tổng hợp cuối cùng sau khi kết hợp Q, L, M, P và rule theo profile.',
+      },
+    };
+    const selected = scoreMap[score];
+    const items = [
+      this.buildModalResult(selected.title, selected.passed, `${selected.message} Giá trị hiện tại ${selected.value.toFixed(2)}.`, score),
+      this.buildModalResult('Layer 1', item.passedLayer1, item.passedLayer1 ? 'Layer 1 đang đạt.' : 'Layer 1 chưa đạt.', 'layer_1'),
+      this.buildModalResult('Layer 2', item.passedLayer2, item.passedLayer2 ? 'Layer 2 đang đạt.' : 'Layer 2 chưa đạt.', 'layer_2'),
+      this.buildModalResult('Layer 3', item.passedLayer3, item.passedLayer3 ? 'Layer 3 đang đạt.' : 'Layer 3 chưa đạt.', 'layer_3'),
+    ];
+    if (score === 'Q') {
+      items.push(...this.prefixRuleResults('Cơ bản', item.layerResults.filter((rule) => ['quality', 'pe', 'eps', 'roe'].some((code) => rule.ruleCode.includes(code)))));
+    }
+    if (score === 'M') {
+      items.push(...this.prefixRuleResults('Động lượng', item.layerResults.filter((rule) => ['breakout', 'volume', 'momentum', 'price_action'].some((code) => rule.ruleCode.includes(code)))));
+    }
+    if (score === 'Winning') {
+      items.push(...this.prefixRuleResults('Rule', item.layerResults));
+    }
+    this.openRuleModal(`${selected.title} ${item.symbol}`, items, 'passFail');
+  }
+
+  closeRuleModal(): void {
+    this.ruleModalOpen = false;
+  }
+
+  get ruleModalPassItems(): StrategyRuleResult[] {
+    return this.ruleModalItems.filter((item) => item.passed);
+  }
+
+  get ruleModalFailItems(): StrategyRuleResult[] {
+    return this.ruleModalItems.filter((item) => !item.passed);
+  }
+
+  get ruleModalPassTitle(): string {
+    if (this.ruleModalMode === 'triggerOk') {
+      return 'TRIGGER';
+    }
+    if (this.ruleModalMode === 'mixed') {
+      return 'PASS / TRIGGER';
+    }
+    return 'PASS';
+  }
+
+  get ruleModalFailTitle(): string {
+    if (this.ruleModalMode === 'triggerOk') {
+      return 'OK';
+    }
+    if (this.ruleModalMode === 'mixed') {
+      return 'FAIL / OK';
+    }
+    return 'FAIL';
+  }
+
+  countDetectedSignals(items: StrategySignalItem[] | null | undefined): number {
+    return (items || []).filter((item) => item.detected).length;
+  }
+
+  optionalNumberLabel(value: number | null | undefined, digits = 1): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return '-';
+    }
+    return Number(value).toFixed(digits);
+  }
+
+  percentWholeLabel(value: number | null | undefined): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return '-';
+    }
+    return `${Number(value).toFixed(1)}%`;
+  }
+
   useSuggestedJournalPrefill(): void {
     if (!this.selectedScoreItem) {
       return;
@@ -1239,6 +1910,44 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     });
   }
 
+  private ensureScoringFormulaSelection(): void {
+    const availableCodes = this.selectableScoringFormulas.map((item) => item.formulaCode);
+    if (!availableCodes.length) {
+      this.selectedScoringFormulaCodes = [];
+      this.persistScoringFormulaCodes();
+      return;
+    }
+
+    const filtered = this.selectedScoringFormulaCodes.filter((code) => availableCodes.includes(code));
+    this.selectedScoringFormulaCodes = filtered.length
+      ? filtered
+      : availableCodes.slice(0, Math.min(4, availableCodes.length));
+    this.persistScoringFormulaCodes();
+  }
+
+  private readStoredScoringFormulaCodes(): string[] {
+    const raw = localStorage.getItem(STRATEGY_SCORING_FORMULA_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as string[];
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === 'string')
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private persistScoringFormulaCodes(): void {
+    localStorage.setItem(
+      STRATEGY_SCORING_FORMULA_STORAGE_KEY,
+      JSON.stringify(this.selectedScoringFormulaCodes)
+    );
+  }
+
   private extractExpressionTokens(expression: string): string[] {
     const matches = expression.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
     return matches.filter((item) => !EXPRESSION_RESERVED_WORDS.has(item));
@@ -1264,6 +1973,34 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
   private findRuleResult(results: StrategyRuleResult[], codes: string[]): StrategyRuleResult | null {
     return results.find((item) => codes.includes(item.ruleCode)) || null;
+  }
+
+  private buildModalResult(
+    label: string,
+    passed: boolean,
+    message: string,
+    ruleCode: string,
+    severity = 'info',
+    expression = ''
+  ): StrategyRuleResult {
+    return {
+      id: 0,
+      ruleCode,
+      label,
+      expression,
+      severity,
+      isRequired: false,
+      passed,
+      message,
+      parameters: [],
+    };
+  }
+
+  private prefixRuleResults(prefix: string, items: StrategyRuleResult[] | null | undefined): StrategyRuleResult[] {
+    return (items || []).map((item) => ({
+      ...item,
+      label: `[${prefix}] ${item.label}`,
+    }));
   }
 
   private buildRuleNarrative(

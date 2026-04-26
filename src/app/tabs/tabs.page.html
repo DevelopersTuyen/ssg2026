@@ -32,25 +32,36 @@
     </div>
   </section> -->
 
-  <button
-    type="button"
-    class="desktop-floating-toggle"
-    (click)="toggleSidebar()"
-    [attr.aria-expanded]="!sidebarCollapsed"
-    aria-label="Toggle menu"
+  <aside
+    class="desktop-sidebar"
+    [class.is-collapsed]="sidebarCollapsed"
+    [style.width.px]="sidebarWidth"
+    [style.flex-basis.px]="sidebarWidth"
   >
-    <ion-icon [name]="sidebarCollapsed ? 'menu-outline' : 'menu-sharp'"></ion-icon>
-  </button>
-
-  <aside class="desktop-sidebar" [class.is-collapsed]="sidebarCollapsed">
     <div class="desktop-sidebar-head">
-      <div class="desktop-sidebar-brand" *ngIf="!sidebarCollapsed">
-        <div class="brand-kicker">Market</div>
-        <div class="brand-title">Workspace</div>
+      <div class="desktop-sidebar-brand-wrap">
+        <div class="desktop-sidebar-brand" [class.is-hidden]="sidebarCollapsed">
+          <div class="brand-kicker">Market</div>
+          <div class="brand-title">Workspace</div>
+        </div>
       </div>
+
+      <button
+        type="button"
+        class="desktop-sidebar-toggle"
+        (click)="toggleSidebar()"
+        [attr.aria-expanded]="!sidebarCollapsed"
+        [attr.aria-label]="sidebarCollapsed ? 'Expand menu' : 'Collapse menu'"
+      >
+        <ion-icon [name]="sidebarCollapsed ? 'chevron-forward-outline' : 'chevron-back-outline'"></ion-icon>
+      </button>
     </div>
 
+    <div class="desktop-sidebar-divider"></div>
+
     <nav class="desktop-sidebar-nav">
+      <div class="desktop-nav-group-label" [class.is-hidden]="sidebarCollapsed">Navigation</div>
+
       <ng-container *ngFor="let item of menuItems">
         <a
           *ngIf="can(item.permission)"
@@ -59,34 +70,65 @@
           routerLinkActive="active"
           [routerLinkActiveOptions]="{ exact: true }"
           [attr.aria-label]="item.labelKey | translate"
+          [attr.title]="sidebarCollapsed ? (item.labelKey | translate) : null"
         >
           <span class="desktop-nav-icon">
             <ion-icon [name]="item.icon"></ion-icon>
           </span>
-          <span class="desktop-nav-label" *ngIf="!sidebarCollapsed">{{ item.labelKey | translate }}</span>
+          <span class="desktop-nav-label" [class.is-hidden]="sidebarCollapsed">{{ item.labelKey | translate }}</span>
         </a>
       </ng-container>
     </nav>
+
+    <div class="desktop-sidebar-spacer"></div>
+
+    <div class="desktop-sidebar-footer" [class.is-collapsed]="sidebarCollapsed">
+      <div class="desktop-sidebar-status-dot"></div>
+      <div class="desktop-sidebar-status-copy" [class.is-hidden]="sidebarCollapsed">
+        <strong>Workspace</strong>
+        <span>Desktop navigation</span>
+      </div>
+    </div>
   </aside>
 
   <div class="tabs-stage">
-    <ion-tabs class="tabs-host">
-      <ion-tab-bar slot="bottom" class="mobile-tab-bar">
-        <ion-tab-button *ngIf="can('dashboard.view')" tab="dashboard-v2" href="/tabs/dashboard-v2">
-          <ion-icon aria-hidden="true" name="grid-outline"></ion-icon>
-          <ion-label>{{ 'tabs.dashboardV2' | translate }}</ion-label>
-        </ion-tab-button>
+    <div class="tabs-content-shell">
+      <ion-router-outlet class="tabs-router-outlet"></ion-router-outlet>
+    </div>
 
-        <ion-tab-button *ngIf="canViewStrategy" tab="strategy-hub" href="/tabs/strategy-hub">
-          <ion-icon name="layers-outline"></ion-icon>
-          <ion-label>{{ 'tabs.strategy' | translate }}</ion-label>
-        </ion-tab-button>
+    <nav class="mobile-tab-bar" aria-label="Mobile navigation">
+      <a
+        *ngIf="can('dashboard.view')"
+        class="mobile-tab-link"
+        routerLink="/tabs/dashboard-v2"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <ion-icon aria-hidden="true" name="grid-outline"></ion-icon>
+        <span>{{ 'tabs.dashboardV2' | translate }}</span>
+      </a>
 
-        <ion-tab-button *ngIf="can('market-settings.view')" tab="market-settings" href="/tabs/market-settings">
-          <ion-icon name="settings-outline"></ion-icon>
-          <ion-label>{{ 'tabs.settings' | translate }}</ion-label>
-        </ion-tab-button>
-      </ion-tab-bar>
-    </ion-tabs>
+      <a
+        *ngIf="canViewStrategy"
+        class="mobile-tab-link"
+        routerLink="/tabs/strategy-hub"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <ion-icon name="layers-outline"></ion-icon>
+        <span>{{ 'tabs.strategy' | translate }}</span>
+      </a>
+
+      <a
+        *ngIf="can('market-settings.view')"
+        class="mobile-tab-link"
+        routerLink="/tabs/market-settings"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <ion-icon name="settings-outline"></ion-icon>
+        <span>{{ 'tabs.settings' | translate }}</span>
+      </a>
+    </nav>
   </div>
 </div>

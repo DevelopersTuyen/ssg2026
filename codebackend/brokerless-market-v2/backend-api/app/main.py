@@ -1,10 +1,12 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.db import init_db
 from app.core.logging import setup_logging, get_logger
+from app.services.strategy_precompute_service import StrategyPrecomputeWorker
 from app.routers import (
     health,
     dashboard,
@@ -28,8 +30,19 @@ logger = get_logger(__name__)
 async def lifespan(_: FastAPI):
     logger.info("api service starting")
     await init_db()
-    yield
-    logger.info("api service stopping")
+    strategy_precompute_worker = StrategyPrecomputeWorker()
+    strategy_precompute_task = asyncio.create_task(
+        strategy_precompute_worker.run(),
+        name="strategy-precompute-worker",
+    )
+    try:
+        yield
+    finally:
+        strategy_precompute_worker.stop()
+        strategy_precompute_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await strategy_precompute_task
+        logger.info("api service stopping")
 
 
 app = FastAPI(

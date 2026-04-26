@@ -296,6 +296,8 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   strategySavedSnapshot = '';
   selectedStrategySection: StrategySettingsSection = 'formulas';
   expandedStrategyCardKey = '';
+  strategyConfigSearch = '';
+  strategyVariableSearch = '';
   editingStrategyJournalId: number | null = null;
   newStrategyProfile = {
     code: '',
@@ -401,8 +403,15 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   }
 
   loadSettings(): void {
-    this.loading = true;
-    this.pageLoadState.start(this.pageLoadKey);
+    const cachedSettings = this.auth.preferences;
+    if (cachedSettings) {
+      this.settings = cachedSettings;
+      this.loading = false;
+      this.pageLoadState.startBackground(this.pageLoadKey);
+    } else {
+      this.loading = true;
+      this.pageLoadState.start(this.pageLoadKey);
+    }
     this.error = '';
     this.message = '';
 
@@ -689,9 +698,67 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
 
   selectStrategySection(section: StrategySettingsSection): void {
     this.selectedStrategySection = section;
+    this.strategyConfigSearch = '';
+    this.strategyVariableSearch = '';
     this.ensureStrategyExpansion();
     if (section === 'journal' && !this.strategyJournal.length && !this.strategyLoading) {
       this.reloadStrategyJournal();
+    }
+  }
+
+  matchesStrategyConfigSearch(entity: StrategyConfigEntity): boolean {
+    const keyword = this.strategyConfigSearch.trim().toLowerCase();
+    if (!keyword) {
+      return true;
+    }
+
+    const source = [
+      (entity as any).label,
+      (entity as any).formulaCode,
+      (entity as any).layerCode,
+      (entity as any).ruleCode,
+      (entity as any).checklistType,
+      entity.expression,
+      ...(entity.parameters || []).map((parameter) => `${parameter.label} ${parameter.paramKey}`),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return source.includes(keyword);
+  }
+
+  getStrategySectionTitle(): string {
+    switch (this.selectedStrategySection) {
+      case 'profiles':
+        return 'Profiles';
+      case 'screenRules':
+        return 'Screener rules';
+      case 'alertRules':
+        return 'Alert rules';
+      case 'checklists':
+        return 'Checklists';
+      case 'versions':
+        return 'Versions';
+      default:
+        return 'Formulas';
+    }
+  }
+
+  getStrategySectionHelp(): string {
+    switch (this.selectedStrategySection) {
+      case 'profiles':
+        return 'Quan ly bo cau hinh dau tu va profile mac dinh.';
+      case 'screenRules':
+        return 'Rule loc co phieu theo tung tang logic.';
+      case 'alertRules':
+        return 'Rule tao canh bao va message hien thi cho nguoi dung.';
+      case 'checklists':
+        return 'Checklist ky luat giao dich va quy trinh xem xet.';
+      case 'versions':
+        return 'Lich su publish cua cau hinh strategy.';
+      default:
+        return 'Cong thuc cham diem Q, L, M, P va cac bien tinh toan.';
     }
   }
 
@@ -1057,6 +1124,18 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       seen.add(item.key);
       return true;
     });
+  }
+
+  filterExpressionBuilderVariables(entity: StrategyConfigEntity): StrategyVariableHint[] {
+    const keyword = this.strategyVariableSearch.trim().toLowerCase();
+    const variables = this.getExpressionBuilderVariables(entity);
+    if (!keyword) {
+      return variables;
+    }
+
+    return variables.filter((variable) =>
+      [variable.label, variable.key, variable.description].join(' ').toLowerCase().includes(keyword)
+    );
   }
 
   insertExpressionToken(entity: StrategyConfigEntity, editor: HTMLTextAreaElement, token: string): void {

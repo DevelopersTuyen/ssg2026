@@ -865,6 +865,7 @@ export interface StrategyJournalEntry {
   id: number;
   profileId?: number | null;
   symbol: string;
+  exchange?: string | null;
   tradeDate?: string | null;
   classification?: string | null;
   tradeSide: string;
@@ -1636,7 +1637,8 @@ export class MarketApiService {
     return this.withCache(
       'strategy:profiles',
       300000,
-      this.http.get<ApiEnvelope<StrategyProfile[]>>(`${this.baseUrl}/api/strategy/profiles`)
+      this.http.get<ApiEnvelope<StrategyProfile[]>>(`${this.baseUrl}/api/strategy/profiles`),
+      { persistent: true, persistentTtlMs: 43200000 }
     ).pipe(catchError(() => of({ data: [] })));
   }
 
@@ -1709,9 +1711,10 @@ export class MarketApiService {
     if (options.keyword) params['keyword'] = options.keyword;
     if (options.watchlistOnly) params['watchlist_only'] = true;
     return this.withCache(
-      `strategy:rankings:${options.profileId}:${options.exchange || 'ALL'}:${options.keyword || ''}:${options.watchlistOnly ? 'watch' : 'all'}:${options.page ?? 1}:${options.pageSize ?? 20}`,
+      `strategy:rankings:v2:${options.profileId}:${options.exchange || 'ALL'}:${options.keyword || ''}:${options.watchlistOnly ? 'watch' : 'all'}:${options.page ?? 1}:${options.pageSize ?? 20}`,
       30000,
-      this.http.get<ApiEnvelope<StrategyPagedResponse>>(`${this.baseUrl}/api/strategy/scoring/rankings`, { params })
+      this.http.get<ApiEnvelope<StrategyPagedResponse>>(`${this.baseUrl}/api/strategy/scoring/rankings`, { params }),
+      { persistent: true, persistentTtlMs: 180000 }
     ).pipe(catchError(() => of({ data: null })));
   }
 
@@ -1758,13 +1761,18 @@ export class MarketApiService {
     ).pipe(catchError(() => of({ data: null })));
   }
 
-  listStrategyJournal(limit = 50): Observable<ApiEnvelope<StrategyJournalEntry[]>> {
+  listStrategyJournal(limit = 50, exchange?: string | null): Observable<ApiEnvelope<StrategyJournalEntry[]>> {
+    const params: Record<string, string | number> = { limit };
+    if (exchange && exchange !== 'ALL') {
+      params['exchange'] = exchange;
+    }
     return this.withCache(
-      `strategy:journal:${limit}`,
+      `strategy:journal:${limit}:${exchange || 'ALL'}`,
       30000,
       this.http.get<ApiEnvelope<StrategyJournalEntry[]>>(`${this.baseUrl}/api/strategy/journal`, {
-        params: { limit },
-      })
+        params,
+      }),
+      { persistent: true, persistentTtlMs: 300000 }
     ).pipe(catchError(() => of({ data: [] })));
   }
 

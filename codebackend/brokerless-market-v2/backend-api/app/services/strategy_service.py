@@ -28,6 +28,7 @@ from app.models.market import (
     MarketFinancialIncomeStatement,
     MarketFinancialRatio,
     MarketQuoteSnapshot,
+    MarketSymbol,
 )
 from app.repositories.market_read_repo import MarketReadRepository
 from app.services.auth_service import require_permission
@@ -309,7 +310,7 @@ def _coerce_date_value(value: Any) -> date | None:
 
 class StrategyService:
     _shared_scored_universe_cache: dict[tuple[Any, ...], tuple[float, list[dict[str, Any]]]] = {}
-    _shared_cache_ttl_seconds = 30.0
+    _shared_cache_ttl_seconds = 120.0
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -330,12 +331,11 @@ class StrategyService:
         profile = await self._get_profile(actor.company_code, profile_id)
         profiles = await self.list_profiles(actor)
         rankings = await self.get_rankings(actor, profile.id, page=1, page_size=8)
-        risk = await self.get_risk_overview(actor, profile.id)
         config_summary = await self._get_profile_config_summary(profile.id)
         rankings["items"] = [self._to_overview_score_item(item) for item in rankings.get("items", [])]
         risk = {
-            "profile": risk.get("profile"),
-            "summaryCards": risk.get("summaryCards") or [],
+            "profile": self._serialize_profile(profile),
+            "summaryCards": [],
             "highRiskItems": [],
         }
         return {
@@ -507,6 +507,16 @@ class StrategyService:
     ) -> dict[str, Any]:
         require_permission(actor, "scoring.view")
         profile = await self._get_profile(actor.company_code, profile_id)
+        snapshot_universe = await self._load_score_snapshot_universe(
+            actor.company_code,
+            profile,
+            exchange=exchange,
+            keyword=keyword,
+            watchlist_only=watchlist_only,
+        )
+        if snapshot_universe is not None:
+            return self._paginate([self._to_ranking_score_item(item) for item in snapshot_universe], page, page_size)
+
         bundle = await self._build_profile_bundle(profile.id)
         universe = await self._get_scored_universe_cached(
             actor,
@@ -516,7 +526,7 @@ class StrategyService:
             keyword=keyword,
             watchlist_only=watchlist_only,
         )
-        return self._paginate(universe, page, page_size)
+        return self._paginate([self._to_ranking_score_item(item) for item in universe], page, page_size)
 
     async def run_screener(
         self,
@@ -530,6 +540,23 @@ class StrategyService:
     ) -> dict[str, Any]:
         require_permission(actor, "screener.view")
         profile = await self._get_profile(actor.company_code, profile_id)
+        snapshot_universe = await self._load_score_snapshot_universe(
+            actor.company_code,
+            profile,
+            exchange=exchange,
+            keyword=keyword,
+            watchlist_only=watchlist_only,
+        )
+        if snapshot_universe is not None:
+            passed_items = [item for item in snapshot_universe if item["passedAllLayers"]]
+            response = self._paginate([self._to_ranking_score_item(item) for item in passed_items], page, page_size)
+            response["summary"] = {
+                "passed": len(passed_items),
+                "total": len(snapshot_universe),
+                "passRate": round((len(passed_items) / len(snapshot_universe)) * 100, 2) if snapshot_universe else 0,
+            }
+            return response
+
         bundle = await self._build_profile_bundle(profile.id)
         universe = await self._get_scored_universe_cached(
             actor,
@@ -540,7 +567,7 @@ class StrategyService:
             watchlist_only=watchlist_only,
         )
         passed_items = [item for item in universe if item["passedAllLayers"]]
-        response = self._paginate(passed_items, page, page_size)
+        response = self._paginate([self._to_ranking_score_item(item) for item in passed_items], page, page_size)
         response["summary"] = {
             "passed": len(passed_items),
             "total": len(universe),
@@ -551,6 +578,10 @@ class StrategyService:
     async def get_symbol_scoring(self, actor: AppUser, profile_id: int, symbol: str) -> dict[str, Any]:
         require_permission(actor, "scoring.view")
         profile = await self._get_profile(actor.company_code, profile_id)
+        snapshot_item = await self._load_symbol_score_snapshot(actor.company_code, profile, symbol)
+        if snapshot_item is not None:
+            return snapshot_item
+
         bundle = await self._build_profile_bundle(profile.id)
         universe = await self._get_scored_universe_cached(actor, profile.id, bundle, keyword=symbol.upper())
         item = next((row for row in universe if row["symbol"] == symbol.upper()), None)
@@ -576,15 +607,21 @@ class StrategyService:
             "highRiskItems": top_risk,
         }
 
-    async def list_journal(self, actor: AppUser, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_journal(self, actor: AppUser, limit: int = 50, exchange: str | None = None) -> list[dict[str, Any]]:
         require_permission(actor, "journal.view")
-        result = await self.session.execute(
-            select(StrategyTradeJournalEntry)
+        normalized_exchange = str(exchange or "").upper()
+        stmt = (
+            select(StrategyTradeJournalEntry, MarketSymbol.exchange)
+            .outerjoin(MarketSymbol, MarketSymbol.symbol == StrategyTradeJournalEntry.symbol)
             .where(StrategyTradeJournalEntry.company_code == actor.company_code)
             .order_by(desc(StrategyTradeJournalEntry.created_at))
             .limit(limit)
         )
-        return [self._serialize_journal(row) for row in result.scalars().all()]
+        if normalized_exchange in {"HSX", "HNX", "UPCOM"}:
+            stmt = stmt.where(MarketSymbol.exchange == normalized_exchange)
+
+        result = await self.session.execute(stmt)
+        return [self._serialize_journal(row, exchange=symbol_exchange) for row, symbol_exchange in result.all()]
 
     async def create_journal_entry(self, actor: AppUser, payload: dict[str, Any]) -> dict[str, Any]:
         require_permission(actor, "journal.create")
@@ -696,6 +733,175 @@ class StrategyService:
         self._scored_universe_cache[cache_key] = universe
         self._shared_scored_universe_cache[cache_key] = (time.monotonic(), universe)
         return universe
+
+    async def _load_score_snapshot_universe(
+        self,
+        company_code: str,
+        profile: StrategyProfile,
+        *,
+        exchange: str | None = None,
+        keyword: str | None = None,
+        watchlist_only: bool = False,
+    ) -> list[dict[str, Any]] | None:
+        latest_date_result = await self.session.execute(
+            select(func.max(StrategyStockScoreSnapshot.trading_date)).where(
+                StrategyStockScoreSnapshot.company_code == company_code,
+                StrategyStockScoreSnapshot.profile_id == profile.id,
+                StrategyStockScoreSnapshot.computed_at >= profile.updated_at,
+            )
+        )
+        latest_date = latest_date_result.scalar()
+        if latest_date is None:
+            return None
+
+        stmt = select(StrategyStockScoreSnapshot).where(
+            StrategyStockScoreSnapshot.company_code == company_code,
+            StrategyStockScoreSnapshot.profile_id == profile.id,
+            StrategyStockScoreSnapshot.trading_date == latest_date,
+            StrategyStockScoreSnapshot.computed_at >= profile.updated_at,
+        )
+        normalized_exchange = str(exchange or "").upper()
+        if normalized_exchange in {"HSX", "HNX", "UPCOM"}:
+            stmt = stmt.where(StrategyStockScoreSnapshot.exchange == normalized_exchange)
+            stmt = stmt.order_by(
+                StrategyStockScoreSnapshot.rank_overall.asc().nullslast(),
+                StrategyStockScoreSnapshot.winning_score.desc().nullslast(),
+                StrategyStockScoreSnapshot.symbol.asc(),
+            )
+        else:
+            stmt = stmt.order_by(
+                StrategyStockScoreSnapshot.winning_score.desc().nullslast(),
+                StrategyStockScoreSnapshot.margin_of_safety.desc().nullslast(),
+                StrategyStockScoreSnapshot.symbol.asc(),
+            )
+
+        result = await self.session.execute(stmt)
+        items = [self._snapshot_to_score_item(row) for row in result.scalars().all()]
+        normalized_keyword = str(keyword or "").strip().upper()
+        if normalized_keyword:
+            items = [item for item in items if normalized_keyword in str(item.get("symbol") or "").upper()]
+        if watchlist_only:
+            items = [item for item in items if item.get("isWatchlist")]
+        for idx, item in enumerate(items, 1):
+            item["rank"] = idx
+        return items
+
+    async def _load_symbol_score_snapshot(
+        self,
+        company_code: str,
+        profile: StrategyProfile,
+        symbol: str,
+    ) -> dict[str, Any] | None:
+        normalized_symbol = str(symbol or "").strip().upper()
+        if not normalized_symbol:
+            return None
+
+        result = await self.session.execute(
+            select(StrategyStockScoreSnapshot)
+            .where(
+                StrategyStockScoreSnapshot.company_code == company_code,
+                StrategyStockScoreSnapshot.profile_id == profile.id,
+                StrategyStockScoreSnapshot.symbol == normalized_symbol,
+                StrategyStockScoreSnapshot.computed_at >= profile.updated_at,
+            )
+            .order_by(
+                StrategyStockScoreSnapshot.trading_date.desc(),
+                StrategyStockScoreSnapshot.computed_at.desc(),
+            )
+            .limit(1)
+        )
+        row = result.scalar_one_or_none()
+        return self._snapshot_to_score_item(row) if row else None
+
+    def _snapshot_to_score_item(self, row: StrategyStockScoreSnapshot) -> dict[str, Any]:
+        metrics = row.metrics_json if isinstance(row.metrics_json, dict) else {}
+        explanation = row.explanation_json if isinstance(row.explanation_json, dict) else {}
+        layer_results = list(explanation.get("ruleResults") or [])
+        alert_results = list(explanation.get("alerts") or [])
+        checklist_results = list(explanation.get("checklists") or [])
+        risk_score = self._compute_risk_score(metrics, alert_results)
+        current_price = _float(row.current_price, _float(metrics.get("current_price"), 0))
+        return {
+            "rank": row.rank_overall or 0,
+            "symbol": row.symbol,
+            "name": metrics.get("name"),
+            "exchange": row.exchange,
+            "price": current_price,
+            "changePercent": _float(metrics.get("change_percent"), 0),
+            "tradingValue": _float(metrics.get("trading_value"), 0),
+            "volume": _float(metrics.get("volume"), 0),
+            "currentPrice": current_price,
+            "fairValue": row.fair_value,
+            "marginOfSafety": _float(row.margin_of_safety, 0),
+            "qScore": _float(row.q_score, 0),
+            "lScore": _float(row.l_score, 0),
+            "mScore": _float(row.m_score, 0),
+            "pScore": _float(row.p_score, 0),
+            "winningScore": _float(row.winning_score, 0),
+            "fundamentalMetrics": explanation.get("fundamentalMetrics"),
+            "volumeIntelligence": explanation.get("volumeIntelligence"),
+            "candlestickSignals": explanation.get("candlestickSignals") or [],
+            "footprintSignals": explanation.get("footprintSignals") or [],
+            "executionPlan": explanation.get("executionPlan") or {},
+            "metrics": metrics,
+            "layerResults": layer_results,
+            "alertResults": alert_results,
+            "checklistResults": checklist_results,
+            "passedLayer1": bool(row.passed_layer_1),
+            "passedLayer2": bool(row.passed_layer_2),
+            "passedLayer3": bool(row.passed_layer_3),
+            "passedAllLayers": bool(row.passed_layer_1 and row.passed_layer_2 and row.passed_layer_3),
+            "riskScore": round(risk_score, 2),
+            "isWatchlist": bool(metrics.get("watchlist_bonus")),
+            "newsMentions": int(_float(metrics.get("news_mentions"), 0)),
+            "explanation": {
+                "topDrivers": explanation.get("topDrivers") or [],
+                "ruleResults": layer_results,
+                "alerts": alert_results,
+                "checklists": checklist_results,
+            },
+        }
+
+    @staticmethod
+    def _to_ranking_score_item(item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "rank": item.get("rank") or 0,
+            "symbol": item.get("symbol"),
+            "name": item.get("name"),
+            "exchange": item.get("exchange"),
+            "price": item.get("price") or item.get("currentPrice") or 0,
+            "changePercent": item.get("changePercent") or 0,
+            "tradingValue": item.get("tradingValue") or 0,
+            "volume": item.get("volume") or 0,
+            "currentPrice": item.get("currentPrice") or item.get("price") or 0,
+            "fairValue": item.get("fairValue"),
+            "marginOfSafety": item.get("marginOfSafety") or 0,
+            "qScore": item.get("qScore") or 0,
+            "lScore": item.get("lScore") or 0,
+            "mScore": item.get("mScore") or 0,
+            "pScore": item.get("pScore") or 0,
+            "winningScore": item.get("winningScore") or 0,
+            "riskScore": item.get("riskScore") or 0,
+            "isWatchlist": bool(item.get("isWatchlist")),
+            "newsMentions": item.get("newsMentions") or 0,
+            "passedLayer1": bool(item.get("passedLayer1")),
+            "passedLayer2": bool(item.get("passedLayer2")),
+            "passedLayer3": bool(item.get("passedLayer3")),
+            "passedAllLayers": bool(item.get("passedAllLayers")),
+            "metrics": {},
+            "layerResults": [],
+            "alertResults": [],
+            "checklistResults": [],
+            "candlestickSignals": [],
+            "footprintSignals": [],
+            "executionPlan": {},
+            "explanation": {
+                "topDrivers": [],
+                "ruleResults": [],
+                "alerts": [],
+                "checklists": [],
+            },
+        }
 
     @classmethod
     def _invalidate_shared_scored_universe_cache(cls, company_code: str, profile_id: int | None = None) -> None:
@@ -863,7 +1069,7 @@ class StrategyService:
             if matched_exchanges:
                 exchanges = matched_exchanges
 
-        per_exchange_limit = 120 if normalized_keyword else 8000
+        per_exchange_limit = 120 if normalized_keyword else 300
         stock_sort = "all" if normalized_keyword else "actives"
         items: list[dict[str, Any]] = []
         for ex in exchanges:
@@ -1900,13 +2106,19 @@ class StrategyService:
         if not items or not bundle.get("formulas"):
             return
         profile_id = int(bundle["formulas"][0]["profileId"])
-        await self.session.execute(
-            StrategySignalSnapshot.__table__.delete().where(
-                StrategySignalSnapshot.company_code == company_code,
-                StrategySignalSnapshot.profile_id == profile_id,
-                StrategySignalSnapshot.trading_date == trading_date,
-            )
+        exchanges = {
+            str(row.get("exchange") or "").upper()
+            for row in items
+            if str(row.get("exchange") or "").upper()
+        }
+        delete_stmt = StrategySignalSnapshot.__table__.delete().where(
+            StrategySignalSnapshot.company_code == company_code,
+            StrategySignalSnapshot.profile_id == profile_id,
+            StrategySignalSnapshot.trading_date == trading_date,
         )
+        if exchanges:
+            delete_stmt = delete_stmt.where(StrategySignalSnapshot.exchange.in_(exchanges))
+        await self.session.execute(delete_stmt)
 
         now = datetime.now()
         for row in items[:300]:
@@ -2395,11 +2607,17 @@ class StrategyService:
         }
 
     @staticmethod
-    def _serialize_journal(item: StrategyTradeJournalEntry) -> dict[str, Any]:
+    def _serialize_journal(item: StrategyTradeJournalEntry, exchange: str | None = None) -> dict[str, Any]:
+        snapshot_exchange = (
+            (item.result_snapshot_json or {}).get("exchange")
+            or (item.signal_snapshot_json or {}).get("exchange")
+            or exchange
+        )
         return {
             "id": item.id,
             "profileId": item.profile_id,
             "symbol": item.symbol,
+            "exchange": str(snapshot_exchange).upper() if snapshot_exchange else None,
             "tradeDate": item.trade_date.isoformat() if item.trade_date else None,
             "classification": item.classification,
             "tradeSide": item.trade_side,

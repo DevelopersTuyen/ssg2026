@@ -1,127 +1,14 @@
-﻿<ion-content [fullscreen]="true" class="strategy-content">
+﻿<ion-content [fullscreen]="true" [scrollY]="false" class="strategy-content">
   <div class="strategy-shell">
-    <section class="hero-panel">
-      <div class="hero-copy">
-        <div class="page-kicker">{{ 'strategyHub.kicker' | translate }}</div>
-        <h1>Trung tâm chiến lược cho hệ thống AI chứng khoán</h1>
-        <p>Quản lý công thức, bộ lọc, cảnh báo, rủi ro và nhật ký giao dịch theo đúng logic mà sếp đang yêu cầu.</p>
-      </div>
+    <app-page-load-indicator class="strategy-mini-loader" pageId="strategy-hub"></app-page-load-indicator>
 
-      <div class="hero-actions">
-        <select class="hero-select" [(ngModel)]="activeProfileId" (change)="onProfileChange()">
-          <option *ngFor="let profile of profiles; trackBy: trackByCode" [ngValue]="profile.id">
-            {{ profile.name }}
-          </option>
-        </select>
-        <button type="button" class="btn-light" (click)="refreshData()" [disabled]="loading">Tải lại</button>
-        <button type="button" class="btn-light" routerLink="/tabs/market-settings">Cài đặt thị trường</button>
-      </div>
-      <div class="applied-state-card engine-summary-card" *ngIf="selectedScoreItem">
-        <span>{{ 'strategyHub.applied.engineStates' | translate }}</span>
-        <strong>{{ selectedScoreItem.symbol }}</strong>
-        <div class="engine-badge-row">
-          <span class="signal-pill" [class.bullish]="getSmartMoneyBadgeState(selectedScoreItem) === 'on'" [class.neutral]="getSmartMoneyBadgeState(selectedScoreItem) === 'off'">
-            {{ 'strategyHub.badge.smartMoney' | translate }}:
-            {{ (getSmartMoneyBadgeState(selectedScoreItem) === 'on' ? 'strategyHub.state.on' : 'strategyHub.state.off') | translate }}
-          </span>
-          <span class="signal-pill" [class.bullish]="selectedScoreItem.candlestickSignals?.length" [class.neutral]="!selectedScoreItem.candlestickSignals?.length">
-            {{ 'strategyHub.badge.candle' | translate }}:
-            {{ getPrimaryCandlestickSignal(selectedScoreItem) | translate }}
-          </span>
-          <span
-            class="signal-pill"
-            [class.bullish]="getExecutionBadgeState(selectedScoreItem) === 'ready'"
-            [class.bearish]="getExecutionBadgeState(selectedScoreItem) === 'standAside'"
-            [class.neutral]="getExecutionBadgeState(selectedScoreItem) === 'wait'"
-          >
-            {{ 'strategyHub.badge.execution' | translate }}:
-            {{ getExecutionBadgeLabel(selectedScoreItem) | translate }}
-          </span>
-        </div>
-      </div>
-    </section>
-
-    <app-page-load-indicator pageId="strategy-hub"></app-page-load-indicator>
-
-    <div class="status-row" *ngIf="loading || detailLoading || message || error">
+    <div class="status-row" *ngIf="detailLoading || message || error">
       <div class="status-pill loading" *ngIf="detailLoading">Đang tải chi tiết công thức của mã đang chọn...</div>
-      <div class="status-pill loading" *ngIf="loading">Đang tải dữ liệu chiến lược...</div>
       <div class="status-pill success" *ngIf="message">{{ message }}</div>
       <div class="status-pill error" *ngIf="error">{{ error }}</div>
     </div>
 
-    <section class="applied-state" *ngIf="overview">
-      <div class="applied-state-card">
-        <span>Profile đang áp dụng</span>
-        <strong>{{ overview.activeProfile.name }}</strong>
-        <small>Code: {{ overview.activeProfile.code }}</small>
-      </div>
-      <div class="applied-state-card">
-        <span>Công thức / Luật</span>
-        <strong>{{ overview.configSummary.formulaCount }} / {{ overview.configSummary.screenRuleCount }}</strong>
-        <small>{{ overview.configSummary.alertRuleCount }} cảnh báo · {{ overview.configSummary.checklistCount }} checklist</small>
-      </div>
-      <div class="applied-state-card">
-        <span>Phiên bản chiến lược</span>
-        <strong>{{ overview.configSummary.versionCount }}</strong>
-        <small>Tổng số phiên bản đã phát hành</small>
-      </div>
-      <div class="applied-state-card" *ngIf="selectedScoreItem">
-        <span>Engine đang hiển thị</span>
-        <strong>{{ selectedScoreItem.symbol }}</strong>
-        <small>
-          {{ selectedScoreItem.fundamentalMetrics ? 'Cơ bản' : '' }}
-          {{ selectedScoreItem.volumeIntelligence ? ' · Khối lượng' : '' }}
-          {{ selectedScoreItem.candlestickSignals?.length ? ' · Nến' : '' }}
-          {{ selectedScoreItem.footprintSignals?.length ? ' · Dấu chân tổ chức' : '' }}
-          {{ selectedScoreItem.executionPlan ? ' · Thực thi' : '' }}
-        </small>
-      </div>
-    </section>
-
-    <section class="applied-state" *ngIf="enabledFormulas.length">
-      <div class="applied-state-card applied-formula-card">
-        <span>Công thức đang áp dụng</span>
-        <div class="formula-chip-row">
-          <span class="formula-chip" *ngFor="let formula of enabledFormulas">
-            {{ formula.label }}
-          </span>
-        </div>
-        <small>{{ enabledFormulaLabels.join(' · ') }}</small>
-      </div>
-    </section>
-
-    <section class="overview-grid" *ngIf="overview">
-      <article class="overview-card">
-        <span>Công thức</span>
-        <strong>{{ overview.configSummary.formulaCount }}</strong>
-        <small>Công thức đang hoạt động</small>
-      </article>
-      <article class="overview-card">
-        <span>Luật lọc</span>
-        <strong>{{ overview.configSummary.screenRuleCount }}</strong>
-        <small>Rule 3 táº§ng lá»c</small>
-      </article>
-      <article class="overview-card">
-        <span>Luật cảnh báo</span>
-        <strong>{{ overview.configSummary.alertRuleCount }}</strong>
-        <small>Cảnh báo sớm</small>
-      </article>
-      <article class="overview-card">
-        <span>Phiên bản</span>
-        <strong>{{ overview.configSummary.versionCount }}</strong>
-        <small>Lá»‹ch sá»­ publish</small>
-      </article>
-    </section>
-
-    <div class="strategy-tabs">
-      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'overview'" (click)="selectTab('overview')">{{ 'strategyHub.tab.overview' | translate }}</button>
-      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'screener'" (click)="selectTab('screener')">{{ 'strategyHub.tab.screener' | translate }}</button>
-      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'scoring'" (click)="selectTab('scoring')">{{ 'strategyHub.tab.scoring' | translate }}</button>
-      <button type="button" class="strategy-tab" [class.active]="selectedTab === 'risk'" (click)="selectTab('risk')">{{ 'strategyHub.tab.risk' | translate }}</button>
-    </div>
-
-    <div [ngSwitch]="selectedTab">
+    <div class="strategy-main" [ngSwitch]="selectedTab">
       <section *ngSwitchCase="'overview'" class="workspace-grid">
         <article class="panel">
           <div class="panel-header">
@@ -266,29 +153,66 @@
         </div>
       </section>
 
-      <section *ngSwitchCase="'scoring'" class="workspace-grid">
-        <article class="panel panel-span-2">
-          <div class="panel-header">
-            <div>
-              <div class="panel-title">Báº£ng xáº¿p háº¡ng scoring</div>
-              <div class="panel-subtitle">Xếp hạng toàn bộ mã theo Winning Score và hiển thị chi tiết điểm thành phần.</div>
+      <section *ngSwitchCase="'scoring'" class="workspace-grid scoring-workspace" [class.no-detail]="!selectedScoreItem">
+        <article class="panel panel-span-2 score-table-panel">
+          <div class="panel-header scoring-panel-header row g-2 align-items-center">
+            <div class="col-12 col-xl-3" *ngIf="selectableScoringFormulas.length">
+              <div class="formula-column-chip-row">
+                <button
+                  type="button"
+                  class="formula-column-chip"
+                  *ngFor="let formula of selectableScoringFormulas"
+                  [class.active]="isScoringFormulaSelected(formula.formulaCode)"
+                  (click)="toggleScoringFormula(formula.formulaCode)"
+                  [attr.title]="formula.label"
+                >
+                  {{ getScoringFormulaChipLabel(formula.formulaCode, formula.label) }}
+                </button>
+              </div>
             </div>
-            <div class="toolbar">
-              <select class="toolbar-select" [(ngModel)]="scoringExchange">
+            <div class="col-12 col-md-5 col-xl-3">
+              <select class="toolbar-select w-100" [(ngModel)]="activeProfileId" (change)="onProfileChange()">
+                <option *ngFor="let profile of profiles; trackBy: trackByCode" [ngValue]="profile.id">
+                  {{ profile.name }}
+                </option>
+              </select>
+            </div>
+            <div class="col-6 col-md-2 col-xl-1">
+              <select class="toolbar-select w-100" [(ngModel)]="scoringExchange" (change)="reloadScoringFromFirstPage()">
                 <option value="ALL">Tất cả sàn</option>
                 <option value="HSX">HSX</option>
                 <option value="HNX">HNX</option>
                 <option value="UPCOM">UPCOM</option>
               </select>
-              <input class="toolbar-input" [(ngModel)]="scoringKeyword" placeholder="Tìm mã" />
-              <label class="toolbar-checkbox">
-                <input type="checkbox" [(ngModel)]="scoringWatchlistOnly" />
-              Danh sách theo dõi
-              </label>
-              <button type="button" class="btn-primary" (click)="reloadScoring()">Làm mới điểm</button>
+            </div>
+            <div class="col-6 col-md-5 col-xl-2">
+              <input
+                class="toolbar-input w-100"
+                [ngModel]="scoringKeyword"
+                (ngModelChange)="onScoringKeywordChange($event)"
+                (keyup.enter)="reloadScoringFromFirstPage()"
+                placeholder="Tìm mã"
+              />
+            </div>
+            <div class="col-12 col-xl-3">
+              <div class="toolbar-action-row">
+                <label class="toolbar-checkbox">
+                  <ion-icon name="bookmark-outline"></ion-icon>
+                  <input type="checkbox" [(ngModel)]="scoringWatchlistOnly" (change)="reloadScoringFromFirstPage()" />
+                  <span class="toolbar-checkbox-label">Danh sách theo dõi</span>
+                </label>
+                <button type="button" class="btn-primary toolbar-refresh-btn" (click)="reloadScoringFromFirstPage()" title="Làm mới điểm">
+                  <ion-icon name="refresh-outline"></ion-icon>
+                  <span class="toolbar-button-label">Làm mới điểm</span>
+                </button>
+                <button type="button" class="btn-light toolbar-settings-btn" routerLink="/tabs/market-settings" title="Cài đặt thị trường">
+                  <ion-icon name="settings-outline"></ion-icon>
+                  <span class="toolbar-button-label">Cài đặt</span>
+                </button>
+              </div>
             </div>
           </div>
-          <div class="table-shell">
+          <div class="table-shell scoring-table-shell">
             <table class="data-table">
               <thead>
                 <tr>
@@ -296,19 +220,52 @@
                   <th>Mã</th>
                   <th>Giá</th>
                   <th>Winning</th>
+                  <th *ngFor="let formula of selectableScoringFormulas" [hidden]="!isScoringFormulaSelected(formula.formulaCode)">
+                    {{ formula.label }}
+                  </th>
                   <th>Rủi ro</th>
                   <th>Tin tá»©c</th>
                   <th class="table-action-cell">Nhật ký</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let item of rankings?.items || []" (click)="chooseScoreItem(item)" [class.selected]="selectedScoreItem?.symbol === item.symbol">
-                  <td>{{ item.rank }}</td>
-                  <td>{{ item.symbol }}</td>
-                  <td>{{ item.currentPrice | number:'1.0-2' }}</td>
-                  <td>{{ item.winningScore | number:'1.0-0' }}</td>
-                  <td>{{ item.riskScore | number:'1.0-0' }}</td>
-                  <td>{{ item.newsMentions }}</td>
+                <tr
+                  *ngFor="let item of rankings?.items || []"
+                  (click)="chooseScoreItem(item)"
+                  [class.selected]="selectedScoreItem?.symbol === item.symbol"
+                  [ngClass]="getScoreRowToneClass(item)"
+                >
+                  <td><span class="rank-pill">{{ item.rank }}</span></td>
+                  <td>
+                    <button type="button" class="symbol-link-btn symbol-status" [ngClass]="getSymbolToneClass(item)" (click)="openSymbolDetail(item.symbol, $event)">
+                      {{ item.symbol }}
+                    </button>
+                  </td>
+                  <td>
+                    <span class="metric-pill" [ngClass]="getChangeToneClass(item.changePercent)">
+                      {{ item.currentPrice | number:'1.0-2' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="metric-pill strong" [ngClass]="getWinningToneClass(item)">
+                      {{ item.winningScore | number:'1.0-0' }}
+                    </span>
+                  </td>
+                  <td *ngFor="let formula of selectableScoringFormulas" [hidden]="!isScoringFormulaSelected(formula.formulaCode)">
+                    <span class="metric-pill" [ngClass]="getFormulaToneClass(item, formula.formulaCode)">
+                    {{ getScoringFormulaValue(item, formula.formulaCode) | number:'1.0-2' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="metric-pill" [ngClass]="getRiskToneClass(item.riskScore)">
+                      {{ item.riskScore | number:'1.0-0' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="metric-pill" [ngClass]="getNewsToneClass(item.newsMentions)">
+                      {{ item.newsMentions }}
+                    </span>
+                  </td>
                   <td class="table-action-cell">
                     <button type="button" class="icon-action-btn" title="Đưa mã này sang nhật ký" (click)="openJournalFromItem(item, $event)">
                       <ion-icon name="document-text-outline"></ion-icon>
@@ -318,12 +275,31 @@
               </tbody>
             </table>
           </div>
+          <div class="table-pagination" *ngIf="rankings">
+            <div class="pagination-copy">
+              Hiển thị {{ scoringStartIndex }}-{{ scoringEndIndex }} / {{ rankings.total || 0 }} mã
+            </div>
+            <div class="pagination-actions">
+              <button type="button" class="pagination-btn" (click)="goToPreviousScoringPage()" [disabled]="scoringPage <= 1">
+                <ion-icon name="chevron-back-outline"></ion-icon>
+              </button>
+              <span>Trang {{ scoringPage }} / {{ scoringTotalPages }}</span>
+              <button type="button" class="pagination-btn" (click)="goToNextScoringPage()" [disabled]="scoringPage >= scoringTotalPages">
+                <ion-icon name="chevron-forward-outline"></ion-icon>
+              </button>
+            </div>
+          </div>
         </article>
 
-        <article class="panel" *ngIf="selectedScoreItem">
+        <article class="panel score-detail-panel" *ngIf="selectedScoreItem">
           <div class="panel-header">
             <div>
-              <div class="panel-title">{{ selectedScoreItem.symbol }} breakdown</div>
+              <div class="panel-title">
+                <button type="button" class="symbol-link-btn detail-symbol-link" (click)="openSymbolDetail(selectedScoreItem.symbol, $event)">
+                  {{ selectedScoreItem.symbol }}
+                </button>
+                breakdown
+              </div>
               <div class="panel-subtitle">Chi tiết công thức, tín hiệu và checklist.</div>
             </div>
             <button type="button" class="btn-light quick-journal-btn" (click)="openJournalFromItem(selectedScoreItem, $event)">
@@ -332,69 +308,138 @@
             </button>
           </div>
           <div class="engine-badge-row detail-badges">
-            <span class="signal-pill" [class.bullish]="getSmartMoneyBadgeState(selectedScoreItem) === 'on'" [class.neutral]="getSmartMoneyBadgeState(selectedScoreItem) === 'off'">
+            <button type="button" class="signal-pill signal-pill-action" [class.bullish]="getSmartMoneyBadgeState(selectedScoreItem) === 'on'" [class.neutral]="getSmartMoneyBadgeState(selectedScoreItem) === 'off'" (click)="openSignalOverviewModal(selectedScoreItem)">
               {{ 'strategyHub.badge.smartMoney' | translate }}:
               {{ (getSmartMoneyBadgeState(selectedScoreItem) === 'on' ? 'strategyHub.state.on' : 'strategyHub.state.off') | translate }}
-            </span>
-            <span class="signal-pill" [class.bullish]="selectedScoreItem.candlestickSignals?.length" [class.neutral]="!selectedScoreItem.candlestickSignals?.length">
+            </button>
+            <button type="button" class="signal-pill signal-pill-action" [class.bullish]="selectedScoreItem.candlestickSignals?.length" [class.neutral]="!selectedScoreItem.candlestickSignals?.length" (click)="openCandleSignalsModal(selectedScoreItem)">
               {{ 'strategyHub.badge.candle' | translate }}:
               {{ getPrimaryCandlestickSignal(selectedScoreItem) | translate }}
-            </span>
-            <span
-              class="signal-pill"
+            </button>
+            <button
+              type="button"
+              class="signal-pill signal-pill-action"
               [class.bullish]="getExecutionBadgeState(selectedScoreItem) === 'ready'"
               [class.bearish]="getExecutionBadgeState(selectedScoreItem) === 'standAside'"
               [class.neutral]="getExecutionBadgeState(selectedScoreItem) === 'wait'"
+              (click)="openExecutionPlanModal(selectedScoreItem)"
             >
               {{ 'strategyHub.badge.execution' | translate }}:
               {{ getExecutionBadgeLabel(selectedScoreItem) | translate }}
-            </span>
+            </button>
           </div>
           <div class="driver-grid">
-            <div class="driver-card">
+            <button type="button" class="driver-card driver-card-action" (click)="openValuationMetricModal(selectedScoreItem, 'fairValue')">
               <span>Giá trị hợp lý</span>
               <strong>{{ selectedScoreItem.fairValue | number:'1.0-2' }}</strong>
-            </div>
-            <div class="driver-card">
+            </button>
+            <button type="button" class="driver-card driver-card-action" (click)="openValuationMetricModal(selectedScoreItem, 'marginOfSafety')">
               <span>Biên an toàn</span>
               <strong>{{ selectedScoreItem.marginOfSafety | percent:'1.0-1' }}</strong>
-            </div>
-            <div class="driver-card">
+            </button>
+            <button type="button" class="driver-card driver-card-action" (click)="openValuationMetricModal(selectedScoreItem, 'changePercent')">
               <span>Biến động</span>
               <strong>{{ selectedScoreItem.changePercent | number:'1.2-2' }}%</strong>
-            </div>
-            <div class="driver-card">
+            </button>
+            <button type="button" class="driver-card driver-card-action" (click)="openValuationMetricModal(selectedScoreItem, 'watchlist')">
               <span>Danh sách theo dõi</span>
               <strong>{{ selectedScoreItem.isWatchlist ? 'Có' : 'Không' }}</strong>
-            </div>
+            </button>
           </div>
 
           <div class="formula-metrics">
-            <div class="formula-metric">
+            <button type="button" class="formula-metric formula-metric-action" (click)="openScoreMetricModal(selectedScoreItem, 'Q')">
               <span>Q Score</span>
               <strong>{{ selectedScoreItem.qScore | number:'1.0-2' }}</strong>
               <small>Công thức chất lượng đang được áp dụng</small>
-            </div>
-            <div class="formula-metric">
+            </button>
+            <button type="button" class="formula-metric formula-metric-action" (click)="openScoreMetricModal(selectedScoreItem, 'L')">
               <span>L Score</span>
               <strong>{{ selectedScoreItem.lScore | number:'1.0-2' }}</strong>
               <small>Công thức leadership/xu hướng đang được áp dụng</small>
-            </div>
-            <div class="formula-metric">
+            </button>
+            <button type="button" class="formula-metric formula-metric-action" (click)="openScoreMetricModal(selectedScoreItem, 'M')">
               <span>M Score</span>
               <strong>{{ selectedScoreItem.mScore | number:'1.0-2' }}</strong>
               <small>Công thức động lượng/xác nhận đang được áp dụng</small>
-            </div>
-            <div class="formula-metric">
+            </button>
+            <button type="button" class="formula-metric formula-metric-action" (click)="openScoreMetricModal(selectedScoreItem, 'P')">
               <span>P Score</span>
               <strong>{{ selectedScoreItem.pScore | number:'1.0-2' }}</strong>
               <small>Công thức giá/rủi ro đang được áp dụng</small>
-            </div>
-            <div class="formula-metric highlight">
+            </button>
+            <button type="button" class="formula-metric formula-metric-action highlight" (click)="openScoreMetricModal(selectedScoreItem, 'Winning')">
               <span>Winning Score</span>
               <strong>{{ selectedScoreItem.winningScore | number:'1.0-2' }}</strong>
               <small>Điểm tổng hợp cuối cùng của profile đang chọn</small>
-            </div>
+            </button>
+          </div>
+
+          <div class="breakdown-glance">
+            <section
+              class="breakdown-card primary breakdown-card-action"
+              role="button"
+              tabindex="0"
+              (click)="openDecisionBreakdownModal(selectedScoreItem)"
+              (keydown.enter)="openDecisionBreakdownModal(selectedScoreItem)"
+            >
+              <span>Kết luận nhanh</span>
+              <strong>{{ selectedScoreItem.passedAllLayers ? 'Đạt bộ lọc' : 'Cần xem lại' }}</strong>
+              <p>
+                Winning {{ selectedScoreItem.winningScore | number:'1.0-0' }},
+                rủi ro {{ selectedScoreItem.riskScore | number:'1.0-0' }},
+                biên an toàn {{ selectedScoreItem.marginOfSafety | percent:'1.0-1' }}.
+              </p>
+              <small>Xem lý do</small>
+            </section>
+
+            <section
+              class="breakdown-card breakdown-card-action"
+              role="button"
+              tabindex="0"
+              (click)="openFundamentalBreakdownModal(selectedScoreItem)"
+              (keydown.enter)="openFundamentalBreakdownModal(selectedScoreItem)"
+            >
+              <span>Cơ bản</span>
+              <strong>{{ selectedScoreItem.fundamentalMetrics?.qualityFlagCount || 0 }} cờ đạt</strong>
+              <p>
+                P/E {{ optionalNumberLabel(selectedScoreItem.fundamentalMetrics?.pe, 1) }},
+                ROE {{ percentWholeLabel(selectedScoreItem.fundamentalMetrics?.roe) }}.
+              </p>
+              <small>Xem pass / fail</small>
+            </section>
+
+            <section
+              class="breakdown-card breakdown-card-action"
+              role="button"
+              tabindex="0"
+              (click)="openFlowBreakdownModal(selectedScoreItem)"
+              (keydown.enter)="openFlowBreakdownModal(selectedScoreItem)"
+            >
+              <span>Dòng tiền</span>
+              <strong>{{ countDetectedSignals(selectedScoreItem.candlestickSignals) + countDetectedSignals(selectedScoreItem.footprintSignals) }} tín hiệu</strong>
+              <p>
+                Smart money {{ selectedScoreItem.volumeIntelligence?.smartMoneyInflow ? 'bật' : 'chưa bật' }},
+                spike {{ optionalNumberLabel(selectedScoreItem.volumeIntelligence?.volumeSpikeRatio, 1) }}x.
+              </p>
+              <small>Xem tín hiệu</small>
+            </section>
+
+            <section
+              class="breakdown-card breakdown-card-action"
+              role="button"
+              tabindex="0"
+              (click)="openRulesBreakdownModal(selectedScoreItem)"
+              (keydown.enter)="openRulesBreakdownModal(selectedScoreItem)"
+            >
+              <span>Luật & cảnh báo</span>
+              <strong>{{ countPassedRules(selectedScoreItem.layerResults) }}/{{ selectedScoreItem.layerResults.length || 0 }} pass</strong>
+              <p>
+                {{ countTriggeredAlerts(selectedScoreItem.alertResults) }} cảnh báo kích hoạt,
+                {{ countFailedRules(selectedScoreItem.checklistResults) }} checklist chưa đạt.
+              </p>
+              <small>Xem pass / fail</small>
+            </section>
           </div>
 
           <div class="detail-section-grid">
@@ -625,30 +670,6 @@
                   <span>{{ narrative.status === 'pass' ? 'PASS' : narrative.status === 'fail' ? 'FAIL' : 'CẦN XEM' }}</span>
                 </div>
                 <p>{{ narrative.detail }}</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="rule-list">
-            <div class="rule-group">
-              <h4>Luật theo lớp</h4>
-              <div class="rule-item" *ngFor="let item of selectedScoreItem.layerResults">
-                <span>{{ item.label }}</span>
-                <strong [class.pass]="item.passed" [class.fail]="!item.passed">{{ item.passed ? 'PASS' : 'FAIL' }}</strong>
-              </div>
-            </div>
-            <div class="rule-group">
-              <h4>Luật cảnh báo</h4>
-              <div class="rule-item" *ngFor="let item of selectedScoreItem.alertResults">
-                <span>{{ item.label }}</span>
-                <strong [class.fail]="item.passed">{{ item.passed ? 'TRIGGER' : 'OK' }}</strong>
-              </div>
-            </div>
-            <div class="rule-group">
-              <h4>Luật checklist</h4>
-              <div class="rule-item" *ngFor="let item of selectedScoreItem.checklistResults">
-                <span>{{ item.label }}</span>
-                <strong [class.pass]="item.passed" [class.fail]="!item.passed">{{ item.passed ? 'PASS' : 'FAIL' }}</strong>
               </div>
             </div>
           </div>
@@ -1086,5 +1107,63 @@
       </section>
     </div>
   </div>
+
+  <div class="rule-modal-overlay" *ngIf="ruleModalOpen" (click)="closeRuleModal()">
+    <section class="rule-modal" (click)="$event.stopPropagation()">
+      <div class="rule-modal-head">
+        <div>
+          <span>Chi tiết đánh giá</span>
+          <h3>{{ ruleModalTitle }}</h3>
+        </div>
+        <button type="button" class="rule-modal-close" (click)="closeRuleModal()" aria-label="Đóng">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+
+      <div class="rule-modal-columns">
+        <article class="rule-modal-column pass">
+          <div class="rule-modal-column-title">
+            <strong>{{ ruleModalPassTitle }}</strong>
+            <span>{{ ruleModalPassItems.length }}</span>
+          </div>
+          <div class="rule-modal-list">
+            <div class="rule-modal-item" *ngFor="let item of ruleModalPassItems">
+              <div class="rule-modal-item-title">
+                <strong>{{ item.label }}</strong>
+                <span>{{ ruleModalPassTitle }}</span>
+              </div>
+              <p *ngIf="item.message">{{ item.message }}</p>
+              <code *ngIf="item.expression">{{ item.expression }}</code>
+            </div>
+            <div class="rule-modal-empty" *ngIf="!ruleModalPassItems.length">Không có mục nào.</div>
+          </div>
+        </article>
+
+        <article class="rule-modal-column fail">
+          <div class="rule-modal-column-title">
+            <strong>{{ ruleModalFailTitle }}</strong>
+            <span>{{ ruleModalFailItems.length }}</span>
+          </div>
+          <div class="rule-modal-list">
+            <div class="rule-modal-item" *ngFor="let item of ruleModalFailItems">
+              <div class="rule-modal-item-title">
+                <strong>{{ item.label }}</strong>
+                <span>{{ ruleModalFailTitle }}</span>
+              </div>
+              <p *ngIf="item.message">{{ item.message }}</p>
+              <code *ngIf="item.expression">{{ item.expression }}</code>
+            </div>
+            <div class="rule-modal-empty" *ngIf="!ruleModalFailItems.length">Không có mục nào.</div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <app-symbol-detail-modal
+    [open]="symbolDetailOpen"
+    [symbol]="symbolDetailSymbol"
+    (closed)="closeSymbolDetail()"
+  ></app-symbol-detail-modal>
 </ion-content>
 

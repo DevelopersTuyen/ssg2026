@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Observable, Subscription, forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import { AuthService } from 'src/app/core/services/auth.service';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
@@ -19,6 +19,7 @@ import {
   StrategyJournalEntry,
   StrategyParameter,
   StrategyProfileConfigResponse,
+  StrategyProfile,
   StrategyRuleResult,
   StrategyScoredItem,
   StrategyScreenRule,
@@ -29,9 +30,10 @@ import {
 declare const ApexCharts: any;
 
 type DashboardChartTab = 'allocation' | 'equity' | 'outcomes';
-type DashboardAlertTab = 'priority' | 'alerts' | 'news';
+type DashboardAlertTab = 'priority' | 'alerts' | 'news' | 'ai';
 type DashboardDetailTab = 'overview' | 'rules' | 'snapshot';
 type DashboardConfigEntity = StrategyFormula | StrategyScreenRule | StrategyAlertRule | StrategyChecklistItem;
+type DashboardExchange = ExchangeTab | 'ALL';
 
 interface DashboardV2JournalRowVm {
   id: number;
@@ -82,7 +84,7 @@ interface DashboardV2StatsVm {
 }
 
 interface DashboardV2ExchangeOption {
-  value: ExchangeTab;
+  value: DashboardExchange;
   label: string;
 }
 
@@ -117,6 +119,10 @@ interface DashboardV2MetricChipVm {
   tone: 'default' | 'positive' | 'danger' | 'warning';
 }
 
+interface DashboardV2ChartDetailVm extends DashboardV2MetricChipVm {
+  helper: string;
+}
+
 interface DashboardV2DetailFactVm {
   label: string;
   value: string;
@@ -136,6 +142,7 @@ interface DashboardV2InsightVm {
 })
 export class DashboardV2Page implements OnInit, OnDestroy {
   readonly exchangeOptions: DashboardV2ExchangeOption[] = [
+    { value: 'ALL', label: 'Tất cả sàn' },
     { value: 'HSX', label: 'HSX' },
     { value: 'HNX', label: 'HNX' },
     { value: 'UPCOM', label: 'UPCOM' },
@@ -143,7 +150,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   loading = false;
   error = '';
-  selectedExchange: ExchangeTab = 'HSX';
+  selectedExchange: DashboardExchange = 'ALL';
   selectedChartTab: DashboardChartTab = 'allocation';
   selectedAlertTab: DashboardAlertTab = 'priority';
   compactTableEnabled = true;
@@ -158,6 +165,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   journalRows: DashboardV2JournalRowVm[] = [];
   alertItems: DashboardV2AlertVm[] = [];
   priorityItems: DashboardV2PriorityVm[] = [];
+  aiAnalysisItems: DashboardV2PriorityVm[] = [];
   newsItems: MarketAlertNewsItem[] = [];
   stats: DashboardV2StatsVm = {
     totalCapital: 0,
@@ -191,6 +199,8 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   journalDetailSnapshotMetrics: DashboardV2MetricChipVm[] = [];
   journalDetailCurrentMetrics: DashboardV2MetricChipVm[] = [];
   selectedDetailTab: DashboardDetailTab = 'overview';
+  symbolDetailOpen = false;
+  symbolDetailSymbol = '';
 
   private readonly currency = new Intl.NumberFormat('vi-VN', {
     maximumFractionDigits: 0,
@@ -207,6 +217,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   private renderTimer?: number;
   private dashboardSub?: Subscription;
+  private alertsSub?: Subscription;
   private detailSub?: Subscription;
   private backgroundSub?: Subscription;
   private insightChart: any;
@@ -276,6 +287,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.dashboardSub?.unsubscribe();
+    this.alertsSub?.unsubscribe();
     this.detailSub?.unsubscribe();
     this.backgroundSub?.unsubscribe();
     this.stopAutoRefresh();
@@ -289,7 +301,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     this.loadDashboard(true);
   }
 
-  changeExchange(exchange: ExchangeTab): void {
+  changeExchange(exchange: DashboardExchange): void {
     if (this.selectedExchange === exchange) {
       return;
     }
@@ -311,6 +323,18 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     );
   }
 
+  isChartTab(tab: DashboardChartTab): boolean {
+    return this.selectedChartTab === tab;
+  }
+
+  chartTabLabel(tab: DashboardChartTab): string {
+    return this.t(`dashboardV2.chartTab.${tab}`);
+  }
+
+  chartTabHelp(tab: DashboardChartTab): string {
+    return this.t(`dashboardV2.chartDescription.${tab}`);
+  }
+
   changeAlertTab(tab: DashboardAlertTab): void {
     this.selectedAlertTab = tab;
     this.setInsightPanel(
@@ -318,6 +342,14 @@ export class DashboardV2Page implements OnInit, OnDestroy {
       this.alertTabHelp(tab),
       this.selectedExchange
     );
+  }
+
+  isAlertTab(tab: DashboardAlertTab): boolean {
+    return this.selectedAlertTab === tab;
+  }
+
+  alertTabLabel(tab: DashboardAlertTab): string {
+    return this.t(`dashboardV2.alertTab.${tab}`);
   }
 
   alertTabHelp(tab: DashboardAlertTab): string {
@@ -369,6 +401,20 @@ export class DashboardV2Page implements OnInit, OnDestroy {
         this.journalDetailError = this.t('dashboardV2.detail.error.score');
       },
     });
+  }
+
+  openSymbolDetail(symbol: string, event?: Event): void {
+    event?.stopPropagation();
+    const normalized = (symbol || '').trim().toUpperCase();
+    if (!normalized) {
+      return;
+    }
+    this.symbolDetailSymbol = normalized;
+    this.symbolDetailOpen = true;
+  }
+
+  closeSymbolDetail(): void {
+    this.symbolDetailOpen = false;
   }
 
   closeJournalDetail(): void {
@@ -429,7 +475,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     return item.id;
   }
 
-  trackByExchange(_: number, item: DashboardV2ExchangeOption): ExchangeTab {
+  trackByExchange(_: number, item: DashboardV2ExchangeOption): DashboardExchange {
     return item.value;
   }
 
@@ -498,6 +544,59 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     ];
   }
 
+  currentChartDetails(): DashboardV2ChartDetailVm[] {
+    if (this.selectedChartTab === 'allocation') {
+      const deployedRatio = this.stats.totalCapital > 0 ? this.stats.openCapital / this.stats.totalCapital : 0;
+      return [
+        {
+          label: this.t('dashboardV2.chartDetail.deployed'),
+          value: this.formatPercent(deployedRatio),
+          tone: deployedRatio > 0.65 ? 'warning' : 'default',
+          helper: this.t('dashboardV2.chartDetail.deployedHelp'),
+        },
+        {
+          label: this.t('dashboardV2.chartDetail.realized'),
+          value: this.formatSignedMoney(this.stats.realizedProfit - this.stats.realizedLoss),
+          tone: this.stats.netPnl >= 0 ? 'positive' : 'danger',
+          helper: this.t('dashboardV2.chartDetail.realizedHelp'),
+        },
+      ];
+    }
+
+    if (this.selectedChartTab === 'equity') {
+      return [
+        {
+          label: this.t('dashboardV2.chartDetail.trend'),
+          value: this.stats.netPnl >= 0 ? this.t('dashboardV2.chartDetail.trendUp') : this.t('dashboardV2.chartDetail.trendDown'),
+          tone: this.stats.netPnl >= 0 ? 'positive' : 'danger',
+          helper: this.t('dashboardV2.chartDetail.trendHelp'),
+        },
+        {
+          label: this.t('dashboardV2.chartDetail.sample'),
+          value: `${Math.min(this.journalEntries.length, 24)}`,
+          tone: 'default',
+          helper: this.t('dashboardV2.chartDetail.sampleHelp'),
+        },
+      ];
+    }
+
+    const decidedCount = this.stats.winCount + this.stats.lossCount;
+    return [
+      {
+        label: this.t('dashboardV2.chartDetail.closedRatio'),
+        value: this.formatPercent(this.journalEntries.length ? decidedCount / this.journalEntries.length : 0),
+        tone: decidedCount > 0 ? 'default' : 'warning',
+        helper: this.t('dashboardV2.chartDetail.closedRatioHelp'),
+      },
+      {
+        label: this.t('dashboardV2.chartDetail.executionQuality'),
+        value: this.formatPercent(this.stats.winRate),
+        tone: this.stats.winRate >= 0.5 ? 'positive' : 'warning',
+        helper: this.t('dashboardV2.chartDetail.executionQualityHelp'),
+      },
+    ];
+  }
+
   detailStatusLabel(status: 'pass' | 'fail' | 'warn' | 'na'): string {
     if (status === 'pass') return this.t('dashboardV2.detailStatus.pass');
     if (status === 'fail') return this.t('dashboardV2.detailStatus.fail');
@@ -518,6 +617,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
       { key: 'priority', label: this.t('dashboardV2.alertTab.priority') },
       { key: 'alerts', label: this.t('dashboardV2.alertTab.alerts') },
       { key: 'news', label: this.t('dashboardV2.alertTab.news') },
+      { key: 'ai', label: this.t('dashboardV2.alertTab.ai') },
     ];
   }
 
@@ -582,26 +682,20 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     }
     this.error = '';
     this.dashboardSub?.unsubscribe();
-    this.destroyChart();
+    this.loadAlertsOverview(true);
 
     this.dashboardSub = forkJoin({
-      overview: this.safeNullable(this.api.getStrategyOverview()),
-      journal: this.safeList(this.api.listStrategyJournal(18)),
-      alerts: this.safeNullable(this.api.getMarketAlertsOverview(this.selectedExchange)),
+      profiles: this.safeList(this.api.listStrategyProfiles()),
+      journal: this.safeList(this.api.listStrategyJournal(18, this.selectedExchange)),
     }).subscribe({
-      next: ({ overview, journal, alerts }) => {
-        this.overview = overview.data || null;
-        this.alertsOverview = alerts.data || null;
+      next: ({ profiles, journal }) => {
+        this.overview = this.buildLightOverview(profiles.data);
 
-        const journalEntries = (journal.data && journal.data.length ? journal.data : this.overview?.journal) || [];
+        const journalEntries = journal.data || [];
         this.journalEntries = journalEntries;
         this.journalRows = this.buildJournalRows(journalEntries);
         this.stats = this.computeStats(journalEntries);
-        this.alertItems = this.buildAlertItems(this.alertsOverview?.alerts || []);
-        this.newsItems = this.alertsOverview?.news_items || [];
-        this.priorityItems = this.buildPriorityItems(journalEntries, this.alertsOverview, this.newsItems);
-        this.dataHealthIssues = this.buildDataHealthIssues(this.overview, this.alertsOverview, journalEntries);
-        this.dataHealthSummary = this.buildDataHealthSummary(journalEntries);
+        this.applyAlertsState();
         this.applyAlertNarrative();
 
         this.loading = false;
@@ -614,12 +708,163 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     });
   }
 
+  private loadAlertsOverview(silent = false): void {
+    this.alertsSub?.unsubscribe();
+    this.alertsSub = this.getAlertsOverviewForSelectedExchange().subscribe({
+      next: (alerts) => {
+        this.alertsOverview = alerts.data || null;
+        this.applyAlertsState();
+        this.applyAlertNarrative();
+      },
+      error: () => {
+        if (!silent) {
+          this.error = this.t('dashboardV2.error.load');
+        }
+      },
+    });
+  }
+
+  private getAlertsOverviewForSelectedExchange(): Observable<ApiEnvelope<MarketAlertsOverviewResponse | null>> {
+    if (this.selectedExchange !== 'ALL') {
+      return this.safeNullable(this.api.getMarketAlertsOverview(this.selectedExchange));
+    }
+
+    return forkJoin([
+      this.safeNullable(this.api.getMarketAlertsOverview('HSX')),
+      this.safeNullable(this.api.getMarketAlertsOverview('HNX')),
+      this.safeNullable(this.api.getMarketAlertsOverview('UPCOM')),
+    ]).pipe(
+      catchError(() => of([] as ApiEnvelope<MarketAlertsOverviewResponse | null>[])),
+      map((responses) => ({
+        data: this.mergeAlertsOverview(responses.map((response) => response.data).filter(Boolean) as MarketAlertsOverviewResponse[]),
+      }))
+    );
+  }
+
+  private mergeAlertsOverview(items: MarketAlertsOverviewResponse[]): MarketAlertsOverviewResponse | null {
+    if (!items.length) {
+      return null;
+    }
+
+    const alerts: MarketAlertItem[] = items.reduce<MarketAlertItem[]>((acc, item) => acc.concat(item.alerts || []), []);
+    const newsItems = items
+      .reduce<MarketAlertNewsItem[]>((acc, item) => acc.concat(item.news_items || []), [])
+      .filter((item, index, arr) => arr.findIndex((candidate) => candidate.url === item.url && candidate.title === item.title) === index)
+      .slice(0, 20);
+    const watchlistSymbols = Array.from(new Set(items.reduce<string[]>((acc, item) => acc.concat(item.watchlist_symbols || []), [])));
+    const generatedDates = items.map((item) => item.generated_at).filter(Boolean).sort();
+    const generatedAt = generatedDates.length ? generatedDates[generatedDates.length - 1] : '';
+    const criticalCount = alerts.filter((item) => item.severity === 'critical').length;
+    const watchlistAlertCount = items.reduce((sum, item) => sum + Number(item.watchlist_alert_count || 0), 0);
+    const averageConfidence = items.length
+      ? items.reduce((sum, item) => sum + Number(item.market_outlook?.confidence || 0), 0) / items.length
+      : 0;
+    const dominantDirection = this.resolveDominantDirection(items);
+
+    return {
+      exchange: 'ALL',
+      provider: items.find((item) => item.provider)?.provider || '',
+      model: items.find((item) => item.model)?.model || '',
+      used_fallback: items.some((item) => item.used_fallback),
+      generated_at: generatedAt,
+      headline: `Tổng hợp ${items.length} sàn: ${alerts.length} cảnh báo, ${newsItems.length} tin liên quan.`,
+      watchlist_headline: watchlistSymbols.length
+        ? `${watchlistSymbols.length} mã watchlist đang được theo dõi trên toàn thị trường.`
+        : 'Chưa có mã watchlist nổi bật trên toàn thị trường.',
+      summary_cards: [
+        { label: 'Tổng cảnh báo', value: `${alerts.length}`, tone: alerts.length ? 'warning' : 'default', helper: 'Gộp HSX, HNX và UPCOM' },
+        { label: 'Ưu tiên cao', value: `${criticalCount}`, tone: criticalCount ? 'danger' : 'default', helper: 'Số cảnh báo critical toàn thị trường' },
+        { label: 'Watchlist', value: `${watchlistAlertCount}`, tone: watchlistAlertCount ? 'positive' : 'default', helper: 'Cảnh báo liên quan danh sách theo dõi' },
+      ],
+      market_outlook: {
+        title: 'Outlook toàn thị trường',
+        summary: `Gộp dữ liệu HSX, HNX và UPCOM. Hướng chính: ${dominantDirection}.`,
+        direction: dominantDirection,
+        confidence: averageConfidence,
+      },
+      alerts,
+      news_items: newsItems,
+      watchlist_symbols: watchlistSymbols,
+      alert_count: alerts.length,
+      watchlist_alert_count: watchlistAlertCount,
+    };
+  }
+
+  private resolveDominantDirection(items: MarketAlertsOverviewResponse[]): 'up' | 'down' | 'neutral' {
+    const counts = items.reduce(
+      (acc, item) => {
+        const direction = item.market_outlook?.direction || 'neutral';
+        acc[direction] += 1;
+        return acc;
+      },
+      { up: 0, down: 0, neutral: 0 }
+    );
+    if (counts.up > counts.down && counts.up >= counts.neutral) {
+      return 'up';
+    }
+    if (counts.down > counts.up && counts.down >= counts.neutral) {
+      return 'down';
+    }
+    return 'neutral';
+  }
+
+  private applyAlertsState(): void {
+    this.alertItems = this.buildAlertItems(this.alertsOverview?.alerts || []);
+    this.newsItems = this.alertsOverview?.news_items || [];
+    this.priorityItems = this.buildPriorityItems(this.journalEntries, this.alertsOverview, this.newsItems);
+    this.dataHealthIssues = this.buildDataHealthIssues(this.overview, this.alertsOverview, this.journalEntries);
+    this.dataHealthSummary = this.buildDataHealthSummary(this.journalEntries);
+    this.aiAnalysisItems = this.buildAiAnalysisItems(this.alertsOverview);
+  }
+
   private safeNullable<T>(source$: Observable<ApiEnvelope<T | null>>): Observable<ApiEnvelope<T | null>> {
     return source$.pipe(catchError(() => of({ data: null } as ApiEnvelope<T | null>)));
   }
 
   private safeList<T>(source$: Observable<ApiEnvelope<T[]>>): Observable<ApiEnvelope<T[]>> {
     return source$.pipe(catchError(() => of({ data: [] as T[] } as ApiEnvelope<T[]>)));
+  }
+
+  private buildLightOverview(profiles: StrategyProfile[]): StrategyOverviewResponse | null {
+    const activeProfile =
+      profiles.find((item) => item.isDefault) ||
+      profiles.find((item) => item.isActive) ||
+      profiles[0] ||
+      null;
+
+    if (!activeProfile) {
+      return null;
+    }
+
+    return {
+      profiles,
+      activeProfile,
+      configSummary: {
+        formulaCount: 0,
+        screenRuleCount: 0,
+        alertRuleCount: 0,
+        checklistCount: 0,
+        versionCount: 0,
+      },
+      rankings: {
+        page: 1,
+        pageSize: 0,
+        total: 0,
+        items: [],
+      },
+      screener: {
+        page: 1,
+        pageSize: 0,
+        total: 0,
+        items: [],
+      },
+      risk: {
+        profile: activeProfile,
+        summaryCards: [],
+        highRiskItems: [],
+      },
+      journal: [],
+    };
   }
 
   private buildJournalRows(entries: StrategyJournalEntry[]): DashboardV2JournalRowVm[] {
@@ -749,6 +994,53 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     }
 
     return items.slice(0, 6);
+  }
+
+  private buildAiAnalysisItems(overview: MarketAlertsOverviewResponse | null): DashboardV2PriorityVm[] {
+    const outlook = overview?.market_outlook;
+    const items: DashboardV2PriorityVm[] = [];
+
+    if (outlook) {
+      items.push({
+        key: `ai-outlook-${overview?.exchange || this.selectedExchange}`,
+        title: outlook.title || this.t('dashboardV2.ai.outlookTitle'),
+        body: outlook.summary || this.t('dashboardV2.ai.outlookBody'),
+        meta: `${this.t('dashboardV2.ai.confidence')} ${this.decimal.format(Number(outlook.confidence || 0))}%`,
+        tone: outlook.direction === 'up' ? 'positive' : outlook.direction === 'down' ? 'danger' : 'default',
+      });
+    }
+
+    if (overview?.headline || overview?.watchlist_headline) {
+      items.push({
+        key: `ai-headline-${overview.exchange || this.selectedExchange}`,
+        title: this.t('dashboardV2.ai.keyFinding'),
+        body: overview.watchlist_headline || overview.headline,
+        meta: overview.generated_at || this.selectedExchange,
+        tone: overview.watchlist_headline ? 'warning' : 'default',
+      });
+    }
+
+    items.push({
+      key: `ai-source-${overview?.provider || 'fallback'}`,
+      title: this.t('dashboardV2.ai.dataSource'),
+      body: overview
+        ? `${overview.provider || 'Fallback'} / ${overview.model || '--'}`
+        : this.t('dashboardV2.ai.waitingData'),
+      meta: overview?.used_fallback ? this.t('dashboardV2.ai.fallback') : this.t('dashboardV2.ai.live'),
+      tone: overview?.used_fallback ? 'warning' : 'positive',
+    });
+
+    if (this.dataHealthIssues.length) {
+      items.push({
+        key: 'ai-data-health',
+        title: this.t('dashboardV2.ai.dataHealth'),
+        body: this.dataHealthIssues.slice(0, 2).join(' / '),
+        meta: this.t('dashboardV2.ai.needsReview'),
+        tone: 'warning',
+      });
+    }
+
+    return items.slice(0, 5);
   }
 
   private applyAlertNarrative(): void {
@@ -1199,7 +1491,12 @@ export class DashboardV2Page implements OnInit, OnDestroy {
       return;
     }
 
-    if (settings.defaultExchange === 'HSX' || settings.defaultExchange === 'HNX' || settings.defaultExchange === 'UPCOM') {
+    if (
+      settings.defaultExchange === 'ALL' ||
+      settings.defaultExchange === 'HSX' ||
+      settings.defaultExchange === 'HNX' ||
+      settings.defaultExchange === 'UPCOM'
+    ) {
       this.selectedExchange = settings.defaultExchange;
     }
 
@@ -1262,7 +1559,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
       issues.push(this.t('dashboardV2.dataHealth.issue.profile'));
     }
 
-    if (alerts?.exchange && alerts.exchange !== this.selectedExchange) {
+    if (this.selectedExchange !== 'ALL' && alerts?.exchange && alerts.exchange !== this.selectedExchange) {
       issues.push(this.t('dashboardV2.dataHealth.issue.exchange'));
     }
 

@@ -196,11 +196,12 @@ async def get_strategy_risk_overview(
 async def list_strategy_journal(
     authorization: str | None = Header(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    exchange: str | None = Query(default=None),
     services: tuple[AuthService, StrategyService, Any] = Depends(get_services),
 ):
     auth_service, strategy_service, _ = services
     user = await auth_service.get_current_user(_extract_bearer_token(authorization))
-    data = await strategy_service.list_journal(user, limit=limit)
+    data = await strategy_service.list_journal(user, limit=limit, exchange=exchange)
     return ApiEnvelope(data=data)
 
 
