@@ -9,6 +9,7 @@ import {
   MarketCandleItem,
   MarketDataQualityIssue,
   MarketExchangeRule,
+  MarketIntradayPoint,
   MarketSymbolListItem,
   MarketApiService,
 } from 'src/app/core/services/market-api.service';
@@ -34,6 +35,7 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
   selectedQuote: LiveSymbolQuote | null = null;
   selectedHourly: LiveSymbolHourlyItem[] = [];
   selectedCandles: MarketCandleItem[] = [];
+  selectedIntraday: MarketIntradayPoint[] = [];
   selectedSymbolMaster: MarketSymbolListItem | null = null;
   exchangeRule: MarketExchangeRule | null = null;
   dataQualityIssues: MarketDataQualityIssue[] = [];
@@ -109,6 +111,10 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
   }
 
   get chartSourceText(): string {
+    if (this.selectedIntraday.length) {
+      const latest = this.selectedIntraday[this.selectedIntraday.length - 1];
+      return `Intraday tick / ${this.selectedIntraday.length} diem / cap nhat ${this.formatTimeHms(new Date(latest.time).getTime())}`;
+    }
     if (this.selectedCandles.length) {
       const latest = this.selectedCandles[this.selectedCandles.length - 1];
       return `Candle 5m / ${this.selectedCandles.length} nến / cập nhật ${this.formatDateTime(latest?.computed_at || latest?.time)}`;
@@ -212,21 +218,24 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
 
     this.symbolSub = forkJoin({
       quote: this.api.getSymbolQuote(symbol),
+      intraday: this.api.getSymbolIntraday(symbol, 2000),
       candles: this.api.getSymbolCandles(symbol, '5m', 240),
       hourly: this.api.getSymbolHourly(symbol),
       master: this.api.getMarketSymbols({ keyword: symbol, pageSize: 1 }),
       rules: this.api.getExchangeRules(),
       dataQuality: this.api.getDataQualityIssues(120),
     }).subscribe({
-      next: ({ quote, candles, hourly, master, rules, dataQuality }) => {
+      next: ({ quote, intraday, candles, hourly, master, rules, dataQuality }) => {
         this.selectedQuote = quote.quote || null;
+        this.selectedIntraday = this.normalizeIntradayPoints(intraday.data || []);
         this.selectedCandles = candles.data || [];
         this.selectedSymbolMaster = this.resolveSymbolMaster(symbol, master.data?.items || []);
         const exchange = this.selectedSymbolMaster?.exchange || quote.exchange || null;
         this.exchangeRule = this.resolveExchangeRule(exchange, rules.data || []);
         this.dataQualityIssues = (dataQuality.data || []).filter((issue) => (issue.symbol || '').toUpperCase() === symbol);
+        const intradayItems = this.mapIntradayToHourly(this.selectedIntraday);
         const candleItems = this.mapCandlesToHourly(this.selectedCandles);
-        this.selectedHourly = (candleItems.length ? candleItems : hourly.items || []).sort(
+        this.selectedHourly = (intradayItems.length ? intradayItems : candleItems.length ? candleItems : hourly.items || []).sort(
           (left, right) => new Date(left.time).getTime() - new Date(right.time).getTime()
         );
         this.symbolLoading = false;
@@ -235,12 +244,37 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
       error: () => {
         this.selectedQuote = null;
         this.selectedHourly = [];
+        this.selectedIntraday = [];
         this.selectedCandles = [];
         this.selectedSymbolMaster = null;
         this.exchangeRule = null;
         this.dataQualityIssues = [];
         this.symbolLoading = false;
       },
+    });
+  }
+
+  private normalizeIntradayPoints(points: MarketIntradayPoint[]): MarketIntradayPoint[] {
+    return points
+      .filter((item) => item.time && this.safeChartPrice(item.price))
+      .sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime());
+  }
+
+  private mapIntradayToHourly(points: MarketIntradayPoint[]): LiveSymbolHourlyItem[] {
+    return points.map((item, index) => {
+      const close = this.safeChartPrice(item.price) || 0;
+      const previous = index > 0 ? this.safeChartPrice(points[index - 1].price) : null;
+      const open = previous || close;
+      return {
+        time: item.time,
+        open,
+        high: Math.max(open, close),
+        low: Math.min(open, close),
+        close,
+        volume: item.volume,
+        tradingValue: item.trading_value,
+        pointCount: 1,
+      };
     });
   }
 

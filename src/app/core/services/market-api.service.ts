@@ -270,6 +270,15 @@ export interface MarketCandleItem {
   computed_at: string | null;
 }
 
+export interface MarketIntradayPoint {
+  time: string;
+  price: number | null;
+  change_value: number | null;
+  change_percent: number | null;
+  volume: number | null;
+  trading_value: number | null;
+}
+
 export interface MarketCandleResampleResult {
   symbol: string;
   timeframe: string;
@@ -1664,6 +1673,16 @@ export class MarketApiService {
       30000,
       this.http.get<ApiEnvelope<MarketCandleItem[]>>(`${this.baseUrl}/api/market/symbols/${symbol}/candles`, {
         params: { timeframe, limit },
+      })
+    ).pipe(catchError(() => of({ data: [] })));
+  }
+
+  getSymbolIntraday(symbol: string, limit = 2000): Observable<ApiEnvelope<MarketIntradayPoint[]>> {
+    return this.withCache(
+      `foundation:intraday:${symbol.toUpperCase()}:${limit}`,
+      12000,
+      this.http.get<ApiEnvelope<MarketIntradayPoint[]>>(`${this.baseUrl}/api/market/symbols/${symbol}/intraday`, {
+        params: { limit },
       })
     ).pipe(catchError(() => of({ data: [] })));
   }

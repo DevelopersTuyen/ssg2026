@@ -57,7 +57,7 @@
           </article>
           <article class="foundation-mini-card">
             <span>Nguồn chart</span>
-            <strong>{{ selectedCandles.length ? 'Candle engine' : 'Fallback' }}</strong>
+            <strong>{{ selectedIntraday.length ? 'Intraday realtime' : selectedCandles.length ? 'Candle engine' : 'Fallback' }}</strong>
             <small>{{ chartSourceText }}</small>
           </article>
         </div>
