@@ -327,21 +327,42 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
     }
 
     this.destroyChart();
-    const closeSeries = this.selectedHourly.map((item) => ({
-      x: new Date(item.time).getTime(),
-      y: Number(item.close || 0),
-    }));
+    const priceBand = this.resolvePriceBand();
+    const candleSeries = this.buildCandleSeries();
+    const canRenderCandles = candleSeries.some((item) => item.y.some((value, index, values) => index > 0 && value !== values[0]));
+    const chartType = canRenderCandles ? 'candlestick' : 'area';
+    const closeSeries = canRenderCandles
+      ? candleSeries
+      : candleSeries.map((item) => ({
+          x: item.x,
+          y: item.y[3],
+        }));
 
     this.chart = new ApexCharts(el, {
       chart: {
-        type: 'area',
+        type: chartType,
         height: 360,
         toolbar: { show: false },
         animations: { enabled: false },
         fontFamily: 'inherit',
       },
       series: [{ name: 'Giá', data: closeSeries }],
-      stroke: { width: 3, curve: 'smooth' },
+      legend: { show: false },
+      annotations: {
+        yaxis: this.buildPriceBandAnnotations(priceBand),
+      },
+      plotOptions: {
+        candlestick: {
+          colors: {
+            upward: '#16a34a',
+            downward: '#dc2626',
+          },
+          wick: {
+            useFillColor: true,
+          },
+        },
+      },
+      stroke: { width: canRenderCandles ? 1 : 3, curve: 'smooth' },
       colors: ['#16a34a'],
       fill: {
         type: 'gradient',
@@ -368,7 +389,7 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
       },
       tooltip: {
         shared: false,
-        intersect: true,
+        intersect: !canRenderCandles,
         x: { formatter: (value: number) => this.formatTimeHms(value) },
         y: { formatter: (value: number) => this.formatPrice(value) },
       },
@@ -379,6 +400,140 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
     });
 
     this.chart.render();
+  }
+
+  private buildCandleSeries(): Array<{ x: number; y: [number, number, number, number] }> {
+    return this.selectedHourly
+      .map((item) => {
+        const close = this.safeChartPrice(item.close);
+        const open = this.safeChartPrice(item.open) ?? close;
+        const high = this.safeChartPrice(item.high) ?? close ?? open;
+        const low = this.safeChartPrice(item.low) ?? close ?? open;
+        const fallback = close ?? open ?? high ?? low;
+        if (!fallback) {
+          return null;
+        }
+
+        const values = [
+          open ?? fallback,
+          Math.max(high ?? fallback, open ?? fallback, close ?? fallback),
+          Math.min(low ?? fallback, open ?? fallback, close ?? fallback),
+          close ?? fallback,
+        ] as [number, number, number, number];
+        return {
+          x: new Date(item.time).getTime(),
+          y: values,
+        };
+      })
+      .filter((item): item is { x: number; y: [number, number, number, number] } => !!item && Number.isFinite(item.x));
+  }
+
+  private safeChartPrice(value: number | null | undefined): number | null {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  }
+
+  private resolvePriceBand(): { ceiling: number; reference: number; floor: number } | null {
+    const reference = this.resolveReferencePrice();
+    const limitPercent = Number(this.exchangeRule?.price_limit_percent);
+    if (!reference || !Number.isFinite(reference) || !limitPercent || !Number.isFinite(limitPercent)) {
+      return null;
+    }
+
+    const band = reference * limitPercent / 100;
+    return {
+      ceiling: reference + band,
+      reference,
+      floor: Math.max(0, reference - band),
+    };
+  }
+
+  private resolveReferencePrice(): number | null {
+    const reference = this.normalizeComparablePrice(this.selectedQuote?.referencePrice, this.selectedQuote?.price);
+    if (reference) {
+      return reference;
+    }
+
+    const price = Number(this.selectedQuote?.price);
+    const changeValue = Number(this.selectedQuote?.changeValue);
+    if (Number.isFinite(price) && price > 0 && Number.isFinite(changeValue)) {
+      const inferred = price - changeValue;
+      if (inferred > 0) {
+        return inferred;
+      }
+    }
+
+    const changePercent = Number(this.selectedQuote?.changePercent);
+    if (Number.isFinite(price) && price > 0 && Number.isFinite(changePercent) && changePercent !== -100) {
+      const inferred = price / (1 + changePercent / 100);
+      if (inferred > 0) {
+        return inferred;
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeComparablePrice(value: number | null | undefined, currentPrice: number | null | undefined): number | null {
+    const ref = Number(value);
+    const price = Number(currentPrice);
+    if (!Number.isFinite(ref) || ref <= 0) {
+      return null;
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      return ref;
+    }
+    if (ref > price * 100) {
+      return ref / 1000;
+    }
+    if (ref > price * 10) {
+      return ref / 100;
+    }
+    return ref;
+  }
+
+  private buildPriceBandAnnotations(priceBand: { ceiling: number; reference: number; floor: number } | null): Array<Record<string, any>> {
+    if (!priceBand) {
+      return [];
+    }
+
+    return [
+      this.buildPriceBandAnnotation(priceBand.ceiling, 'Tran', '#dc2626'),
+      this.buildPriceBandAnnotation(priceBand.reference, 'TC', '#f59e0b'),
+      this.buildPriceBandAnnotation(priceBand.floor, 'San', '#2563eb'),
+    ];
+  }
+
+  private buildPriceBandAnnotation(value: number, label: string, color: string): Record<string, any> {
+    return {
+      y: value,
+      borderColor: color,
+      strokeDashArray: 5,
+      label: {
+        borderColor: color,
+        offsetX: -8,
+        style: {
+          background: color,
+          color: '#fff',
+          fontSize: '11px',
+          fontWeight: 800,
+        },
+        text: `${label} ${this.formatPrice(value)}`,
+      },
+    };
+  }
+
+  private resolveYAxisPadding(values: number[]): number {
+    if (!values.length) {
+      return 1;
+    }
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min;
+    if (range <= 0) {
+      return Math.max(max * 0.01, 1);
+    }
+    return Math.max(range * 0.08, max * 0.003, 1);
   }
 
   private destroyChart(): void {
