@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +47,12 @@ class MarketRepository:
         source: str,
         raw_json: dict | list | None,
         updated_at: datetime,
+        industry: str | None = None,
+        sector: str | None = None,
+        market_cap: float | None = None,
+        shares_outstanding: float | None = None,
+        foreign_room: float | None = None,
+        trading_status: str | None = None,
     ) -> None:
         raw_json = to_jsonable(raw_json)
         stmt = insert(MarketSymbol).values(
@@ -54,6 +60,12 @@ class MarketRepository:
             name=name,
             exchange=exchange,
             instrument_type=instrument_type,
+            industry=industry,
+            sector=sector,
+            market_cap=market_cap,
+            shares_outstanding=shares_outstanding,
+            foreign_room=foreign_room,
+            trading_status=trading_status,
             source=source,
             raw_json=raw_json,
             updated_at=updated_at,
@@ -65,6 +77,12 @@ class MarketRepository:
                 "name": name,
                 "exchange": exchange,
                 "instrument_type": instrument_type,
+                "industry": func.coalesce(stmt.excluded.industry, MarketSymbol.industry),
+                "sector": func.coalesce(stmt.excluded.sector, MarketSymbol.sector),
+                "market_cap": func.coalesce(stmt.excluded.market_cap, MarketSymbol.market_cap),
+                "shares_outstanding": func.coalesce(stmt.excluded.shares_outstanding, MarketSymbol.shares_outstanding),
+                "foreign_room": func.coalesce(stmt.excluded.foreign_room, MarketSymbol.foreign_room),
+                "trading_status": func.coalesce(stmt.excluded.trading_status, MarketSymbol.trading_status),
                 "source": source,
                 "raw_json": raw_json,
                 "updated_at": updated_at,

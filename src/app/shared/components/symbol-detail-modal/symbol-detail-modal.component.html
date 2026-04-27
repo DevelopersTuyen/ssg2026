@@ -38,10 +38,43 @@
         </div>
       </div>
 
-      <div class="symbol-chart-box">
-        <div [id]="chartHostId"></div>
-        <div class="empty-state" *ngIf="!selectedHourly.length && !symbolLoading">
-          {{ 'marketWatch.empty.symbolDetail' | translate }}
+      <div class="symbol-main">
+        <div class="symbol-foundation-grid">
+          <article class="foundation-mini-card">
+            <span>Ngữ cảnh sàn</span>
+            <strong>{{ selectedSymbolMaster?.exchange || selectedQuote?.quoteTime || '--' }}</strong>
+            <small>{{ exchangeContextText }}</small>
+          </article>
+          <article class="foundation-mini-card">
+            <span>Master data</span>
+            <strong>{{ selectedSymbolMaster?.name || selectedSymbolDisplay }}</strong>
+            <small>{{ masterDataText }}</small>
+          </article>
+          <article class="foundation-mini-card" [class.warning]="dataQualityIssues.length">
+            <span>Data health</span>
+            <strong>{{ dataQualityIssues.length ? 'Cần xem' : 'Sạch' }}</strong>
+            <small>{{ dataQualityText }}</small>
+          </article>
+          <article class="foundation-mini-card">
+            <span>Nguồn chart</span>
+            <strong>{{ selectedCandles.length ? 'Candle engine' : 'Fallback' }}</strong>
+            <small>{{ chartSourceText }}</small>
+          </article>
+        </div>
+
+        <div class="data-quality-list" *ngIf="dataQualityIssues.length">
+          <div class="data-quality-row" *ngFor="let issue of dataQualityIssues | slice:0:3" [attr.data-severity]="issue.severity">
+            <strong>{{ issue.severity }}</strong>
+            <span>{{ issue.message }}</span>
+            <small>{{ issue.detected_at | date:'short' }}</small>
+          </div>
+        </div>
+
+        <div class="symbol-chart-box">
+          <div [id]="chartHostId"></div>
+          <div class="empty-state" *ngIf="!selectedHourly.length && !symbolLoading">
+            {{ 'marketWatch.empty.symbolDetail' | translate }}
+          </div>
         </div>
       </div>
     </div>

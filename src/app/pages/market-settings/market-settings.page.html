@@ -259,6 +259,125 @@
             </article>
           </div>
 
+          <section class="foundation-board">
+            <div class="foundation-toolbar">
+              <div>
+                <div class="section-title mb-1">Data Foundation</div>
+                <p class="mb-0">Rule sàn, kiểm tra chất lượng dữ liệu, alert event và master data mã.</p>
+              </div>
+              <div class="foundation-actions">
+                <select class="form-select form-select-sm" [(ngModel)]="foundationExchange">
+                  <option value="ALL">Tất cả sàn</option>
+                  <option value="HSX">HSX</option>
+                  <option value="HNX">HNX</option>
+                  <option value="UPCOM">UPCOM</option>
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadDataFoundation()" [disabled]="foundationLoading">Tải nền</button>
+                <button type="button" class="btn btn-sm btn-dark" (click)="scanDataQuality()" [disabled]="foundationLoading">Scan dữ liệu</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="refreshAlertEvents()" [disabled]="foundationLoading">Tạo alert events</button>
+                <button type="button" class="btn btn-sm btn-outline-success" (click)="deliverAlertEvents()" [disabled]="foundationLoading">Gửi pending</button>
+              </div>
+            </div>
+
+            <div class="status-row px-0" *ngIf="foundationLoading || foundationMessage || foundationError">
+              <div class="status-pill loading" *ngIf="foundationLoading">Đang xử lý nền dữ liệu...</div>
+              <div class="status-pill success" *ngIf="foundationMessage">{{ foundationMessage }}</div>
+              <div class="status-pill error" *ngIf="foundationError">{{ foundationError }}</div>
+            </div>
+
+            <div class="foundation-grid">
+              <article class="foundation-card foundation-rules">
+                <div class="foundation-card-head">
+                  <strong>Exchange rules</strong>
+                  <span>{{ exchangeRules.length }} sàn</span>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th>Sàn</th>
+                        <th>Biên độ</th>
+                        <th>Lot</th>
+                        <th>Bước giá</th>
+                        <th>Lệnh</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let rule of exchangeRules">
+                        <td><strong>{{ rule.exchange }}</strong></td>
+                        <td>{{ rule.price_limit_percent || '--' }}%</td>
+                        <td>{{ rule.lot_size }}</td>
+                        <td>{{ rule.tick_size_rules.length }} rule</td>
+                        <td>{{ rule.supported_order_types.join(', ') }}</td>
+                      </tr>
+                      <tr *ngIf="!exchangeRules.length">
+                        <td colspan="5" class="text-muted">Chưa có rule sàn.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article class="foundation-card">
+                <div class="foundation-card-head">
+                  <strong>Data quality</strong>
+                  <span>{{ dataQualityIssues.length }} lỗi mở</span>
+                </div>
+                <div class="foundation-list">
+                  <div class="foundation-list-row" *ngFor="let issue of dataQualityIssues | slice:0:8" [attr.data-tone]="issueSeverityClass(issue)">
+                    <strong>{{ issue.symbol || issue.exchange || issue.scope }}</strong>
+                    <span>{{ issue.message }}</span>
+                    <small>{{ issue.severity }} / {{ issue.detected_at | date:'short' }}</small>
+                  </div>
+                  <div class="empty-state-panel compact" *ngIf="!dataQualityIssues.length">
+                    <div class="empty-state-title">Chưa có lỗi mở</div>
+                    <div class="empty-state-copy">Bấm Scan dữ liệu để kiểm tra quote/intraday mới nhất.</div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="foundation-card">
+                <div class="foundation-card-head">
+                  <strong>Alert delivery</strong>
+                  <span>{{ alertEvents.length }} pending</span>
+                </div>
+                <div class="foundation-list">
+                  <div class="foundation-list-row" *ngFor="let event of alertEvents | slice:0:8" [attr.data-tone]="event.severity">
+                    <strong>{{ event.symbol || event.exchange || 'MARKET' }}</strong>
+                    <span>{{ event.title }}</span>
+                    <small>{{ event.delivery_channels.join(', ') }} / {{ event.created_at | date:'short' }}</small>
+                  </div>
+                  <div class="empty-state-panel compact" *ngIf="!alertEvents.length">
+                    <div class="empty-state-title">Chưa có alert pending</div>
+                    <div class="empty-state-copy">Bấm Tạo alert events để materialize cảnh báo từ overview.</div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="foundation-card">
+                <div class="foundation-card-head">
+                  <strong>Master data</strong>
+                  <span>{{ masterDataItems.length }} mã</span>
+                </div>
+                <div class="input-group input-group-sm mb-2">
+                  <input class="form-control" placeholder="Tìm mã, ví dụ FPT" [(ngModel)]="masterDataKeyword" (keyup.enter)="searchMasterData()" />
+                  <button type="button" class="btn btn-outline-secondary" (click)="searchMasterData()">Tìm</button>
+                </div>
+                <div class="foundation-list">
+                  <div class="foundation-list-row" *ngFor="let item of masterDataItems">
+                    <strong>{{ item.symbol }} <small>{{ item.exchange || '--' }}</small></strong>
+                    <span>{{ item.name || '--' }}</span>
+                    <small>{{ item.industry || item.sector || 'Chưa có ngành' }} / {{ formatLargeNumber(item.market_cap) }}</small>
+                  </div>
+                  <div class="empty-state-panel compact" *ngIf="!masterDataItems.length">
+                    <div class="empty-state-title">Tìm mã để kiểm tra kho chuẩn</div>
+                    <div class="empty-state-copy">Hiển thị ngành, sector, vốn hóa, room ngoại, trạng thái khi backend có dữ liệu.</div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <div class="form-grid">
             <div class="form-item">
               <label>Auto refresh (giay)</label>

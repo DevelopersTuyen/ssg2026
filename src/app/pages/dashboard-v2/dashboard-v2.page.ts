@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+﻿import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Observable, Subscription, forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
@@ -9,9 +9,12 @@ import {
   ApiEnvelope,
   ExchangeTab,
   MarketSettingsData,
+  MarketAlertEventItem,
   MarketAlertItem,
   MarketAlertNewsItem,
   MarketAlertsOverviewResponse,
+  MarketDataQualityIssue,
+  MarketExchangeRule,
   StrategyAlertRule,
   StrategyChecklistItem,
   StrategyDriver,
@@ -157,10 +160,14 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   stickyHeaderEnabled = true;
   dataHealthIssues: string[] = [];
   dataHealthSummary = '';
+  exchangeSessionSummary = '';
   insightPanel: DashboardV2InsightVm = { title: '', body: '', meta: '' };
 
   overview: StrategyOverviewResponse | null = null;
   alertsOverview: MarketAlertsOverviewResponse | null = null;
+  exchangeRules: MarketExchangeRule[] = [];
+  dataQualityOpenIssues: MarketDataQualityIssue[] = [];
+  pendingAlertEvents: MarketAlertEventItem[] = [];
 
   journalRows: DashboardV2JournalRowVm[] = [];
   alertItems: DashboardV2AlertVm[] = [];
@@ -687,9 +694,15 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     this.dashboardSub = forkJoin({
       profiles: this.safeList(this.api.listStrategyProfiles()),
       journal: this.safeList(this.api.listStrategyJournal(18, this.selectedExchange)),
+      rules: this.safeList(this.api.getExchangeRules()),
+      dataQuality: this.safeList(this.api.getDataQualityIssues(80)),
+      alertEvents: this.safeList(this.api.getAlertEvents('pending', 60)),
     }).subscribe({
-      next: ({ profiles, journal }) => {
+      next: ({ profiles, journal, rules, dataQuality, alertEvents }) => {
         this.overview = this.buildLightOverview(profiles.data);
+        this.exchangeRules = rules.data || [];
+        this.dataQualityOpenIssues = this.filterFoundationByExchange(dataQuality.data || []);
+        this.pendingAlertEvents = this.filterFoundationByExchange(alertEvents.data || []);
 
         const journalEntries = journal.data || [];
         this.journalEntries = journalEntries;
@@ -767,18 +780,18 @@ export class DashboardV2Page implements OnInit, OnDestroy {
       model: items.find((item) => item.model)?.model || '',
       used_fallback: items.some((item) => item.used_fallback),
       generated_at: generatedAt,
-      headline: `Tổng hợp ${items.length} sàn: ${alerts.length} cảnh báo, ${newsItems.length} tin liên quan.`,
+      headline: `Tá»•ng há»£p ${items.length} sĂ n: ${alerts.length} cáº£nh bĂ¡o, ${newsItems.length} tin liĂªn quan.`,
       watchlist_headline: watchlistSymbols.length
-        ? `${watchlistSymbols.length} mã watchlist đang được theo dõi trên toàn thị trường.`
-        : 'Chưa có mã watchlist nổi bật trên toàn thị trường.',
+        ? `${watchlistSymbols.length} mĂ£ watchlist Ä‘ang Ä‘Æ°á»£c theo dĂµi trĂªn toĂ n thá»‹ trÆ°á»ng.`
+        : 'ChÆ°a cĂ³ mĂ£ watchlist ná»•i báº­t trĂªn toĂ n thá»‹ trÆ°á»ng.',
       summary_cards: [
-        { label: 'Tổng cảnh báo', value: `${alerts.length}`, tone: alerts.length ? 'warning' : 'default', helper: 'Gộp HSX, HNX và UPCOM' },
-        { label: 'Ưu tiên cao', value: `${criticalCount}`, tone: criticalCount ? 'danger' : 'default', helper: 'Số cảnh báo critical toàn thị trường' },
-        { label: 'Watchlist', value: `${watchlistAlertCount}`, tone: watchlistAlertCount ? 'positive' : 'default', helper: 'Cảnh báo liên quan danh sách theo dõi' },
+        { label: 'Tá»•ng cáº£nh bĂ¡o', value: `${alerts.length}`, tone: alerts.length ? 'warning' : 'default', helper: 'Gá»™p HSX, HNX vĂ  UPCOM' },
+        { label: 'Æ¯u tiĂªn cao', value: `${criticalCount}`, tone: criticalCount ? 'danger' : 'default', helper: 'Sá»‘ cáº£nh bĂ¡o critical toĂ n thá»‹ trÆ°á»ng' },
+        { label: 'Watchlist', value: `${watchlistAlertCount}`, tone: watchlistAlertCount ? 'positive' : 'default', helper: 'Cáº£nh bĂ¡o liĂªn quan danh sĂ¡ch theo dĂµi' },
       ],
       market_outlook: {
-        title: 'Outlook toàn thị trường',
-        summary: `Gộp dữ liệu HSX, HNX và UPCOM. Hướng chính: ${dominantDirection}.`,
+        title: 'Outlook toĂ n thá»‹ trÆ°á»ng',
+        summary: `Gá»™p dá»¯ liá»‡u HSX, HNX vĂ  UPCOM. HÆ°á»›ng chĂ­nh: ${dominantDirection}.`,
         direction: dominantDirection,
         confidence: averageConfidence,
       },
@@ -808,12 +821,76 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     return 'neutral';
   }
 
+  private filterFoundationByExchange<T extends { exchange?: string | null }>(items: T[]): T[] {
+    if (this.selectedExchange === 'ALL') {
+      return items;
+    }
+    return items.filter((item) => (item.exchange || '').toUpperCase() === this.selectedExchange);
+  }
+
+  private buildDataQualityIssues(): string[] {
+    return this.dataQualityOpenIssues.slice(0, 4).map((issue) => {
+      const target = issue.symbol || issue.exchange || issue.scope;
+      return `${target}: ${issue.message}`;
+    });
+  }
+
+  private buildExchangeSessionSummary(): string {
+    const rules = this.selectedExchange === 'ALL'
+      ? this.exchangeRules
+      : this.exchangeRules.filter((rule) => rule.exchange === this.selectedExchange);
+    if (!rules.length) {
+      return '';
+    }
+
+    return rules
+      .map((rule) => {
+        const session = this.resolveCurrentSession(rule);
+        return `${rule.exchange}: ${session}`;
+      })
+      .join(' / ');
+  }
+
+  private resolveCurrentSession(rule: MarketExchangeRule): string {
+    const now = new Date();
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    if (now.getDay() === 0 || now.getDay() === 6) {
+      return 'nghỉ cuối tuần';
+    }
+    for (const session of rule.trading_sessions || []) {
+      const start = this.sessionMinutes(session['start']);
+      const end = this.sessionMinutes(session['end']);
+      if (minutes >= start && minutes < end) {
+        return session['is_break'] ? 'nghỉ giữa phiên' : (session['label'] || session['code'] || 'đang giao dịch');
+      }
+    }
+    return 'đóng cửa';
+  }
+
+  private sessionMinutes(value: string | null | undefined): number {
+    if (!value || !value.includes(':')) {
+      return 0;
+    }
+    const [hour, minute] = value.split(':').map((part) => Number(part));
+    return hour * 60 + minute;
+  }
+
   private applyAlertsState(): void {
-    this.alertItems = this.buildAlertItems(this.alertsOverview?.alerts || []);
+    this.alertItems = [
+      ...this.buildAlertItems(this.alertsOverview?.alerts || []),
+      ...this.buildAlertItemsFromEvents(this.pendingAlertEvents),
+    ].slice(0, 12);
     this.newsItems = this.alertsOverview?.news_items || [];
-    this.priorityItems = this.buildPriorityItems(this.journalEntries, this.alertsOverview, this.newsItems);
-    this.dataHealthIssues = this.buildDataHealthIssues(this.overview, this.alertsOverview, this.journalEntries);
+    this.priorityItems = [
+      ...this.buildFoundationPriorityItems(),
+      ...this.buildPriorityItems(this.journalEntries, this.alertsOverview, this.newsItems),
+    ].slice(0, 8);
+    this.dataHealthIssues = [
+      ...this.buildDataQualityIssues(),
+      ...this.buildDataHealthIssues(this.overview, this.alertsOverview, this.journalEntries),
+    ].slice(0, 6);
     this.dataHealthSummary = this.buildDataHealthSummary(this.journalEntries);
+    this.exchangeSessionSummary = this.buildExchangeSessionSummary();
     this.aiAnalysisItems = this.buildAiAnalysisItems(this.alertsOverview);
   }
 
@@ -923,6 +1000,68 @@ export class DashboardV2Page implements OnInit, OnDestroy {
         priceLabel: item.price != null ? this.formatMoney(item.price) : '--',
         tags: (item.tags || []).slice(0, 3),
       }));
+  }
+
+  private buildAlertItemsFromEvents(events: MarketAlertEventItem[]): DashboardV2AlertVm[] {
+    return events.slice(0, 6).map((event) => ({
+      id: `event-${event.id}`,
+      title: event.title,
+      message: event.message,
+      symbol: event.symbol || event.exchange || this.t('dashboardV2.marketSymbolFallback'),
+      timeLabel: this.formatRelativeTime(event.created_at),
+      severity: event.severity === 'critical' || event.severity === 'warning' || event.severity === 'info'
+        ? event.severity
+        : 'info',
+      confidenceLabel: event.status,
+      directionLabel: 'event',
+      changeLabel: event.delivery_channels.join(', ') || 'in-app',
+      priceLabel: event.exchange || '--',
+      tags: [event.scope, event.status].filter(Boolean).slice(0, 3),
+    }));
+  }
+
+  private buildFoundationPriorityItems(): DashboardV2PriorityVm[] {
+    const items: DashboardV2PriorityVm[] = [];
+    const criticalIssues = this.dataQualityOpenIssues.filter((issue) => issue.severity === 'critical');
+    if (criticalIssues.length) {
+      items.push({
+        key: 'foundation-data-quality-critical',
+        title: 'Data quality cần kiểm tra',
+        body: `${criticalIssues.length} lỗi critical đang mở. ${criticalIssues[0]?.symbol || criticalIssues[0]?.scope || ''} - ${criticalIssues[0]?.message || ''}`,
+        meta: this.selectedExchange,
+        tone: 'danger',
+      });
+    } else if (this.dataQualityOpenIssues.length) {
+      items.push({
+        key: 'foundation-data-quality-warning',
+        title: 'Data health',
+        body: `${this.dataQualityOpenIssues.length} cảnh báo dữ liệu đang mở.`,
+        meta: this.selectedExchange,
+        tone: 'warning',
+      });
+    }
+
+    if (this.pendingAlertEvents.length) {
+      items.push({
+        key: 'foundation-alert-events',
+        title: 'Alert events pending',
+        body: `${this.pendingAlertEvents.length} cảnh báo đã được materialize và chờ delivery.`,
+        meta: this.pendingAlertEvents[0]?.delivery_channels?.join(', ') || 'in-app',
+        tone: 'warning',
+      });
+    }
+
+    if (this.exchangeSessionSummary) {
+      items.push({
+        key: 'foundation-exchange-session',
+        title: 'Trạng thái phiên',
+        body: this.exchangeSessionSummary,
+        meta: this.selectedExchange,
+        tone: 'default',
+      });
+    }
+
+    return items;
   }
 
   private buildPriorityItems(
@@ -1783,3 +1922,4 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     return entry.id || Date.now();
   }
 }
+

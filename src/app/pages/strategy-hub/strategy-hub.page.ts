@@ -20,6 +20,7 @@ import {
   StrategyScreenRule,
   StrategyScoredItem,
   StrategySignalItem,
+  MarketDataQualityIssue,
   MarketApiService,
 } from 'src/app/core/services/market-api.service';
 
@@ -269,6 +270,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   activeProfileId: number | null = null;
   config: StrategyProfileConfigResponse | null = null;
   rankings: StrategyPagedResponse | null = null;
+  dataQualityIssues: MarketDataQualityIssue[] = [];
   screener: StrategyPagedResponse | null = null;
   risk: StrategyRiskOverviewResponse | null = null;
   journal: StrategyJournalEntry[] = [];
@@ -338,10 +340,12 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
       if (!this.activeView || !this.activeProfileId) return;
       if (domains.some((item) => ['quotes', 'intraday', 'news', 'financial', 'seedSymbols'].includes(item))) {
+        this.loadDataQualityIssues();
         this.refreshActiveTabData(true);
       }
     });
     this.loadOverview();
+    this.loadDataQualityIssues();
   }
 
   ionViewDidEnter(): void {
@@ -378,6 +382,31 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
   get enabledFormulaLabels(): string[] {
     return this.enabledFormulas.map((item) => item.label);
+  }
+
+  loadDataQualityIssues(): void {
+    this.api.getDataQualityIssues(120).subscribe({
+      next: (response) => {
+        this.dataQualityIssues = response.data || [];
+      },
+      error: () => {
+        this.dataQualityIssues = [];
+      },
+    });
+  }
+
+  getSymbolDataQualityIssues(symbol: string): MarketDataQualityIssue[] {
+    const normalized = (symbol || '').toUpperCase();
+    return this.dataQualityIssues.filter((issue) => (issue.symbol || '').toUpperCase() === normalized);
+  }
+
+  getSymbolDataQualityLabel(symbol: string): string {
+    const issues = this.getSymbolDataQualityIssues(symbol);
+    if (!issues.length) {
+      return '';
+    }
+    const criticalCount = issues.filter((issue) => issue.severity === 'critical').length;
+    return criticalCount ? `${criticalCount} lỗi critical` : `${issues.length} cảnh báo dữ liệu`;
   }
 
   get scoringTotalPages(): number {

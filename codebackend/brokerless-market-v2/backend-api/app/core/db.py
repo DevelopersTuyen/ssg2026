@@ -14,6 +14,10 @@ async def init_db() -> None:
         AppRole,
         AppUser,
         AppUserSetting,
+        MarketAlertEvent,
+        MarketCandle,
+        MarketDataQualityIssue,
+        MarketExchangeRule,
         MarketFinancialBalanceSheet,
         MarketFinancialCashFlow,
         MarketFinancialIncomeStatement,
@@ -41,10 +45,17 @@ async def init_db() -> None:
     )
     from app.repositories.auth_repo import AuthRepository
     from app.services.auth_service import seed_authorization_data
+    from app.services.exchange_rules_service import seed_exchange_rules
     from app.services.strategy_service import seed_default_strategy_data
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.exec_driver_sql("ALTER TABLE market_symbols ADD COLUMN IF NOT EXISTS industry VARCHAR(120)")
+        await conn.exec_driver_sql("ALTER TABLE market_symbols ADD COLUMN IF NOT EXISTS sector VARCHAR(120)")
+        await conn.exec_driver_sql("ALTER TABLE market_symbols ADD COLUMN IF NOT EXISTS market_cap DOUBLE PRECISION")
+        await conn.exec_driver_sql("ALTER TABLE market_symbols ADD COLUMN IF NOT EXISTS shares_outstanding DOUBLE PRECISION")
+        await conn.exec_driver_sql("ALTER TABLE market_symbols ADD COLUMN IF NOT EXISTS foreign_room DOUBLE PRECISION")
+        await conn.exec_driver_sql("ALTER TABLE market_symbols ADD COLUMN IF NOT EXISTS trading_status VARCHAR(50)")
         await conn.exec_driver_sql("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS email VARCHAR(255)")
         await conn.exec_driver_sql("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS department VARCHAR(120)")
         await conn.exec_driver_sql("ALTER TABLE strategy_formula_parameters ALTER COLUMN formula_id DROP NOT NULL")
@@ -61,4 +72,5 @@ async def init_db() -> None:
     async with SessionLocal() as session:
         await seed_authorization_data(AuthRepository(session))
         await seed_default_strategy_data(session)
+        await seed_exchange_rules(session)
         await session.commit()

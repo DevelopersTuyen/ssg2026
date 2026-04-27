@@ -33,8 +33,10 @@
           <span>{{ insightPanel.body }}</span>
         </div>
         <div class="dashboard-v2-insight-meta">
+          <span *ngIf="exchangeSessionSummary">{{ exchangeSessionSummary }}</span>
           <span *ngIf="insightPanel.meta">{{ insightPanel.meta }}</span>
           <span *ngIf="dataHealthIssues.length" class="insight-warning">{{ dataHealthIssues.length }} {{ 'dashboardV2.dataHealth.issues' | translate }}</span>
+          <span *ngIf="pendingAlertEvents.length" class="insight-warning">{{ pendingAlertEvents.length }} alert events</span>
         </div>
       </section>
 

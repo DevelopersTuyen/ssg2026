@@ -61,6 +61,12 @@ class SymbolSeedService:
                         source=payload.get("source") or "seed",
                         raw_json=payload.get("raw_json"),
                         updated_at=now,
+                        industry=payload.get("industry"),
+                        sector=payload.get("sector"),
+                        market_cap=payload.get("market_cap"),
+                        shares_outstanding=payload.get("shares_outstanding"),
+                        foreign_room=payload.get("foreign_room"),
+                        trading_status=payload.get("trading_status"),
                     )
 
                 await repo.create_sync_log(
@@ -138,6 +144,53 @@ class SymbolSeedService:
                 source=f"listing:{source}",
                 name=row.get("organ_name") or row.get("name") or row.get("organ_short_name") or symbol,
                 raw_json=row,
+                industry=self._pick_text(
+                    row,
+                    "industry",
+                    "industry_name",
+                    "icb_name",
+                    "icbName",
+                    "organ_industry",
+                    "organIndustry",
+                ),
+                sector=self._pick_text(
+                    row,
+                    "sector",
+                    "sector_name",
+                    "sectorName",
+                    "icb_code",
+                    "icbCode",
+                    "industry_group",
+                ),
+                market_cap=self._pick_float(
+                    row,
+                    "market_cap",
+                    "marketCap",
+                    "market_capitalization",
+                    "marketCapitalization",
+                    "listed_value",
+                    "listedValue",
+                ),
+                shares_outstanding=self._pick_float(
+                    row,
+                    "shares_outstanding",
+                    "sharesOutstanding",
+                    "outstanding_share",
+                    "outstandingShare",
+                    "listed_share",
+                    "listedShare",
+                    "issue_share",
+                    "issueShare",
+                ),
+                foreign_room=self._pick_float(
+                    row,
+                    "foreign_room",
+                    "foreignRoom",
+                    "foreign_percent",
+                    "foreignPercent",
+                    "foreign_ownership_limit",
+                ),
+                trading_status=self._pick_text(row, "trading_status", "tradingStatus", "status", "stock_status"),
             )
 
     def _upsert_symbol_payload(
@@ -149,6 +202,12 @@ class SymbolSeedService:
         source: str,
         name: str | None = None,
         raw_json: dict | None = None,
+        industry: str | None = None,
+        sector: str | None = None,
+        market_cap: float | None = None,
+        shares_outstanding: float | None = None,
+        foreign_room: float | None = None,
+        trading_status: str | None = None,
     ) -> None:
         if not symbol:
             return
@@ -160,6 +219,12 @@ class SymbolSeedService:
             "name": existing.get("name") or name or symbol,
             "exchange": existing.get("exchange") or exchange,
             "instrument_type": existing.get("instrument_type") or instrument_type,
+            "industry": existing.get("industry") or industry,
+            "sector": existing.get("sector") or sector,
+            "market_cap": existing.get("market_cap") or market_cap,
+            "shares_outstanding": existing.get("shares_outstanding") or shares_outstanding,
+            "foreign_room": existing.get("foreign_room") or foreign_room,
+            "trading_status": existing.get("trading_status") or trading_status,
             "source": existing.get("source") or source,
             "raw_json": existing.get("raw_json") or raw_json or {"symbol": symbol, "exchange": exchange},
         }
@@ -177,3 +242,24 @@ class SymbolSeedService:
         if "index" in text:
             return "index"
         return text
+
+    def _pick_text(self, row: dict, *keys: str) -> str | None:
+        for key in keys:
+            value = row.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return None
+
+    def _pick_float(self, row: dict, *keys: str) -> float | None:
+        for key in keys:
+            value = row.get(key)
+            if value in (None, ""):
+                continue
+            try:
+                return float(str(value).replace(",", ""))
+            except (TypeError, ValueError):
+                continue
+        return None

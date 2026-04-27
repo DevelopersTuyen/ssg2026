@@ -6,6 +6,7 @@ import { environment } from 'src/environments/environment';
 
 export type ExchangeTab = 'HSX' | 'HNX' | 'UPCOM';
 export type SortTab = 'all' | 'actives' | 'gainers' | 'losers';
+export type MarketExchangeFilter = ExchangeTab | 'ALL';
 
 export interface ApiEnvelope<T = any> {
   data: T;
@@ -217,7 +218,115 @@ export interface SymbolSearchItem {
   name?: string | null;
   exchange?: string | null;
   instrument_type?: string | null;
+  industry?: string | null;
+  sector?: string | null;
+  market_cap?: number | null;
+  shares_outstanding?: number | null;
+  foreign_room?: number | null;
+  trading_status?: string | null;
   updated_at?: string | null;
+}
+
+export interface MarketSymbolListItem extends SymbolSearchItem {
+  source?: string | null;
+  is_active?: boolean;
+}
+
+export interface MarketSymbolListResponse {
+  items: MarketSymbolListItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface MarketExchangeRule {
+  exchange: string;
+  timezone: string;
+  trading_sessions: Array<Record<string, any>>;
+  tick_size_rules: Array<Record<string, any>>;
+  lot_size: number;
+  odd_lot_size: number;
+  price_limit_percent: number | null;
+  holiday_calendar: Array<string | Record<string, any>>;
+  supported_order_types: string[];
+  is_active: boolean;
+  updated_at: string | null;
+}
+
+export interface MarketCandleItem {
+  symbol: string;
+  exchange: string | null;
+  timeframe: string;
+  time: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+  trading_value: number | null;
+  point_count: number;
+  quality_flags: Record<string, any>;
+  computed_at: string | null;
+}
+
+export interface MarketCandleResampleResult {
+  symbol: string;
+  timeframe: string;
+  source_points: number;
+  candles_upserted: number;
+}
+
+export interface MarketDataQualityIssue {
+  id: number;
+  issue_key: string;
+  scope: string;
+  symbol: string | null;
+  exchange: string | null;
+  severity: 'critical' | 'warning' | 'info' | string;
+  status: string;
+  message: string;
+  details: Record<string, any>;
+  detected_at: string;
+  resolved_at: string | null;
+}
+
+export interface MarketDataQualityScanResult {
+  exchange: string;
+  quotes_checked: number;
+  intraday_checked: number;
+  issues_upserted: number;
+  scanned_at: string;
+}
+
+export interface MarketAlertEventItem {
+  id: number;
+  scope: string;
+  symbol: string | null;
+  exchange: string | null;
+  severity: string;
+  title: string;
+  message: string;
+  delivery_channels: string[];
+  payload: Record<string, any>;
+  status: string;
+  created_at: string;
+  delivered_at: string | null;
+}
+
+export interface MarketAlertEventRefreshResult {
+  exchange: string;
+  alerts_seen: number;
+  events_created: number;
+  status: string;
+  materialized_at: string;
+}
+
+export interface MarketAlertDeliveryResult {
+  enabled: boolean;
+  checked: number;
+  sent: number;
+  failed: number;
 }
 
 export interface WatchlistItem {
@@ -1460,6 +1569,113 @@ export class MarketApiService {
             data: null,
           })
         )
+      );
+  }
+
+  getMarketSymbols(
+    options: { page?: number; pageSize?: number; exchange?: string; keyword?: string } = {}
+  ): Observable<ApiEnvelope<MarketSymbolListResponse | null>> {
+    const params: Record<string, string | number> = {
+      page: options.page || 1,
+      page_size: options.pageSize || 20,
+    };
+    if (options.exchange && options.exchange !== 'ALL') {
+      params['exchange'] = options.exchange;
+    }
+    if (options.keyword?.trim()) {
+      params['q'] = options.keyword.trim().toUpperCase();
+    }
+
+    const cacheKey = `foundation:market-symbols:${params['page']}:${params['page_size']}:${params['exchange'] || 'ALL'}:${params['q'] || ''}`;
+    return this.withCache(
+      cacheKey,
+      60000,
+      this.http.get<ApiEnvelope<MarketSymbolListResponse>>(`${this.baseUrl}/api/market/symbols`, { params })
+    ).pipe(catchError(() => of({ data: null })));
+  }
+
+  getExchangeRules(): Observable<ApiEnvelope<MarketExchangeRule[]>> {
+    return this.withCache(
+      'foundation:exchange-rules',
+      300000,
+      this.http.get<ApiEnvelope<MarketExchangeRule[]>>(`${this.baseUrl}/api/market/exchange-rules`),
+      { persistent: true, persistentTtlMs: 86400000 }
+    ).pipe(catchError(() => of({ data: [] })));
+  }
+
+  getDataQualityIssues(limit = 100): Observable<ApiEnvelope<MarketDataQualityIssue[]>> {
+    return this.withCache(
+      `foundation:data-quality:${limit}`,
+      30000,
+      this.http.get<ApiEnvelope<MarketDataQualityIssue[]>>(`${this.baseUrl}/api/market/data-quality/issues`, {
+        params: { limit },
+      })
+    ).pipe(catchError(() => of({ data: [] })));
+  }
+
+  scanDataQuality(exchange: MarketExchangeFilter = 'ALL', limit = 500): Observable<ApiEnvelope<MarketDataQualityScanResult | null>> {
+    const params: Record<string, string | number> = { limit };
+    if (exchange !== 'ALL') {
+      params['exchange'] = exchange;
+    }
+    return this.http.post<ApiEnvelope<MarketDataQualityScanResult>>(`${this.baseUrl}/api/market/data-quality/scan`, null, { params }).pipe(
+      tap(() => this.invalidateCache(['foundation:data-quality:'])),
+      catchError(() => of({ data: null }))
+    );
+  }
+
+  getAlertEvents(status?: string, limit = 100): Observable<ApiEnvelope<MarketAlertEventItem[]>> {
+    const params: Record<string, string | number> = { limit };
+    if (status) {
+      params['status'] = status;
+    }
+    return this.withCache(
+      `foundation:alert-events:${status || 'all'}:${limit}`,
+      30000,
+      this.http.get<ApiEnvelope<MarketAlertEventItem[]>>(`${this.baseUrl}/api/market-alerts/events`, { params })
+    ).pipe(catchError(() => of({ data: [] })));
+  }
+
+  refreshAlertEvents(exchange: ExchangeTab = 'HSX'): Observable<ApiEnvelope<MarketAlertEventRefreshResult | null>> {
+    return this.http
+      .post<ApiEnvelope<MarketAlertEventRefreshResult>>(`${this.baseUrl}/api/market-alerts/events/refresh`, null, {
+        params: { exchange },
+      })
+      .pipe(
+        tap(() => this.invalidateCache(['foundation:alert-events:', `market-alerts:overview:${exchange}`])),
+        catchError(() => of({ data: null }))
+      );
+  }
+
+  deliverAlertEvents(limit = 50): Observable<ApiEnvelope<MarketAlertDeliveryResult | null>> {
+    return this.http
+      .post<ApiEnvelope<MarketAlertDeliveryResult>>(`${this.baseUrl}/api/market-alerts/events/deliver`, null, {
+        params: { limit },
+      })
+      .pipe(
+        tap(() => this.invalidateCache(['foundation:alert-events:'])),
+        catchError(() => of({ data: null }))
+      );
+  }
+
+  getSymbolCandles(symbol: string, timeframe = '5m', limit = 500): Observable<ApiEnvelope<MarketCandleItem[]>> {
+    return this.withCache(
+      `foundation:candles:${symbol.toUpperCase()}:${timeframe}:${limit}`,
+      30000,
+      this.http.get<ApiEnvelope<MarketCandleItem[]>>(`${this.baseUrl}/api/market/symbols/${symbol}/candles`, {
+        params: { timeframe, limit },
+      })
+    ).pipe(catchError(() => of({ data: [] })));
+  }
+
+  resampleSymbolCandles(symbol: string, timeframe = '5m', limit = 20000): Observable<ApiEnvelope<MarketCandleResampleResult | null>> {
+    return this.http
+      .post<ApiEnvelope<MarketCandleResampleResult>>(`${this.baseUrl}/api/market/symbols/${symbol}/candles/resample`, null, {
+        params: { timeframe, limit },
+      })
+      .pipe(
+        tap(() => this.invalidateCache([`foundation:candles:${symbol.toUpperCase()}:`])),
+        catchError(() => of({ data: null }))
       );
   }
 

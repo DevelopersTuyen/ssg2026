@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
 import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import { AuthService } from 'src/app/core/services/auth.service';
@@ -8,7 +8,12 @@ import { PageLoadStateService } from 'src/app/core/services/page-load-state.serv
 import { ThemeService } from 'src/app/core/services/theme.service';
 import {
   MarketApiService,
+  MarketAlertEventItem,
+  MarketDataQualityIssue,
+  MarketDataQualityScanResult,
+  MarketExchangeRule,
   MarketSettingsData,
+  SymbolSearchItem,
   MarketSyncJobStatus,
   MarketSyncStatusData,
   StrategyAlertRule,
@@ -279,6 +284,16 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   error = '';
   settings!: MarketSettingsData;
   syncStatus: MarketSyncStatusData = this.buildEmptySyncStatus();
+  exchangeRules: MarketExchangeRule[] = [];
+  dataQualityIssues: MarketDataQualityIssue[] = [];
+  alertEvents: MarketAlertEventItem[] = [];
+  masterDataItems: SymbolSearchItem[] = [];
+  foundationLoading = false;
+  foundationMessage = '';
+  foundationError = '';
+  dataQualityScan: MarketDataQualityScanResult | null = null;
+  foundationExchange: 'ALL' | 'HSX' | 'HNX' | 'UPCOM' = 'ALL';
+  masterDataKeyword = '';
 
   strategyLoading = false;
   strategySaving = false;
@@ -340,6 +355,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       if (!this.activeView) return;
       if (domains.length && this.selectedTab === 'data') {
         this.loadSyncStatus();
+        this.loadDataFoundation(true);
       }
     });
     this.loadSettings();
@@ -355,6 +371,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.pageLoadState.setActivePage(this.pageLoadKey);
     if (this.selectedTab === 'data' && !this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 12000)) {
       this.loadSyncStatus();
+      this.loadDataFoundation(true);
     }
     if (
       (this.selectedTab === 'strategy' || this.selectedTab === 'journal') &&
@@ -385,6 +402,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.selectedTab = tab;
     if (tab === 'data') {
       this.loadSyncStatus();
+      this.loadDataFoundation(true);
     }
     if (tab === 'journal') {
       this.selectedStrategySection = 'journal';
@@ -555,6 +573,127 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     if (this.selectedStrategySection === 'journal') {
       this.reloadStrategyJournal(true);
     }
+  }
+
+  loadDataFoundation(silent = false): void {
+    if (!silent) {
+      this.foundationLoading = true;
+    }
+    this.foundationError = '';
+    this.foundationMessage = '';
+
+    forkJoin({
+      rules: this.api.getExchangeRules(),
+      issues: this.api.getDataQualityIssues(80),
+      events: this.api.getAlertEvents('pending', 40),
+    }).subscribe({
+      next: ({ rules, issues, events }) => {
+        this.exchangeRules = rules.data || [];
+        this.dataQualityIssues = issues.data || [];
+        this.alertEvents = events.data || [];
+        this.foundationLoading = false;
+      },
+      error: () => {
+        this.foundationLoading = false;
+        this.foundationError = 'Khong tai duoc Data Foundation.';
+      },
+    });
+  }
+
+  scanDataQuality(): void {
+    this.foundationLoading = true;
+    this.foundationError = '';
+    this.foundationMessage = '';
+    this.api.scanDataQuality(this.foundationExchange, 1000).subscribe({
+      next: (response) => {
+        this.dataQualityScan = response.data;
+        this.foundationLoading = false;
+        this.foundationMessage = response.data
+          ? `Da scan ${response.data.quotes_checked + response.data.intraday_checked} dong, ghi nhan ${response.data.issues_upserted} canh bao.`
+          : 'Scan data-quality khong co ket qua.';
+        this.loadDataFoundation(true);
+      },
+      error: () => {
+        this.foundationLoading = false;
+        this.foundationError = 'Scan data-quality that bai.';
+      },
+    });
+  }
+
+  refreshAlertEvents(): void {
+    const exchanges: Array<'HSX' | 'HNX' | 'UPCOM'> =
+      this.foundationExchange === 'ALL' ? ['HSX', 'HNX', 'UPCOM'] : [this.foundationExchange];
+    this.foundationLoading = true;
+    this.foundationError = '';
+    this.foundationMessage = '';
+
+    forkJoin(exchanges.map((exchange) => this.api.refreshAlertEvents(exchange))).subscribe({
+      next: (responses) => {
+        const created = responses.reduce((sum, item) => sum + Number(item.data?.events_created || 0), 0);
+        this.foundationLoading = false;
+        this.foundationMessage = `Da tao ${created} alert event moi.`;
+        this.loadDataFoundation(true);
+      },
+      error: () => {
+        this.foundationLoading = false;
+        this.foundationError = 'Refresh alert events that bai.';
+      },
+    });
+  }
+
+  deliverAlertEvents(): void {
+    this.foundationLoading = true;
+    this.foundationError = '';
+    this.foundationMessage = '';
+
+    this.api.deliverAlertEvents(80).subscribe({
+      next: (response) => {
+        this.foundationLoading = false;
+        this.foundationMessage = response.data
+          ? `Da xu ly ${response.data.checked} event: sent ${response.data.sent}, failed ${response.data.failed}.`
+          : 'Khong gui duoc alert events.';
+        this.loadDataFoundation(true);
+      },
+      error: () => {
+        this.foundationLoading = false;
+        this.foundationError = 'Gui alert events that bai.';
+      },
+    });
+  }
+
+  searchMasterData(): void {
+    const keyword = this.masterDataKeyword.trim();
+    if (!keyword) {
+      this.masterDataItems = [];
+      return;
+    }
+
+    this.api.searchSymbols(keyword, 12).subscribe({
+      next: (response) => {
+        this.masterDataItems = response.data || [];
+      },
+      error: () => {
+        this.masterDataItems = [];
+      },
+    });
+  }
+
+  issueSeverityClass(issue: MarketDataQualityIssue): string {
+    return issue.severity === 'critical' ? 'danger' : issue.severity === 'warning' ? 'warning' : 'default';
+  }
+
+  formatLargeNumber(value?: number | null): string {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+      return '--';
+    }
+    const number = Number(value);
+    if (Math.abs(number) >= 1_000_000_000) {
+      return `${(number / 1_000_000_000).toFixed(1)}B`;
+    }
+    if (Math.abs(number) >= 1_000_000) {
+      return `${(number / 1_000_000).toFixed(1)}M`;
+    }
+    return number.toLocaleString('vi-VN');
   }
 
   get hasUnsavedStrategyChanges(): boolean {

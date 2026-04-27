@@ -6,6 +6,10 @@ import {
   FinancialStatementSection,
   LiveSymbolHourlyItem,
   LiveSymbolQuote,
+  MarketCandleItem,
+  MarketDataQualityIssue,
+  MarketExchangeRule,
+  MarketSymbolListItem,
   MarketApiService,
 } from 'src/app/core/services/market-api.service';
 
@@ -29,6 +33,10 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
 
   selectedQuote: LiveSymbolQuote | null = null;
   selectedHourly: LiveSymbolHourlyItem[] = [];
+  selectedCandles: MarketCandleItem[] = [];
+  selectedSymbolMaster: MarketSymbolListItem | null = null;
+  exchangeRule: MarketExchangeRule | null = null;
+  dataQualityIssues: MarketDataQualityIssue[] = [];
   financialOverview: FinancialOverviewResponse | null = null;
   symbolLoading = false;
   financialLoading = false;
@@ -100,6 +108,45 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
     return Number(this.selectedQuote?.changeValue || 0) >= 0;
   }
 
+  get chartSourceText(): string {
+    if (this.selectedCandles.length) {
+      const latest = this.selectedCandles[this.selectedCandles.length - 1];
+      return `Candle 5m / ${this.selectedCandles.length} nến / cập nhật ${this.formatDateTime(latest?.computed_at || latest?.time)}`;
+    }
+    if (this.selectedHourly.length) {
+      return `Hourly fallback / ${this.selectedHourly.length} điểm`;
+    }
+    return 'Chưa có dữ liệu chart';
+  }
+
+  get exchangeContextText(): string {
+    if (!this.exchangeRule) {
+      return 'Chưa có rule sàn';
+    }
+    return `${this.resolveCurrentSession(this.exchangeRule)} / Biên độ ${this.exchangeRule.price_limit_percent || '--'}% / Lot ${this.exchangeRule.lot_size}`;
+  }
+
+  get masterDataText(): string {
+    const master = this.selectedSymbolMaster;
+    if (!master) {
+      return 'Chưa có master data';
+    }
+    const industry = master.industry || master.sector || 'Chưa có ngành';
+    const cap = this.formatMoney(master.market_cap);
+    const status = master.trading_status || (master.is_active === false ? 'inactive' : 'active');
+    return `${industry} / vốn hóa ${cap} / ${status}`;
+  }
+
+  get dataQualityText(): string {
+    if (!this.dataQualityIssues.length) {
+      return 'Không có lỗi dữ liệu mở';
+    }
+    const critical = this.dataQualityIssues.filter((issue) => issue.severity === 'critical').length;
+    return critical
+      ? `${critical} lỗi critical, cần kiểm tra trước khi ra quyết định`
+      : `${this.dataQualityIssues.length} cảnh báo dữ liệu`;
+  }
+
   get financialHighlights() {
     return this.financialOverview?.highlights || [];
   }
@@ -165,11 +212,21 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
 
     this.symbolSub = forkJoin({
       quote: this.api.getSymbolQuote(symbol),
+      candles: this.api.getSymbolCandles(symbol, '5m', 240),
       hourly: this.api.getSymbolHourly(symbol),
+      master: this.api.getMarketSymbols({ keyword: symbol, pageSize: 1 }),
+      rules: this.api.getExchangeRules(),
+      dataQuality: this.api.getDataQualityIssues(120),
     }).subscribe({
-      next: ({ quote, hourly }) => {
+      next: ({ quote, candles, hourly, master, rules, dataQuality }) => {
         this.selectedQuote = quote.quote || null;
-        this.selectedHourly = (hourly.items || []).sort(
+        this.selectedCandles = candles.data || [];
+        this.selectedSymbolMaster = this.resolveSymbolMaster(symbol, master.data?.items || []);
+        const exchange = this.selectedSymbolMaster?.exchange || quote.exchange || null;
+        this.exchangeRule = this.resolveExchangeRule(exchange, rules.data || []);
+        this.dataQualityIssues = (dataQuality.data || []).filter((issue) => (issue.symbol || '').toUpperCase() === symbol);
+        const candleItems = this.mapCandlesToHourly(this.selectedCandles);
+        this.selectedHourly = (candleItems.length ? candleItems : hourly.items || []).sort(
           (left, right) => new Date(left.time).getTime() - new Date(right.time).getTime()
         );
         this.symbolLoading = false;
@@ -178,9 +235,59 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
       error: () => {
         this.selectedQuote = null;
         this.selectedHourly = [];
+        this.selectedCandles = [];
+        this.selectedSymbolMaster = null;
+        this.exchangeRule = null;
+        this.dataQualityIssues = [];
         this.symbolLoading = false;
       },
     });
+  }
+
+  private mapCandlesToHourly(candles: MarketCandleItem[]): LiveSymbolHourlyItem[] {
+    return candles.map((item) => ({
+      time: item.time,
+      open: item.open,
+      high: item.high,
+      low: item.low,
+      close: item.close,
+      volume: item.volume,
+      tradingValue: item.trading_value,
+      pointCount: item.point_count,
+    }));
+  }
+
+  private resolveSymbolMaster(symbol: string, items: MarketSymbolListItem[]): MarketSymbolListItem | null {
+    return items.find((item) => item.symbol?.toUpperCase() === symbol) || items[0] || null;
+  }
+
+  private resolveExchangeRule(exchange: string | null | undefined, rules: MarketExchangeRule[]): MarketExchangeRule | null {
+    const normalized = (exchange || '').toUpperCase();
+    return rules.find((rule) => rule.exchange === normalized) || null;
+  }
+
+  private resolveCurrentSession(rule: MarketExchangeRule): string {
+    const now = new Date();
+    if (now.getDay() === 0 || now.getDay() === 6) {
+      return 'Nghỉ cuối tuần';
+    }
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    for (const session of rule.trading_sessions || []) {
+      const start = this.sessionMinutes(session['start']);
+      const end = this.sessionMinutes(session['end']);
+      if (minutes >= start && minutes < end) {
+        return session['is_break'] ? 'Nghỉ giữa phiên' : (session['label'] || session['code'] || 'Đang giao dịch');
+      }
+    }
+    return 'Đóng cửa';
+  }
+
+  private sessionMinutes(value: string | null | undefined): number {
+    if (!value || !value.includes(':')) {
+      return 0;
+    }
+    const [hour, minute] = value.split(':').map((part) => Number(part));
+    return hour * 60 + minute;
   }
 
   private ensureFinancialOverview(symbol: string): void {
@@ -325,5 +432,14 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
     if (Math.abs(num) >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(2)}B`;
     if (Math.abs(num) >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
     return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  }
+
+  private formatDateTime(value: string | null | undefined): string {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '--';
+    const hh = `${date.getHours()}`.padStart(2, '0');
+    const mm = `${date.getMinutes()}`.padStart(2, '0');
+    return `${hh}:${mm}`;
   }
 }

@@ -143,11 +143,14 @@
 #         ],
 #     }
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.db import SessionLocal
 from app.repositories.market_read_repo import MarketReadRepository
 from app.schemas.market import ApiEnvelope
+from app.services.candle_service import CandleService
+from app.services.data_quality_service import DataQualityService
+from app.services.exchange_rules_service import ExchangeRulesService
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
@@ -155,6 +158,20 @@ router = APIRouter(prefix="/api/market", tags=["market"])
 async def get_repo():
     async with SessionLocal() as session:
         yield MarketReadRepository(session)
+
+
+@router.get("/exchange-rules", response_model=ApiEnvelope)
+async def list_exchange_rules():
+    async with SessionLocal() as session:
+        data = await ExchangeRulesService(session).list_rules()
+    return ApiEnvelope(data=data)
+
+
+@router.get("/exchange-rules/{exchange}", response_model=ApiEnvelope)
+async def get_exchange_rule(exchange: str):
+    async with SessionLocal() as session:
+        data = await ExchangeRulesService(session).get_rule(exchange)
+    return ApiEnvelope(data=data)
 
 
 @router.get("/symbols", response_model=ApiEnvelope)
@@ -180,6 +197,12 @@ async def list_symbols(
                 "name": row.name,
                 "exchange": row.exchange,
                 "instrument_type": row.instrument_type,
+                "industry": row.industry,
+                "sector": row.sector,
+                "market_cap": row.market_cap,
+                "shares_outstanding": row.shares_outstanding,
+                "foreign_room": row.foreign_room,
+                "trading_status": row.trading_status,
                 "source": row.source,
                 "is_active": row.is_active,
                 "updated_at": row.updated_at,
@@ -207,10 +230,42 @@ async def search_symbols(
             "name": row.name,
             "exchange": row.exchange,
             "instrument_type": row.instrument_type,
+            "industry": row.industry,
+            "sector": row.sector,
+            "market_cap": row.market_cap,
+            "shares_outstanding": row.shares_outstanding,
+            "foreign_room": row.foreign_room,
+            "trading_status": row.trading_status,
             "updated_at": row.updated_at,
         }
         for row in rows
     ]
+    return ApiEnvelope(data=data)
+
+
+@router.post("/symbols/{symbol}/candles/resample", response_model=ApiEnvelope)
+async def resample_symbol_candles(
+    symbol: str,
+    timeframe: str = Query(default="5m", pattern="^(1m|5m|15m|1h|1d)$"),
+    limit: int = Query(default=20000, ge=100, le=100000),
+):
+    async with SessionLocal() as session:
+        try:
+            data = await CandleService(session).resample_symbol(symbol=symbol, timeframe=timeframe, limit=limit)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await session.commit()
+    return ApiEnvelope(data=data)
+
+
+@router.get("/symbols/{symbol}/candles", response_model=ApiEnvelope)
+async def list_symbol_candles(
+    symbol: str,
+    timeframe: str = Query(default="5m", pattern="^(1m|5m|15m|1h|1d)$"),
+    limit: int = Query(default=500, ge=1, le=5000),
+):
+    async with SessionLocal() as session:
+        data = await CandleService(session).list_candles(symbol=symbol, timeframe=timeframe, limit=limit)
     return ApiEnvelope(data=data)
 
 
@@ -255,6 +310,24 @@ async def get_symbol_intraday(
         }
         for row in rows
     ]
+    return ApiEnvelope(data=data)
+
+
+@router.post("/data-quality/scan", response_model=ApiEnvelope)
+async def scan_data_quality(
+    exchange: str | None = Query(default=None),
+    limit: int = Query(default=500, ge=50, le=5000),
+):
+    async with SessionLocal() as session:
+        data = await DataQualityService(session).scan(exchange=exchange, limit=limit)
+        await session.commit()
+    return ApiEnvelope(data=data)
+
+
+@router.get("/data-quality/issues", response_model=ApiEnvelope)
+async def list_data_quality_issues(limit: int = Query(default=100, ge=1, le=500)):
+    async with SessionLocal() as session:
+        data = await DataQualityService(session).list_open(limit=limit)
     return ApiEnvelope(data=data)
 
 
