@@ -1,5 +1,6 @@
 ﻿import { Component } from '@angular/core';
 import { Router } from '@angular/router';
+import { AppI18nService } from '../../core/i18n/app-i18n.service';
 
 interface GuideSection {
   id: string;
@@ -659,7 +660,10 @@ export class UserGuidePage {
     },
   ];
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private i18n: AppI18nService,
+  ) {}
 
   get hasGuideSearch(): boolean {
     return this.normalizeText(this.guideSearchTerm).length > 0;
@@ -748,7 +752,7 @@ export class UserGuidePage {
     clone.querySelectorAll('button').forEach((node) => node.remove());
     const html = this.buildWordDocument(clone.innerHTML);
     const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-    const fileName = `huong-dan-su-dung-${new Date().toISOString().slice(0, 10)}.doc`;
+    const fileName = `user-guide-${new Date().toISOString().slice(0, 10)}.doc`;
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -788,13 +792,14 @@ export class UserGuidePage {
   }
 
   private buildWordDocument(content: string): string {
+    const title = this.i18n.translate('guide.wordDocumentTitle');
     return `
       <html xmlns:o="urn:schemas-microsoft-com:office:office"
             xmlns:w="urn:schemas-microsoft-com:office:word"
             xmlns="http://www.w3.org/TR/REC-html40">
         <head>
           <meta charset="utf-8">
-          <title>Hướng dẫn sử dụng</title>
+          <title>${title}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -843,7 +848,7 @@ export class UserGuidePage {
           </style>
         </head>
         <body>
-          <h1>Hướng dẫn sử dụng hệ thống</h1>
+          <h1>${title}</h1>
           ${content}
         </body>
       </html>

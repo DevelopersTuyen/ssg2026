@@ -1,4 +1,4 @@
-<ion-content [fullscreen]="true" class="guide-content">
+﻿<ion-content [fullscreen]="true" class="guide-content">
   <div class="guide-shell">
     <section class="guide-hero">
       <div class="guide-copy">
@@ -15,16 +15,16 @@
           {{ 'guide.openDashboard' | translate }}
         </button>
         <button type="button" class="hero-btn" (click)="downloadWordGuide()">
-          Tải file Word
+          {{ 'guide.downloadWord' | translate }}
         </button>
       </div>
     </section>
 
     <section class="guide-search-panel">
       <div class="guide-search-copy">
-        <div class="panel-kicker">Tìm nhanh</div>
-        <div class="guide-search-title">Tìm hướng dẫn theo từ khóa</div>
-        <p>Gõ các từ như công thức, workflow, sao kê, AI, danh mục, entries, cắt lỗ để lọc đúng phần cần đọc.</p>
+        <div class="panel-kicker">{{ 'guide.searchKicker' | translate }}</div>
+        <div class="guide-search-title">{{ 'guide.searchTitle' | translate }}</div>
+        <p>{{ 'guide.searchHint' | translate }}</p>
       </div>
       <div class="guide-search-box">
         <input
@@ -32,24 +32,26 @@
           class="guide-search-input"
           [value]="guideSearchTerm"
           (input)="onGuideSearch($event)"
-          placeholder="Tìm trong hướng dẫn sử dụng"
+          [placeholder]="'guide.searchPlaceholder' | translate"
         />
-        <button *ngIf="hasGuideSearch" type="button" class="hero-btn" (click)="clearGuideSearch()">Xóa lọc</button>
+        <button *ngIf="hasGuideSearch" type="button" class="hero-btn" (click)="clearGuideSearch()">
+          {{ 'guide.searchClear' | translate }}
+        </button>
       </div>
     </section>
 
     <section class="guide-layout">
       <aside class="guide-nav">
         <div class="nav-title">{{ 'guide.navTitle' | translate }}</div>
-        <button type="button" class="nav-link" (click)="scrollToSection('practical-start')">Khởi động nhanh</button>
-        <button type="button" class="nav-link" (click)="scrollToSection('daily-flow')">Luồng dùng hằng ngày</button>
-        <button type="button" class="nav-link" (click)="scrollToSection('module-guide')">Cách dùng từng màn</button>
-        <button type="button" class="nav-link" (click)="scrollToSection('formula-explained')">Giải thích công thức</button>
-        <button type="button" class="nav-link" (click)="scrollToSection('formula-metrics')">Chi tiết từng công thức</button>
-        <button type="button" class="nav-link" (click)="scrollToSection('journal-relationship')">Journal và Sao kê</button>
-        <button type="button" class="nav-link" (click)="scrollToSection('workflow-operation')">Workflow vận hành</button>
-        <button type="button" class="nav-link" (click)="scrollToSection('workflow-states')">Trạng thái workflow</button>
-        <button type="button" class="nav-link" (click)="scrollToSection('common-mistakes')">Lỗi thường gặp</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('practical-start')">{{ 'guide.nav.quickStart' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('daily-flow')">{{ 'guide.nav.dailyFlow' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('module-guide')">{{ 'guide.nav.moduleGuide' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('formula-explained')">{{ 'guide.nav.formulaExplain' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('formula-metrics')">{{ 'guide.nav.formulaMetrics' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('journal-relationship')">{{ 'guide.nav.journalRelationship' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('workflow-operation')">{{ 'guide.nav.workflowOperation' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('workflow-states')">{{ 'guide.nav.workflowStates' | translate }}</button>
+        <button type="button" class="nav-link" (click)="scrollToSection('common-mistakes')">{{ 'guide.nav.commonMistakes' | translate }}</button>
         <button type="button" class="nav-link" (click)="scrollToSection('getting-started')">{{ 'guide.navGettingStarted' | translate }}</button>
         <button type="button" class="nav-link" (click)="scrollToSection('system-links')">{{ 'guide.navLinks' | translate }}</button>
         <button type="button" class="nav-link" (click)="scrollToSection('formula-guide')">{{ 'guide.navFormulas' | translate }}</button>
@@ -63,11 +65,9 @@
         <section class="guide-panel" id="practical-start" *ngIf="filteredPracticalQuickStart.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Playbook</div>
-              <div class="panel-title">Hướng dẫn sử dụng chuẩn cho người mới</div>
-              <div class="panel-subtitle">
-                Đọc theo đúng thứ tự dưới đây. Người dùng mới không nên nhảy vào sửa formula hay bật auto workflow ngay từ đầu.
-              </div>
+              <div class="panel-kicker">{{ 'guide.practical.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.practical.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.practical.subtitle' | translate }}</div>
             </div>
           </div>
 
@@ -89,11 +89,9 @@
         <section class="guide-panel" id="daily-flow" *ngIf="filteredPracticalDailyFlow.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Vận hành</div>
-              <div class="panel-title">Luồng sử dụng hằng ngày</div>
-              <div class="panel-subtitle">
-                Đây là thứ tự đúng để dùng hệ thống trong ngày giao dịch, từ kiểm tra dữ liệu đến review cuối ngày.
-              </div>
+              <div class="panel-kicker">{{ 'guide.daily.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.daily.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.daily.subtitle' | translate }}</div>
             </div>
           </div>
 
@@ -107,7 +105,7 @@
                   <li *ngFor="let step of item.steps">{{ step }}</li>
                 </ul>
                 <button *ngIf="item.targetRoute" type="button" class="panel-action" (click)="openRoute(item.targetRoute)">
-                  Mở màn này
+                  {{ 'guide.openPage' | translate }}
                 </button>
               </div>
             </article>
@@ -117,29 +115,27 @@
         <section class="guide-panel" id="module-guide" *ngIf="filteredPracticalModuleGuides.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Theo màn hình</div>
-              <div class="panel-title">Cách dùng từng màn chính</div>
-              <div class="panel-subtitle">
-                Mỗi màn có vai trò riêng. Người mới đọc phần này để biết lúc nào nên vào màn nào và không dùng sai vai trò.
-              </div>
+              <div class="panel-kicker">{{ 'guide.module.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.module.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.module.subtitle' | translate }}</div>
             </div>
           </div>
 
           <div class="formula-grid module-guide-grid">
             <article class="formula-card module-guide-card" *ngFor="let item of filteredPracticalModuleGuides">
               <div class="formula-card-title">{{ item.title }}</div>
-              <p><strong>Mục đích:</strong> {{ item.purpose }}</p>
-              <p><strong>Khi dùng:</strong> {{ item.whenToUse }}</p>
-              <div class="subheading">Thao tác nên làm</div>
+              <p><strong>{{ 'guide.module.purpose' | translate }}:</strong> {{ item.purpose }}</p>
+              <p><strong>{{ 'guide.module.whenToUse' | translate }}:</strong> {{ item.whenToUse }}</p>
+              <div class="subheading">{{ 'guide.module.actions' | translate }}</div>
               <ul class="guide-list compact">
                 <li *ngFor="let action of item.actions">{{ action }}</li>
               </ul>
-              <div class="subheading">Điểm cần tránh</div>
+              <div class="subheading">{{ 'guide.module.cautions' | translate }}</div>
               <ul class="guide-list compact caution-list">
                 <li *ngFor="let caution of item.cautions">{{ caution }}</li>
               </ul>
               <button *ngIf="item.route" type="button" class="panel-action" (click)="openRoute(item.route)">
-                Mở màn này
+                {{ 'guide.openPage' | translate }}
               </button>
             </article>
           </div>
@@ -148,11 +144,9 @@
         <section class="guide-panel" id="formula-explained" *ngIf="filteredFormulaExplainGuides.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Formula</div>
-              <div class="panel-title">Giải thích cách đọc công thức</div>
-              <div class="panel-subtitle">
-                Phần này dành cho người mới chưa quen logic Q/L/M/P, pass/fail và formula verdict. Đọc xong mới nên sửa rule hoặc tin hoàn toàn vào AI.
-              </div>
+              <div class="panel-kicker">{{ 'guide.formulaExplain.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.formulaExplain.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.formulaExplain.subtitle' | translate }}</div>
             </div>
           </div>
 
@@ -170,22 +164,20 @@
         <section class="guide-panel" id="formula-metrics" *ngIf="filteredFormulaMetricGuides.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Formula Metrics</div>
-              <div class="panel-title">Chi tiết từng công thức</div>
-              <div class="panel-subtitle">
-                Đây là phần mô tả riêng cho từng score chính để người mới hiểu nó đo cái gì, dùng để làm gì và nên đọc kết quả theo hướng nào.
-              </div>
+              <div class="panel-kicker">{{ 'guide.formulaMetrics.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.formulaMetrics.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.formulaMetrics.subtitle' | translate }}</div>
             </div>
           </div>
 
           <div class="formula-grid module-guide-grid">
             <article class="formula-card module-guide-card" *ngFor="let item of filteredFormulaMetricGuides">
               <div class="formula-card-title">{{ item.name }}</div>
-              <p><strong>Mục đích:</strong> {{ item.purpose }}</p>
+              <p><strong>{{ 'guide.formulaMetrics.purpose' | translate }}:</strong> {{ item.purpose }}</p>
               <p>{{ item.description }}</p>
-              <div class="subheading">Mô tả công thức</div>
+              <div class="subheading">{{ 'guide.formulaMetrics.formula' | translate }}</div>
               <div class="formula-snippet">{{ item.formulaText }}</div>
-              <div class="subheading">Cách hiểu kết quả</div>
+              <div class="subheading">{{ 'guide.formulaMetrics.interpretation' | translate }}</div>
               <ul class="guide-list compact">
                 <li *ngFor="let line of item.interpretation">{{ line }}</li>
               </ul>
@@ -196,17 +188,15 @@
         <section class="guide-panel" id="journal-relationship" *ngIf="filteredJournalRelationshipGuide.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Execution</div>
-              <div class="panel-title">Quan hệ giữa Sao kê khớp lệnh, Entries và Danh mục</div>
-              <div class="panel-subtitle">
-                Đây là phần người dùng mới dễ nhầm nhất. Phải hiểu đúng detail và summary thì mới hiểu vì sao vị thế thay đổi.
-              </div>
+              <div class="panel-kicker">{{ 'guide.journal.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.journal.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.journal.subtitle' | translate }}</div>
             </div>
           </div>
 
           <div class="formula-hero-note">
-            <strong>Luồng chuẩn</strong>
-            <p>Sao kê khớp lệnh -> Entries tổng hợp -> Dashboard V2 Journal / Vị thế / Danh mục / Workflow / Lịch sử.</p>
+            <strong>{{ 'guide.journal.flowTitle' | translate }}</strong>
+            <p>{{ 'guide.journal.flowBody' | translate }}</p>
           </div>
 
           <ul class="guide-list">
@@ -217,11 +207,9 @@
         <section class="guide-panel" id="workflow-operation" *ngIf="filteredWorkflowOperationStages.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Workflow Engine</div>
-              <div class="panel-title">Workflow vận hành như thế nào</div>
-              <div class="panel-subtitle">
-                Đây là luồng hoạt động thật của workflow trong hệ thống, từ lúc sinh action đến lúc ảnh hưởng sang Journal, History và Portfolio.
-              </div>
+              <div class="panel-kicker">{{ 'guide.workflowOperation.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.workflowOperation.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.workflowOperation.subtitle' | translate }}</div>
             </div>
           </div>
 
@@ -242,19 +230,17 @@
         <section class="guide-panel" id="workflow-states" *ngIf="filteredWorkflowStateGuide.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Workflow</div>
-              <div class="panel-title">Ý nghĩa từng trạng thái workflow</div>
-              <div class="panel-subtitle">
-                Người dùng không phải tự suy từ open/completed/dismissed nữa. Đọc đúng phần này để biết phải làm gì tiếp theo.
-              </div>
+              <div class="panel-kicker">{{ 'guide.workflowStates.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.workflowStates.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.workflowStates.subtitle' | translate }}</div>
             </div>
           </div>
 
           <div class="link-grid workflow-state-grid">
             <article class="link-card" *ngFor="let item of filteredWorkflowStateGuide">
               <div class="link-title">{{ item.state }}</div>
-              <p><strong>Ý nghĩa:</strong> {{ item.meaning }}</p>
-              <p><strong>Người dùng nên làm:</strong> {{ item.userAction }}</p>
+              <p><strong>{{ 'guide.workflowStates.meaning' | translate }}:</strong> {{ item.meaning }}</p>
+              <p><strong>{{ 'guide.workflowStates.userAction' | translate }}:</strong> {{ item.userAction }}</p>
             </article>
           </div>
         </section>
@@ -262,11 +248,9 @@
         <section class="guide-panel" id="common-mistakes" *ngIf="filteredCommonMistakesGuide.length">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">FAQ</div>
-              <div class="panel-title">Lỗi thường gặp và cách hiểu đúng</div>
-              <div class="panel-subtitle">
-                Đây là các câu hỏi mà người mới gần như chắc chắn sẽ gặp khi dùng hệ thống lần đầu.
-              </div>
+              <div class="panel-kicker">{{ 'guide.faq.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.faq.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.faq.subtitle' | translate }}</div>
             </div>
           </div>
 
@@ -281,11 +265,9 @@
         <section class="guide-panel" *ngIf="hasGuideSearch && !hasGuideSearchResults">
           <div class="panel-header">
             <div>
-              <div class="panel-kicker">Không có kết quả</div>
-              <div class="panel-title">Không tìm thấy hướng dẫn phù hợp</div>
-              <div class="panel-subtitle">
-                Thử các từ khóa gần nghĩa hơn như công thức, workflow, statement, entries, AI, danh mục, cắt lỗ, chốt lời.
-              </div>
+              <div class="panel-kicker">{{ 'guide.noResults.kicker' | translate }}</div>
+              <div class="panel-title">{{ 'guide.noResults.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'guide.noResults.subtitle' | translate }}</div>
             </div>
           </div>
         </section>
@@ -465,3 +447,4 @@
     </section>
   </div>
 </ion-content>
+

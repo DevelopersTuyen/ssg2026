@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+﻿import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subject, Subscription, forkJoin } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -62,84 +62,84 @@ interface StrategyJournalSuggestion {
 type StrategyExecutionBadgeState = 'ready' | 'wait' | 'standAside';
 
 const VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
-  Q: { key: 'Q', label: 'Q Score', description: 'Điểm chất lượng doanh nghiệp và độ khỏe của mã.', kind: 'formula' },
-  L: { key: 'L', label: 'L Score', description: 'Điểm leadership và mức độ đi cùng xu hướng thị trường.', kind: 'formula' },
-  M: { key: 'M', label: 'M Score', description: 'Điểm động lực và xác nhận breakout.', kind: 'formula' },
-  P: { key: 'P', label: 'P Score', description: 'Hệ số giá và rủi ro dùng làm mẫu số để giảm bớt hưng phấn mua đuổi.', kind: 'formula' },
-  liquidity_score: { key: 'liquidity_score', label: 'Điểm thanh khoản', description: 'Mức dễ vào và ra lệnh dựa trên giá trị giao dịch.', kind: 'metric' },
-  stability_score: { key: 'stability_score', label: 'Điểm ổn định giá', description: 'Giá biến động càng ổn định thì điểm càng cao.', kind: 'metric' },
-  news_score: { key: 'news_score', label: 'Điểm tin tức', description: 'Mức độ được nhắc tới trong luồng tin hiện tại.', kind: 'metric' },
-  watchlist_bonus: { key: 'watchlist_bonus', label: 'Điểm ưu tiên watchlist', description: 'Thưởng điểm nếu mã nằm trong danh sách theo dõi.', kind: 'metric' },
-  leadership_score: { key: 'leadership_score', label: 'Điểm dẫn dắt', description: 'Khả năng dẫn dòng tiền và nổi bật trong sàn.', kind: 'metric' },
-  market_trend_score: { key: 'market_trend_score', label: 'Điểm xu hướng sàn', description: 'Sức khỏe của sàn giao dịch mà mã đang thuộc về.', kind: 'metric' },
-  volume_score: { key: 'volume_score', label: 'Điểm volume', description: 'Mức thanh khoản tương đối so với universe.', kind: 'metric' },
-  momentum_score: { key: 'momentum_score', label: 'Điểm động lượng giá', description: 'Độ mạnh của phần trăm tăng hoặc giảm hiện tại.', kind: 'metric' },
-  volume_confirmation_score: { key: 'volume_confirmation_score', label: 'Điểm xác nhận volume', description: 'Volume có đang ủng hộ xu hướng giá hay không.', kind: 'metric' },
-  price_risk_score: { key: 'price_risk_score', label: 'Điểm rủi ro giá', description: 'Giá càng nóng thì rủi ro càng cao.', kind: 'metric' },
-  hotness_score: { key: 'hotness_score', label: 'Điểm quá nóng', description: 'Dùng để phát hiện mã bị kéo quá nhanh.', kind: 'metric' },
-  volatility_score: { key: 'volatility_score', label: 'Điểm biến động', description: 'Biến động càng mạnh thì điểm rủi ro càng cao.', kind: 'metric' },
-  current_price: { key: 'current_price', label: 'Giá hiện tại', description: 'Giá đang dùng làm đầu vào cho score.', kind: 'metric' },
-  price: { key: 'price', label: 'Giá hiện tại', description: 'Giá đang dùng làm đầu vào cho score.', kind: 'metric' },
-  change_percent: { key: 'change_percent', label: '% thay đổi', description: 'Biến động giá phần trăm của mã.', kind: 'metric' },
-  trading_value: { key: 'trading_value', label: 'Giá trị giao dịch', description: 'Giá trị giao dịch tích lũy của mã.', kind: 'metric' },
-  volume: { key: 'volume', label: 'Khối lượng', description: 'Khối lượng giao dịch tích lũy của mã.', kind: 'metric' },
-  price_vs_open_ratio: { key: 'price_vs_open_ratio', label: 'Tỷ lệ giá / giá mở nhịp', description: 'Dùng để xem mã có giữ được nhịp tăng hay không.', kind: 'metric' },
-  margin_of_safety: { key: 'margin_of_safety', label: 'Biên an toàn', description: 'Khoảng cách giữa fair value và giá hiện tại.', kind: 'metric' },
-  winning_score: { key: 'winning_score', label: 'Winning Score', description: 'Điểm tổng hợp cuối cùng để xếp hạng mã.', kind: 'formula' },
-  journal_entries_today: { key: 'journal_entries_today', label: 'Số entry journal hôm nay', description: 'Dùng cho checklist kỷ luật cuối ngày.', kind: 'metric' },
+  Q: { key: 'Q', label: 'Q Score', description: 'Äiá»ƒm cháº¥t lÆ°á»£ng doanh nghiá»‡p vÃ  Ä‘á»™ khá»e cá»§a mÃ£.', kind: 'formula' },
+  L: { key: 'L', label: 'L Score', description: 'Äiá»ƒm leadership vÃ  má»©c Ä‘á»™ Ä‘i cÃ¹ng xu hÆ°á»›ng thá»‹ trÆ°á»ng.', kind: 'formula' },
+  M: { key: 'M', label: 'M Score', description: 'Äiá»ƒm Ä‘á»™ng lá»±c vÃ  xÃ¡c nháº­n breakout.', kind: 'formula' },
+  P: { key: 'P', label: 'P Score', description: 'Há»‡ sá»‘ giÃ¡ vÃ  rá»§i ro dÃ¹ng lÃ m máº«u sá»‘ Ä‘á»ƒ giáº£m bá»›t hÆ°ng pháº¥n mua Ä‘uá»•i.', kind: 'formula' },
+  liquidity_score: { key: 'liquidity_score', label: 'Äiá»ƒm thanh khoáº£n', description: 'Má»©c dá»… vÃ o vÃ  ra lá»‡nh dá»±a trÃªn giÃ¡ trá»‹ giao dá»‹ch.', kind: 'metric' },
+  stability_score: { key: 'stability_score', label: 'Äiá»ƒm á»•n Ä‘á»‹nh giÃ¡', description: 'GiÃ¡ biáº¿n Ä‘á»™ng cÃ ng á»•n Ä‘á»‹nh thÃ¬ Ä‘iá»ƒm cÃ ng cao.', kind: 'metric' },
+  news_score: { key: 'news_score', label: 'Äiá»ƒm tin tá»©c', description: 'Má»©c Ä‘á»™ Ä‘Æ°á»£c nháº¯c tá»›i trong luá»“ng tin hiá»‡n táº¡i.', kind: 'metric' },
+  watchlist_bonus: { key: 'watchlist_bonus', label: 'Äiá»ƒm Æ°u tiÃªn watchlist', description: 'ThÆ°á»Ÿng Ä‘iá»ƒm náº¿u mÃ£ náº±m trong danh sÃ¡ch theo dÃµi.', kind: 'metric' },
+  leadership_score: { key: 'leadership_score', label: 'Äiá»ƒm dáº«n dáº¯t', description: 'Kháº£ nÄƒng dáº«n dÃ²ng tiá»n vÃ  ná»•i báº­t trong sÃ n.', kind: 'metric' },
+  market_trend_score: { key: 'market_trend_score', label: 'Äiá»ƒm xu hÆ°á»›ng sÃ n', description: 'Sá»©c khá»e cá»§a sÃ n giao dá»‹ch mÃ  mÃ£ Ä‘ang thuá»™c vá».', kind: 'metric' },
+  volume_score: { key: 'volume_score', label: 'Äiá»ƒm volume', description: 'Má»©c thanh khoáº£n tÆ°Æ¡ng Ä‘á»‘i so vá»›i universe.', kind: 'metric' },
+  momentum_score: { key: 'momentum_score', label: 'Äiá»ƒm Ä‘á»™ng lÆ°á»£ng giÃ¡', description: 'Äá»™ máº¡nh cá»§a pháº§n trÄƒm tÄƒng hoáº·c giáº£m hiá»‡n táº¡i.', kind: 'metric' },
+  volume_confirmation_score: { key: 'volume_confirmation_score', label: 'Äiá»ƒm xÃ¡c nháº­n volume', description: 'Volume cÃ³ Ä‘ang á»§ng há»™ xu hÆ°á»›ng giÃ¡ hay khÃ´ng.', kind: 'metric' },
+  price_risk_score: { key: 'price_risk_score', label: 'Äiá»ƒm rá»§i ro giÃ¡', description: 'GiÃ¡ cÃ ng nÃ³ng thÃ¬ rá»§i ro cÃ ng cao.', kind: 'metric' },
+  hotness_score: { key: 'hotness_score', label: 'Äiá»ƒm quÃ¡ nÃ³ng', description: 'DÃ¹ng Ä‘á»ƒ phÃ¡t hiá»‡n mÃ£ bá»‹ kÃ©o quÃ¡ nhanh.', kind: 'metric' },
+  volatility_score: { key: 'volatility_score', label: 'Äiá»ƒm biáº¿n Ä‘á»™ng', description: 'Biáº¿n Ä‘á»™ng cÃ ng máº¡nh thÃ¬ Ä‘iá»ƒm rá»§i ro cÃ ng cao.', kind: 'metric' },
+  current_price: { key: 'current_price', label: 'GiÃ¡ hiá»‡n táº¡i', description: 'GiÃ¡ Ä‘ang dÃ¹ng lÃ m Ä‘áº§u vÃ o cho score.', kind: 'metric' },
+  price: { key: 'price', label: 'GiÃ¡ hiá»‡n táº¡i', description: 'GiÃ¡ Ä‘ang dÃ¹ng lÃ m Ä‘áº§u vÃ o cho score.', kind: 'metric' },
+  change_percent: { key: 'change_percent', label: '% thay Ä‘á»•i', description: 'Biáº¿n Ä‘á»™ng giÃ¡ pháº§n trÄƒm cá»§a mÃ£.', kind: 'metric' },
+  trading_value: { key: 'trading_value', label: 'GiÃ¡ trá»‹ giao dá»‹ch', description: 'GiÃ¡ trá»‹ giao dá»‹ch tÃ­ch lÅ©y cá»§a mÃ£.', kind: 'metric' },
+  volume: { key: 'volume', label: 'Khá»‘i lÆ°á»£ng', description: 'Khá»‘i lÆ°á»£ng giao dá»‹ch tÃ­ch lÅ©y cá»§a mÃ£.', kind: 'metric' },
+  price_vs_open_ratio: { key: 'price_vs_open_ratio', label: 'Tá»· lá»‡ giÃ¡ / giÃ¡ má»Ÿ nhá»‹p', description: 'DÃ¹ng Ä‘á»ƒ xem mÃ£ cÃ³ giá»¯ Ä‘Æ°á»£c nhá»‹p tÄƒng hay khÃ´ng.', kind: 'metric' },
+  margin_of_safety: { key: 'margin_of_safety', label: 'BiÃªn an toÃ n', description: 'Khoáº£ng cÃ¡ch giá»¯a fair value vÃ  giÃ¡ hiá»‡n táº¡i.', kind: 'metric' },
+  winning_score: { key: 'winning_score', label: 'Winning Score', description: 'Äiá»ƒm tá»•ng há»£p cuá»‘i cÃ¹ng Ä‘á»ƒ xáº¿p háº¡ng mÃ£.', kind: 'formula' },
+  journal_entries_today: { key: 'journal_entries_today', label: 'Sá»‘ entry journal hÃ´m nay', description: 'DÃ¹ng cho checklist ká»· luáº­t cuá»‘i ngÃ y.', kind: 'metric' },
 };
 
 const EXTENDED_VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
-  pe_current: { key: 'pe_current', label: 'P/E', description: 'Hệ số P/E hiện tại của mã.', kind: 'metric' },
-  pb_current: { key: 'pb_current', label: 'P/B', description: 'Hệ số P/B hiện tại của mã.', kind: 'metric' },
-  bv_current: { key: 'bv_current', label: 'Book value', description: 'Giá trị sổ sách trên mỗi cổ phần.', kind: 'metric' },
-  eps_current: { key: 'eps_current', label: 'EPS', description: 'EPS hiện tại dùng để lọc tăng trưởng.', kind: 'metric' },
-  eps_growth_year: { key: 'eps_growth_year', label: 'EPS growth năm', description: 'Tăng trưởng EPS năm gần nhất so với năm trước.', kind: 'metric' },
-  eps_growth_quarter: { key: 'eps_growth_quarter', label: 'EPS growth quý', description: 'Tăng trưởng EPS quý gần nhất so với cùng kỳ.', kind: 'metric' },
-  roe_current: { key: 'roe_current', label: 'ROE', description: 'ROE hiện tại của doanh nghiệp.', kind: 'metric' },
-  dar_current: { key: 'dar_current', label: 'DAR', description: 'Tỷ lệ nợ trên tài sản hiện tại.', kind: 'metric' },
-  gross_margin_current: { key: 'gross_margin_current', label: 'Biên gộp', description: 'Biên lợi nhuận gộp gần nhất.', kind: 'metric' },
-  gross_margin_change: { key: 'gross_margin_change', label: 'Biến động biên gộp', description: 'Mức cải thiện hoặc suy giảm biên gộp.', kind: 'metric' },
-  quality_flag_count: { key: 'quality_flag_count', label: 'Số cờ chất lượng', description: 'Số tiêu chí chất lượng hiện đang đạt.', kind: 'metric' },
-  industry_pe_average: { key: 'industry_pe_average', label: 'P/E peer average', description: 'P/E trung bình nhóm so sánh hiện tại.', kind: 'metric' },
-  pe_gap_to_peer: { key: 'pe_gap_to_peer', label: 'P/E gap to peer', description: 'Khoảng cách P/E so với trung bình nhóm.', kind: 'metric' },
-  industry_pb_average: { key: 'industry_pb_average', label: 'P/B peer average', description: 'P/B trung bình nhóm so sánh hiện tại.', kind: 'metric' },
-  pb_gap_to_peer: { key: 'pb_gap_to_peer', label: 'P/B gap to peer', description: 'Khoảng cách P/B so với trung bình nhóm.', kind: 'metric' },
-  ma10_volume: { key: 'ma10_volume', label: 'MA10 volume', description: 'Khối lượng trung bình 10 phiên.', kind: 'metric' },
-  ma20_volume: { key: 'ma20_volume', label: 'MA20 volume', description: 'Khối lượng trung bình 20 phiên.', kind: 'metric' },
-  volume_spike_ratio: { key: 'volume_spike_ratio', label: 'Volume spike ratio', description: 'Tỷ lệ volume hiện tại so với MA10 hoặc MA20.', kind: 'metric' },
-  ema10: { key: 'ema10', label: 'EMA10', description: 'Đường EMA10 của giá đóng cửa.', kind: 'metric' },
-  ema20: { key: 'ema20', label: 'EMA20', description: 'Đường EMA20 của giá đóng cửa.', kind: 'metric' },
-  ema_gap_pct: { key: 'ema_gap_pct', label: 'EMA gap %', description: 'Khoảng cách giá hiện tại với EMA10 hoặc EMA20.', kind: 'metric' },
-  close_above_ema10: { key: 'close_above_ema10', label: 'Đóng trên EMA10', description: 'Cờ xác nhận giá đóng cửa đang nằm trên EMA10.', kind: 'metric' },
-  close_above_ema20: { key: 'close_above_ema20', label: 'Đóng trên EMA20', description: 'Cờ xác nhận giá đóng cửa đang nằm trên EMA20.', kind: 'metric' },
-  smart_money_inflow: { key: 'smart_money_inflow', label: 'Smart money inflow', description: 'Dòng tiền lớn vào với volume xác nhận và giá vượt vùng.', kind: 'metric' },
-  surge_trap: { key: 'surge_trap', label: 'Surge trap', description: 'Volume bùng nổ nhưng nến cho tín hiệu xả hoặc trap.', kind: 'metric' },
-  no_supply: { key: 'no_supply', label: 'No supply', description: 'Nhịp kéo về với volume cạn ở hỗ trợ.', kind: 'metric' },
-  volume_divergence: { key: 'volume_divergence', label: 'Volume divergence', description: 'Giá tăng nhưng volume suy yếu dần.', kind: 'metric' },
-  breakout_confirmation: { key: 'breakout_confirmation', label: 'Breakout confirmation', description: 'Mã đang xác nhận breakout với giá và volume.', kind: 'metric' },
-  spring_shakeout: { key: 'spring_shakeout', label: 'Spring / Shakeout', description: 'Rút chân mạnh sau khi thủng hỗ trợ.', kind: 'metric' },
-  absorption: { key: 'absorption', label: 'Absorption', description: 'Chuỗi nến hấp thụ nguồn cung với volume tăng dần.', kind: 'metric' },
-  pullback_retest: { key: 'pullback_retest', label: 'Pullback retest', description: 'Nhịp test lại breakout hoặc EMA thành công.', kind: 'metric' },
-  bullish_pattern_score: { key: 'bullish_pattern_score', label: 'Bullish pattern score', description: 'Điểm tổng hợp của các mẫu nến tăng giá.', kind: 'metric' },
-  bearish_pattern_score: { key: 'bearish_pattern_score', label: 'Bearish pattern score', description: 'Điểm tổng hợp của các mẫu nến giảm giá.', kind: 'metric' },
-  stop_loss_pct: { key: 'stop_loss_pct', label: 'Stop-loss %', description: 'Tỷ lệ stop-loss gợi ý theo execution engine.', kind: 'metric' },
-  obv_value: { key: 'obv_value', label: 'OBV value', description: 'Giá trị OBV hiện tại của mã.', kind: 'metric' },
-  obv_ma10: { key: 'obv_ma10', label: 'OBV MA10', description: 'Đường trung bình 10 phiên của OBV.', kind: 'metric' },
-  obv_slope_pct: { key: 'obv_slope_pct', label: 'OBV slope %', description: 'Độ dốc gần đây của OBV.', kind: 'metric' },
-  obv_trend_score: { key: 'obv_trend_score', label: 'OBV trend score', description: 'Điểm xu hướng dòng tiền theo OBV.', kind: 'metric' },
-  obv_above_ma: { key: 'obv_above_ma', label: 'OBV trên MA', description: 'OBV đang nằm trên đường trung bình tham chiếu.', kind: 'metric' },
-  price_context_score: { key: 'price_context_score', label: 'Price context score', description: 'Điểm bối cảnh giá: EMA, nền chặt và vùng gần breakout.', kind: 'metric' },
-  near_breakout_zone: { key: 'near_breakout_zone', label: 'Near breakout zone', description: 'Giá đang nằm sát vùng breakout.', kind: 'metric' },
-  base_tightness_pct: { key: 'base_tightness_pct', label: 'Base tightness %', description: 'Độ chặt của nền giá gần đây.', kind: 'metric' },
-  base_is_tight: { key: 'base_is_tight', label: 'Nền giá chặt', description: 'Cờ xác nhận nền giá đang chặt.', kind: 'metric' },
-  news_pressure_score: { key: 'news_pressure_score', label: 'News pressure score', description: 'Mức độ tin tức đang gây áp lực hoặc hưng phấn lên mã.', kind: 'metric' },
-  pre_news_accumulation: { key: 'pre_news_accumulation', label: 'Pre-news accumulation', description: 'Dòng tiền tích lũy trước khi tin bùng nổ.', kind: 'metric' },
-  obv_breakout_confirmation: { key: 'obv_breakout_confirmation', label: 'OBV breakout confirmation', description: 'OBV xác nhận cho breakout.', kind: 'metric' },
-  smart_money_before_news: { key: 'smart_money_before_news', label: 'Smart money before news', description: 'Dòng tiền lớn vào trước khi news pressure tăng.', kind: 'metric' },
-  obv_distribution: { key: 'obv_distribution', label: 'OBV distribution', description: 'Cảnh báo phân phối sớm theo OBV.', kind: 'metric' },
-  weak_news_chase: { key: 'weak_news_chase', label: 'Weak news chase', description: 'Tin nhiều nhưng dòng tiền không đồng thuận.', kind: 'metric' },
-  money_flow_score: { key: 'money_flow_score', label: 'Money flow score', description: 'Điểm tổng hợp của engine dòng tiền trước tin.', kind: 'metric' },
+  pe_current: { key: 'pe_current', label: 'P/E', description: 'Há»‡ sá»‘ P/E hiá»‡n táº¡i cá»§a mÃ£.', kind: 'metric' },
+  pb_current: { key: 'pb_current', label: 'P/B', description: 'Há»‡ sá»‘ P/B hiá»‡n táº¡i cá»§a mÃ£.', kind: 'metric' },
+  bv_current: { key: 'bv_current', label: 'Book value', description: 'GiÃ¡ trá»‹ sá»• sÃ¡ch trÃªn má»—i cá»• pháº§n.', kind: 'metric' },
+  eps_current: { key: 'eps_current', label: 'EPS', description: 'EPS hiá»‡n táº¡i dÃ¹ng Ä‘á»ƒ lá»c tÄƒng trÆ°á»Ÿng.', kind: 'metric' },
+  eps_growth_year: { key: 'eps_growth_year', label: 'EPS growth nÄƒm', description: 'TÄƒng trÆ°á»Ÿng EPS nÄƒm gáº§n nháº¥t so vá»›i nÄƒm trÆ°á»›c.', kind: 'metric' },
+  eps_growth_quarter: { key: 'eps_growth_quarter', label: 'EPS growth quÃ½', description: 'TÄƒng trÆ°á»Ÿng EPS quÃ½ gáº§n nháº¥t so vá»›i cÃ¹ng ká»³.', kind: 'metric' },
+  roe_current: { key: 'roe_current', label: 'ROE', description: 'ROE hiá»‡n táº¡i cá»§a doanh nghiá»‡p.', kind: 'metric' },
+  dar_current: { key: 'dar_current', label: 'DAR', description: 'Tá»· lá»‡ ná»£ trÃªn tÃ i sáº£n hiá»‡n táº¡i.', kind: 'metric' },
+  gross_margin_current: { key: 'gross_margin_current', label: 'BiÃªn gá»™p', description: 'BiÃªn lá»£i nhuáº­n gá»™p gáº§n nháº¥t.', kind: 'metric' },
+  gross_margin_change: { key: 'gross_margin_change', label: 'Biáº¿n Ä‘á»™ng biÃªn gá»™p', description: 'Má»©c cáº£i thiá»‡n hoáº·c suy giáº£m biÃªn gá»™p.', kind: 'metric' },
+  quality_flag_count: { key: 'quality_flag_count', label: 'Sá»‘ cá» cháº¥t lÆ°á»£ng', description: 'Sá»‘ tiÃªu chÃ­ cháº¥t lÆ°á»£ng hiá»‡n Ä‘ang Ä‘áº¡t.', kind: 'metric' },
+  industry_pe_average: { key: 'industry_pe_average', label: 'P/E peer average', description: 'P/E trung bÃ¬nh nhÃ³m so sÃ¡nh hiá»‡n táº¡i.', kind: 'metric' },
+  pe_gap_to_peer: { key: 'pe_gap_to_peer', label: 'P/E gap to peer', description: 'Khoáº£ng cÃ¡ch P/E so vá»›i trung bÃ¬nh nhÃ³m.', kind: 'metric' },
+  industry_pb_average: { key: 'industry_pb_average', label: 'P/B peer average', description: 'P/B trung bÃ¬nh nhÃ³m so sÃ¡nh hiá»‡n táº¡i.', kind: 'metric' },
+  pb_gap_to_peer: { key: 'pb_gap_to_peer', label: 'P/B gap to peer', description: 'Khoáº£ng cÃ¡ch P/B so vá»›i trung bÃ¬nh nhÃ³m.', kind: 'metric' },
+  ma10_volume: { key: 'ma10_volume', label: 'MA10 volume', description: 'Khá»‘i lÆ°á»£ng trung bÃ¬nh 10 phiÃªn.', kind: 'metric' },
+  ma20_volume: { key: 'ma20_volume', label: 'MA20 volume', description: 'Khá»‘i lÆ°á»£ng trung bÃ¬nh 20 phiÃªn.', kind: 'metric' },
+  volume_spike_ratio: { key: 'volume_spike_ratio', label: 'Volume spike ratio', description: 'Tá»· lá»‡ volume hiá»‡n táº¡i so vá»›i MA10 hoáº·c MA20.', kind: 'metric' },
+  ema10: { key: 'ema10', label: 'EMA10', description: 'ÄÆ°á»ng EMA10 cá»§a giÃ¡ Ä‘Ã³ng cá»­a.', kind: 'metric' },
+  ema20: { key: 'ema20', label: 'EMA20', description: 'ÄÆ°á»ng EMA20 cá»§a giÃ¡ Ä‘Ã³ng cá»­a.', kind: 'metric' },
+  ema_gap_pct: { key: 'ema_gap_pct', label: 'EMA gap %', description: 'Khoáº£ng cÃ¡ch giÃ¡ hiá»‡n táº¡i vá»›i EMA10 hoáº·c EMA20.', kind: 'metric' },
+  close_above_ema10: { key: 'close_above_ema10', label: 'ÄÃ³ng trÃªn EMA10', description: 'Cá» xÃ¡c nháº­n giÃ¡ Ä‘Ã³ng cá»­a Ä‘ang náº±m trÃªn EMA10.', kind: 'metric' },
+  close_above_ema20: { key: 'close_above_ema20', label: 'ÄÃ³ng trÃªn EMA20', description: 'Cá» xÃ¡c nháº­n giÃ¡ Ä‘Ã³ng cá»­a Ä‘ang náº±m trÃªn EMA20.', kind: 'metric' },
+  smart_money_inflow: { key: 'smart_money_inflow', label: 'Smart money inflow', description: 'DÃ²ng tiá»n lá»›n vÃ o vá»›i volume xÃ¡c nháº­n vÃ  giÃ¡ vÆ°á»£t vÃ¹ng.', kind: 'metric' },
+  surge_trap: { key: 'surge_trap', label: 'Surge trap', description: 'Volume bÃ¹ng ná»• nhÆ°ng náº¿n cho tÃ­n hiá»‡u xáº£ hoáº·c trap.', kind: 'metric' },
+  no_supply: { key: 'no_supply', label: 'No supply', description: 'Nhá»‹p kÃ©o vá» vá»›i volume cáº¡n á»Ÿ há»— trá»£.', kind: 'metric' },
+  volume_divergence: { key: 'volume_divergence', label: 'Volume divergence', description: 'GiÃ¡ tÄƒng nhÆ°ng volume suy yáº¿u dáº§n.', kind: 'metric' },
+  breakout_confirmation: { key: 'breakout_confirmation', label: 'Breakout confirmation', description: 'MÃ£ Ä‘ang xÃ¡c nháº­n breakout vá»›i giÃ¡ vÃ  volume.', kind: 'metric' },
+  spring_shakeout: { key: 'spring_shakeout', label: 'Spring / Shakeout', description: 'RÃºt chÃ¢n máº¡nh sau khi thá»§ng há»— trá»£.', kind: 'metric' },
+  absorption: { key: 'absorption', label: 'Absorption', description: 'Chuá»—i náº¿n háº¥p thá»¥ nguá»“n cung vá»›i volume tÄƒng dáº§n.', kind: 'metric' },
+  pullback_retest: { key: 'pullback_retest', label: 'Pullback retest', description: 'Nhá»‹p test láº¡i breakout hoáº·c EMA thÃ nh cÃ´ng.', kind: 'metric' },
+  bullish_pattern_score: { key: 'bullish_pattern_score', label: 'Bullish pattern score', description: 'Äiá»ƒm tá»•ng há»£p cá»§a cÃ¡c máº«u náº¿n tÄƒng giÃ¡.', kind: 'metric' },
+  bearish_pattern_score: { key: 'bearish_pattern_score', label: 'Bearish pattern score', description: 'Äiá»ƒm tá»•ng há»£p cá»§a cÃ¡c máº«u náº¿n giáº£m giÃ¡.', kind: 'metric' },
+  stop_loss_pct: { key: 'stop_loss_pct', label: 'Stop-loss %', description: 'Tá»· lá»‡ stop-loss gá»£i Ã½ theo execution engine.', kind: 'metric' },
+  obv_value: { key: 'obv_value', label: 'OBV value', description: 'GiÃ¡ trá»‹ OBV hiá»‡n táº¡i cá»§a mÃ£.', kind: 'metric' },
+  obv_ma10: { key: 'obv_ma10', label: 'OBV MA10', description: 'ÄÆ°á»ng trung bÃ¬nh 10 phiÃªn cá»§a OBV.', kind: 'metric' },
+  obv_slope_pct: { key: 'obv_slope_pct', label: 'OBV slope %', description: 'Äá»™ dá»‘c gáº§n Ä‘Ã¢y cá»§a OBV.', kind: 'metric' },
+  obv_trend_score: { key: 'obv_trend_score', label: 'OBV trend score', description: 'Äiá»ƒm xu hÆ°á»›ng dÃ²ng tiá»n theo OBV.', kind: 'metric' },
+  obv_above_ma: { key: 'obv_above_ma', label: 'OBV trÃªn MA', description: 'OBV Ä‘ang náº±m trÃªn Ä‘Æ°á»ng trung bÃ¬nh tham chiáº¿u.', kind: 'metric' },
+  price_context_score: { key: 'price_context_score', label: 'Price context score', description: 'Äiá»ƒm bá»‘i cáº£nh giÃ¡: EMA, ná»n cháº·t vÃ  vÃ¹ng gáº§n breakout.', kind: 'metric' },
+  near_breakout_zone: { key: 'near_breakout_zone', label: 'Near breakout zone', description: 'GiÃ¡ Ä‘ang náº±m sÃ¡t vÃ¹ng breakout.', kind: 'metric' },
+  base_tightness_pct: { key: 'base_tightness_pct', label: 'Base tightness %', description: 'Äá»™ cháº·t cá»§a ná»n giÃ¡ gáº§n Ä‘Ã¢y.', kind: 'metric' },
+  base_is_tight: { key: 'base_is_tight', label: 'Ná»n giÃ¡ cháº·t', description: 'Cá» xÃ¡c nháº­n ná»n giÃ¡ Ä‘ang cháº·t.', kind: 'metric' },
+  news_pressure_score: { key: 'news_pressure_score', label: 'News pressure score', description: 'Má»©c Ä‘á»™ tin tá»©c Ä‘ang gÃ¢y Ã¡p lá»±c hoáº·c hÆ°ng pháº¥n lÃªn mÃ£.', kind: 'metric' },
+  pre_news_accumulation: { key: 'pre_news_accumulation', label: 'Pre-news accumulation', description: 'DÃ²ng tiá»n tÃ­ch lÅ©y trÆ°á»›c khi tin bÃ¹ng ná»•.', kind: 'metric' },
+  obv_breakout_confirmation: { key: 'obv_breakout_confirmation', label: 'OBV breakout confirmation', description: 'OBV xÃ¡c nháº­n cho breakout.', kind: 'metric' },
+  smart_money_before_news: { key: 'smart_money_before_news', label: 'Smart money before news', description: 'DÃ²ng tiá»n lá»›n vÃ o trÆ°á»›c khi news pressure tÄƒng.', kind: 'metric' },
+  obv_distribution: { key: 'obv_distribution', label: 'OBV distribution', description: 'Cáº£nh bÃ¡o phÃ¢n phá»‘i sá»›m theo OBV.', kind: 'metric' },
+  weak_news_chase: { key: 'weak_news_chase', label: 'Weak news chase', description: 'Tin nhiá»u nhÆ°ng dÃ²ng tiá»n khÃ´ng Ä‘á»“ng thuáº­n.', kind: 'metric' },
+  money_flow_score: { key: 'money_flow_score', label: 'Money flow score', description: 'Äiá»ƒm tá»•ng há»£p cá»§a engine dÃ²ng tiá»n trÆ°á»›c tin.', kind: 'metric' },
 };
 
 Object.assign(VARIABLE_HINTS, EXTENDED_VARIABLE_HINTS);
@@ -470,7 +470,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     if (!this.screener?.summary) {
       return '';
     }
-    return `${this.t('strategyHub.screener.passed')} ${this.screener.summary.passed}/${this.screener.summary.total} ${this.t('strategyHub.screener.symbolUnit')} · ${this.decimal.format(this.screener.summary.passRate)}%`;
+    return `${this.t('strategyHub.screener.passed')} ${this.screener.summary.passed}/${this.screener.summary.total} ${this.t('strategyHub.screener.symbolUnit')} Â· ${this.decimal.format(this.screener.summary.passRate)}%`;
   }
 
   getScoringPaginationSummary(): string {
@@ -709,14 +709,14 @@ export class StrategyHubPage implements OnInit, OnDestroy {
             this.pageLoadState.finish(this.pageLoadKey);
           },
           error: () => {
-            this.error = 'KhĂ´ng táº£i Ä‘Æ°á»£c Strategy Hub.';
+            this.error = 'KhÄ‚Â´ng tÃ¡ÂºÂ£i Ã„â€˜Ã†Â°Ã¡Â»Â£c Strategy Hub.';
             this.pageLoadState.fail(this.pageLoadKey, this.error);
           },
         });
       },
       error: () => {
         this.loading = false;
-        this.error = 'Không tải được Strategy Hub.';
+        this.error = 'KhÃ´ng táº£i Ä‘Æ°á»£c Strategy Hub.';
         this.pageLoadState.fail(this.pageLoadKey, this.error);
       },
     });
@@ -752,7 +752,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       },
       error: () => {
         this.loadingConfigProfileId = null;
-        this.pageLoadState.fail(this.pageLoadKey, 'Không tải được cấu hình strategy.');
+        this.pageLoadState.fail(this.pageLoadKey, 'KhÃ´ng táº£i Ä‘Æ°á»£c cáº¥u hÃ¬nh strategy.');
       },
     });
   }
@@ -909,7 +909,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
         this.markSectionLoaded('journal');
         this.pageLoadState.finish(this.pageLoadKey);
       },
-      error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được nhật ký giao dịch.'),
+      error: () => this.pageLoadState.fail(this.pageLoadKey, 'KhÃ´ng táº£i Ä‘Æ°á»£c nháº­t kÃ½ giao dá»‹ch.'),
     });
   }
 
@@ -1015,7 +1015,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
           this.detailLoadingSymbol = null;
         }
         this.navigateToJournalSettings(item);
-        this.pageLoadState.fail(this.pageLoadKey, 'Không tải được chi tiết công thức của mã.');
+        this.pageLoadState.fail(this.pageLoadKey, 'KhÃ´ng táº£i Ä‘Æ°á»£c chi tiáº¿t cÃ´ng thá»©c cá»§a mÃ£.');
       },
     });
   }
@@ -1145,7 +1145,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
         if (this.detailLoadingSymbol === symbol) {
           this.detailLoadingSymbol = null;
         }
-        this.pageLoadState.fail(this.pageLoadKey, 'Không tải được chi tiết công thức của mã.');
+        this.pageLoadState.fail(this.pageLoadKey, 'KhÃ´ng táº£i Ä‘Æ°á»£c chi tiáº¿t cÃ´ng thá»©c cá»§a mÃ£.');
       },
     });
   }
@@ -1155,7 +1155,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       next: (response) => {
         if (!response.data) return;
         this.activeProfileId = response.data.id;
-        this.message = `Đã chuyển sang profile ${response.data.name}.`;
+        this.message = `ÄÃ£ chuyá»ƒn sang profile ${response.data.name}.`;
         this.loadOverview();
       },
     });
@@ -1163,21 +1163,21 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
   createProfile(): void {
     if (!this.newProfile.code.trim() || !this.newProfile.name.trim()) {
-      this.error = 'Cần nhập code và tên profile.';
+      this.error = 'Cáº§n nháº­p code vÃ  tÃªn profile.';
       return;
     }
     this.api.createStrategyProfile(this.newProfile).subscribe({
       next: (response) => {
         if (!response.data) {
-          this.error = 'Không tạo được profile.';
+          this.error = 'KhÃ´ng táº¡o Ä‘Æ°á»£c profile.';
           return;
         }
         this.newProfile = { code: '', name: '', description: '' };
-        this.message = 'Đã tạo profile mới.';
+        this.message = 'ÄÃ£ táº¡o profile má»›i.';
         this.loadOverview();
       },
       error: () => {
-        this.error = 'Tạo profile thất bại.';
+        this.error = 'Táº¡o profile tháº¥t báº¡i.';
       },
     });
   }
@@ -1191,17 +1191,17 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       next: (response) => {
         this.saving = false;
         if (!response.data) {
-          this.error = 'Backend không lưu được strategy config.';
+          this.error = 'Backend khÃ´ng lÆ°u Ä‘Æ°á»£c strategy config.';
           return;
         }
         this.config = response.data;
         this.ensureSettingsExpansion();
-        this.message = 'Đã lưu strategy settings.';
+        this.message = 'ÄÃ£ lÆ°u strategy settings.';
         this.refreshData();
       },
       error: () => {
         this.saving = false;
-        this.error = 'Lưu strategy settings thất bại.';
+        this.error = 'LÆ°u strategy settings tháº¥t báº¡i.';
       },
     });
   }
@@ -1215,22 +1215,22 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       next: (response) => {
         this.publishing = false;
         if (!response.data) {
-          this.error = 'Không publish được version.';
+          this.error = 'KhÃ´ng publish Ä‘Æ°á»£c version.';
           return;
         }
-        this.message = `Đã publish version #${response.data.versionNo}.`;
+        this.message = `ÄÃ£ publish version #${response.data.versionNo}.`;
         this.loadConfig(this.activeProfileId!);
       },
       error: () => {
         this.publishing = false;
-        this.error = 'Publish strategy thất bại.';
+        this.error = 'Publish strategy tháº¥t báº¡i.';
       },
     });
   }
 
   saveJournal(): void {
     if (!this.activeProfileId || !this.journalForm.symbol.trim()) {
-      this.error = 'Cần nhập mã giao dịch.';
+      this.error = 'Cáº§n nháº­p mÃ£ giao dá»‹ch.';
       return;
     }
     const payload = {
@@ -1280,10 +1280,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     request$.subscribe({
       next: (response) => {
         if (!response.data) {
-          this.error = this.editingJournalId ? 'Không cập nhật được nhật ký.' : 'Không lưu được nhật ký.';
+          this.error = this.editingJournalId ? 'KhÃ´ng cáº­p nháº­t Ä‘Æ°á»£c nháº­t kÃ½.' : 'KhÃ´ng lÆ°u Ä‘Æ°á»£c nháº­t kÃ½.';
           return;
         }
-        this.message = this.editingJournalId ? 'Đã cập nhật nhật ký giao dịch.' : 'Đã thêm nhật ký giao dịch.';
+        this.message = this.editingJournalId ? 'ÄÃ£ cáº­p nháº­t nháº­t kÃ½ giao dá»‹ch.' : 'ÄÃ£ thÃªm nháº­t kÃ½ giao dá»‹ch.';
         this.resetJournalForm();
         this.refreshData();
       },
@@ -1317,20 +1317,20 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   }
 
   deleteJournal(item: StrategyJournalEntry): void {
-    const confirmed = window.confirm(`Xóa nhật ký giao dịch cho mã ${item.symbol}?`);
+    const confirmed = window.confirm(`XÃ³a nháº­t kÃ½ giao dá»‹ch cho mÃ£ ${item.symbol}?`);
     if (!confirmed) {
       return;
     }
     this.api.deleteStrategyJournal(item.id).subscribe({
       next: (response) => {
         if (!response.data) {
-          this.error = 'Không xóa được journal.';
+          this.error = 'KhÃ´ng xÃ³a Ä‘Æ°á»£c journal.';
           return;
         }
         if (this.editingJournalId === item.id) {
           this.resetJournalForm();
         }
-        this.message = 'Đã xóa nhật ký giao dịch.';
+        this.message = 'ÄÃ£ xÃ³a nháº­t kÃ½ giao dá»‹ch.';
         this.reloadJournal();
       },
     });
@@ -1591,10 +1591,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
   getParameterValueLabel(parameter: StrategyParameter): string {
     if (parameter.dataType === 'boolean') {
-      return parameter.value ? 'Bật' : 'Tắt';
+      return parameter.value ? 'Báº­t' : 'Táº¯t';
     }
     if (parameter.value === null || parameter.value === undefined || parameter.value === '') {
-      return 'Chưa đặt';
+      return 'ChÆ°a Ä‘áº·t';
     }
     return String(parameter.value);
   }
@@ -1890,17 +1890,17 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       fairValue: {
         title: 'Giá trị hợp lý',
         passed: item.fairValue !== null && item.currentPrice <= item.fairValue,
-        message: `Giá hiện tại ${this.optionalNumberLabel(item.currentPrice, 2)}, fair value ${this.optionalNumberLabel(item.fairValue, 2)}.`,
+        message: 'Giá hiện tại ' + this.optionalNumberLabel(item.currentPrice, 2) + ', fair value ' + this.optionalNumberLabel(item.fairValue, 2) + '.',
       },
       marginOfSafety: {
         title: 'Biên an toàn',
         passed: item.marginOfSafety > 0,
-        message: `Biên an toàn hiện tại ${(item.marginOfSafety * 100).toFixed(1)}%. Số dương nghĩa là giá đang thấp hơn fair value.`,
+        message: 'Biên an toàn hiện tại ' + (item.marginOfSafety * 100).toFixed(1) + '%. Số dương nghĩa là giá đang thấp hơn fair value.',
       },
       changePercent: {
         title: 'Biến động',
         passed: Math.abs(item.changePercent) <= 3,
-        message: `Biến động phiên hiện tại ${item.changePercent.toFixed(2)}%. Biến động quá mạnh cần kiểm tra thanh khoản và tin tức.`,
+        message: 'Biến động phiên hiện tại ' + item.changePercent.toFixed(2) + '%. Biến động quá mạnh cần kiểm tra thanh khoản và tin tức.',
       },
       watchlist: {
         title: 'Danh sách theo dõi',
@@ -1911,10 +1911,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     const selected = metricMap[metric];
     const items = [
       this.buildModalResult(selected.title, selected.passed, selected.message, metric),
-      this.buildModalResult('Rủi ro', item.riskScore < 65, `Risk score hiện tại ${item.riskScore.toFixed(2)}.`, 'risk_score'),
-      this.buildModalResult('Winning Score', item.winningScore >= 50, `Winning Score hiện tại ${item.winningScore.toFixed(2)}.`, 'winning_score'),
+      this.buildModalResult('Rủi ro', item.riskScore < 65, 'Risk score hiện tại ' + item.riskScore.toFixed(2) + '.', 'risk_score'),
+      this.buildModalResult('Winning Score', item.winningScore >= 50, 'Winning Score hiện tại ' + item.winningScore.toFixed(2) + '.', 'winning_score'),
     ];
-    this.openRuleModal(`${selected.title} ${item.symbol}`, items, 'passFail');
+    this.openRuleModal(selected.title + ' ' + item.symbol, items, 'passFail');
   }
 
   openScoreMetricModal(item: StrategyScoredItem, score: 'Q' | 'L' | 'M' | 'P' | 'Winning'): void {
@@ -1968,7 +1968,6 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     }
     this.openRuleModal(`${selected.title} ${item.symbol}`, items, 'passFail');
   }
-
   closeRuleModal(): void {
     this.ruleModalOpen = false;
   }
@@ -2030,7 +2029,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     const parameterHints = (entity.parameters || []).map((parameter) => ({
       key: parameter.paramKey,
       label: parameter.label,
-      description: `Tham số cấu hình. Giá trị hiện tại: ${this.getParameterValueLabel(parameter)}.`,
+      description: `Tham sá»‘ cáº¥u hÃ¬nh. GiÃ¡ trá»‹ hiá»‡n táº¡i: ${this.getParameterValueLabel(parameter)}.`,
       kind: 'parameter' as const,
     }));
 
@@ -2119,14 +2118,14 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       return {
         key: token,
         label: parameter.label,
-        description: `Giá trị cấu hình hiện tại: ${this.getParameterValueLabel(parameter)}.`,
+        description: `GiÃ¡ trá»‹ cáº¥u hÃ¬nh hiá»‡n táº¡i: ${this.getParameterValueLabel(parameter)}.`,
         kind: 'parameter',
       };
     }
     return VARIABLE_HINTS[token] || {
       key: token,
       label: token.replace(/_/g, ' '),
-      description: 'Biến kỹ thuật đang được dùng trong công thức, chưa có mô tả business riêng.',
+      description: 'Biáº¿n ká»¹ thuáº­t Ä‘ang Ä‘Æ°á»£c dÃ¹ng trong cÃ´ng thá»©c, chÆ°a cÃ³ mÃ´ táº£ business riÃªng.',
       kind: 'metric',
     };
   }
@@ -2171,7 +2170,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   ): string {
     const thresholdText = this.describeRuleThreshold(rule);
     const prefix = rule.passed ? passPrefix : failPrefix;
-    return thresholdText ? `${prefix}: ${currentValueText}, ngưỡng ${thresholdText}.` : `${prefix}: ${currentValueText}.`;
+    return thresholdText ? `${prefix}: ${currentValueText}, ngÆ°á»¡ng ${thresholdText}.` : `${prefix}: ${currentValueText}.`;
   }
 
   private describeRuleThreshold(rule: StrategyRuleResult): string {
@@ -2180,7 +2179,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     }
     const parameter = rule.parameters[0];
     const valueLabel = this.getParameterValueLabel(parameter);
-    if (!valueLabel || valueLabel === 'Chưa đặt') {
+    if (!valueLabel || valueLabel === 'ChÆ°a Ä‘áº·t') {
       return '';
     }
     return `${parameter.label.toLowerCase()} = ${valueLabel}`;
