@@ -520,8 +520,9 @@
               </div>
             </section>
 
-            <div class="journal-toolbar" *ngIf="isJournalWorkspaceTab('journal')">
-              <div class="journal-filter-group" role="group" [attr.aria-label]="'dashboardV2.journalFilter.label' | translate">
+            <div class="row g-2 journal-toolbar" *ngIf="isJournalWorkspaceTab('journal')">
+              <div class="col">
+                <div class="journal-filter-group" role="group" [attr.aria-label]="'dashboardV2.journalFilter.label' | translate">
                 <button
                   *ngFor="let item of journalFilterItems()"
                   type="button"
@@ -532,9 +533,11 @@
                   <span>{{ item.label }}</span>
                   <strong>{{ journalResultCount(item.key) }}</strong>
                 </button>
+                </div>
               </div>
 
-              <div class="journal-sort-group">
+              <div class="col-auto">
+                <div class="journal-sort-group">
                 <label class="journal-sort-label" for="dashboard-v2-journal-sort">{{ 'dashboardV2.journalSort.label' | translate }}</label>
                 <select
                   id="dashboard-v2-journal-sort"
@@ -544,9 +547,23 @@
                 >
                   <option *ngFor="let item of journalSortItems()" [value]="item.key">{{ item.label }}</option>
                 </select>
-                <button type="button" class="btn btn-sm btn-outline-secondary journal-sort-dir" (click)="toggleJournalSortDir()">
-                  {{ (journalSortDir === 'desc' ? 'dashboardV2.journalSort.desc' : 'dashboardV2.journalSort.asc') | translate }}
-                </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary journal-sort-dir" (click)="toggleJournalSortDir()">
+                    {{ (journalSortDir === 'desc' ? 'dashboardV2.journalSort.desc' : 'dashboardV2.journalSort.asc') | translate }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="col-auto">
+                <div class="journal-page-group">
+                  <select
+                    id="dashboard-v2-journal-page-size"
+                    class="form-select form-select-sm journal-page-select"
+                    [value]="journalPageSize()"
+                  (change)="onJournalPageSizeChange($event)"
+                  >
+                    <option *ngFor="let size of journalPageSizeOptions" [value]="size">{{ size }}</option>
+                  </select>
+                </div>
               </div>
             </div>
 

@@ -309,8 +309,8 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     news: 6,
     ai: 4,
   };
-  private readonly journalWorkspacePageSizes: Record<DashboardJournalPagerKey, number> = {
-    journal: 12,
+  private journalWorkspacePageSizes: Record<DashboardJournalPagerKey, number> = {
+    journal: 10,
     'operations-open': 6,
     'operations-actions': 6,
     'portfolio-holdings': 6,
@@ -326,6 +326,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     { value: 'HNX', label: 'HNX' },
     { value: 'UPCOM', label: 'UPCOM' },
   ];
+  readonly journalPageSizeOptions = [5, 10, 15];
 
   loading = false;
   error = '';
@@ -830,6 +831,32 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   pagedVisibleJournalRows(): DashboardV2JournalRowVm[] {
     return this.currentJournalWorkspacePageItems('journal', this.visibleJournalRows());
+  }
+
+  journalPageSize(): number {
+    return this.journalWorkspacePageSizes.journal;
+  }
+
+  journalPageRangeLabel(): string {
+    const total = this.visibleJournalRows().length;
+    if (!total) {
+      return '0 / 0';
+    }
+    const currentPage = this.currentJournalWorkspacePage('journal', total);
+    const pageSize = this.journalWorkspacePageSizes.journal;
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(total, start + pageSize - 1);
+    return `${start}-${end} / ${total}`;
+  }
+
+  onJournalPageSizeChange(event: Event): void {
+    const nextSize = Number((event.target as HTMLSelectElement | null)?.value || 10);
+    if (!Number.isFinite(nextSize) || nextSize <= 0) {
+      return;
+    }
+    this.journalWorkspacePageSizes.journal = nextSize;
+    this.journalWorkspacePages.journal = 1;
+    this.ensureJournalWorkspacePageWithinBounds('journal', this.visibleJournalRows().length);
   }
 
   currentJournalWorkspacePage(key: DashboardJournalPagerKey, total: number): number {

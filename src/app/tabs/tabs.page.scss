@@ -287,6 +287,129 @@
   min-width: 0;
 }
 
+.mobile-topbar,
+.mobile-menu-backdrop,
+.mobile-menu-panel {
+  display: none;
+}
+
+.mobile-topbar {
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(18px);
+  position: sticky;
+  top: 0;
+  z-index: 35;
+}
+
+.mobile-topbar-toggle {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.94);
+  color: #111827;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+}
+
+.mobile-topbar-brand {
+  min-width: 0;
+}
+
+.mobile-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.34);
+  z-index: 34;
+}
+
+.mobile-menu-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(86vw, 20rem);
+  padding: 1rem 0.9rem;
+  background: rgba(255, 255, 255, 0.98);
+  border-right: 1px solid rgba(17, 24, 39, 0.08);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  z-index: 40;
+  transform: translateX(-100%);
+  transition: transform 180ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.mobile-menu-panel.is-open {
+  transform: translateX(0);
+}
+
+.mobile-menu-nav {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.mobile-menu-link {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 3.2rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 1rem;
+  color: #4b5563;
+  text-decoration: none;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.mobile-menu-link.active {
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(17, 24, 39, 0.18);
+}
+
+.mobile-menu-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  background: rgba(17, 24, 39, 0.06);
+}
+
+.mobile-menu-link.active .mobile-menu-icon {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mobile-menu-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.mobile-menu-logout {
+  margin-top: auto;
+  border: 0;
+  border-radius: 1rem;
+  background: rgba(17, 24, 39, 0.06);
+  color: #374151;
+  min-height: 3.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 .mobile-tab-bar {
   display: none;
   align-items: stretch;
@@ -450,6 +573,38 @@
   background: rgba(15, 23, 42, 0.86);
 }
 
+:host-context(html[data-theme-mode='dark']) .mobile-topbar,
+:host-context(body[data-theme-mode='dark']) .mobile-topbar,
+:host-context(html[data-theme-mode='dark']) .mobile-menu-panel,
+:host-context(body[data-theme-mode='dark']) .mobile-menu-panel {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.94);
+}
+
+:host-context(html[data-theme-mode='dark']) .mobile-topbar-toggle,
+:host-context(body[data-theme-mode='dark']) .mobile-topbar-toggle,
+:host-context(html[data-theme-mode='dark']) .mobile-menu-link,
+:host-context(body[data-theme-mode='dark']) .mobile-menu-link,
+:host-context(html[data-theme-mode='dark']) .mobile-menu-logout,
+:host-context(body[data-theme-mode='dark']) .mobile-menu-logout {
+  color: #e5eefb;
+}
+
+:host-context(html[data-theme-mode='dark']) .mobile-menu-link,
+:host-context(body[data-theme-mode='dark']) .mobile-menu-link {
+  background: rgba(17, 24, 39, 0.74);
+}
+
+:host-context(html[data-theme-mode='dark']) .mobile-menu-icon,
+:host-context(body[data-theme-mode='dark']) .mobile-menu-icon {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+:host-context(html[data-theme-mode='dark']) .mobile-menu-logout,
+:host-context(body[data-theme-mode='dark']) .mobile-menu-logout {
+  background: rgba(148, 163, 184, 0.08);
+}
+
 :host-context(html[data-theme-mode='dark']) .desktop-sidebar-divider,
 :host-context(body[data-theme-mode='dark']) .desktop-sidebar-divider {
   background: linear-gradient(90deg, rgba(148, 163, 184, 0.18), rgba(148, 163, 184, 0));
@@ -565,6 +720,18 @@
   .tabs-stage {
     min-height: 100%;
     width: 100%;
+  }
+
+  .mobile-topbar {
+    display: flex;
+  }
+
+  .mobile-menu-backdrop {
+    display: block;
+  }
+
+  .mobile-menu-panel {
+    display: flex;
   }
 
   .mobile-tab-bar {

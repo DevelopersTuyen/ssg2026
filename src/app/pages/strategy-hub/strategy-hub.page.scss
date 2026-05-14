@@ -219,6 +219,26 @@
   line-height: 1;
 }
 
+@media (max-width: 768px) {
+  .strategy-content {
+    --overflow: auto;
+    height: auto;
+  }
+
+  .strategy-shell {
+    height: auto;
+    max-height: none;
+    min-height: auto;
+    overflow: visible;
+    padding: 12px 10px 16px;
+  }
+
+  .strategy-main {
+    min-height: auto;
+    overflow: visible;
+  }
+}
+
 .engine-badge-row {
   display: flex;
   flex-wrap: wrap;
@@ -1986,14 +2006,21 @@
 
 @media (max-width: 768px) {
   .strategy-content {
-    --overflow: hidden;
+    --overflow: auto;
   }
 
   .strategy-shell {
-    height: calc(100dvh - 76px);
-    max-height: calc(100dvh - 76px);
+    height: auto;
+    max-height: none;
+    min-height: auto;
+    overflow: visible;
     padding: 10px;
     gap: 8px;
+  }
+
+  .strategy-main {
+    min-height: auto;
+    overflow: visible;
   }
 
   .scoring-workspace {

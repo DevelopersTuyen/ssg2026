@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subject, Subscription, forkJoin } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -276,6 +276,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   detailLoadingSymbol: string | null = null;
   error = '';
   message = '';
+  isMobileViewport = false;
 
   overview: StrategyOverviewResponse | null = null;
   profiles: StrategyProfile[] = [];
@@ -351,6 +352,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.updateViewportState();
     this.selectedScoringFormulaCodes = this.readStoredScoringFormulaCodes();
     this.pageLoadState.registerPage(this.pageLoadKey, 'tabs.strategy');
     this.scoringKeywordSub = this.scoringKeywordChanges
@@ -386,8 +388,17 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     this.scoringKeywordSub?.unsubscribe();
   }
 
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.updateViewportState();
+  }
+
   private t(key: string): string {
     return this.i18n.translate(key);
+  }
+
+  private updateViewportState(): void {
+    this.isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
   }
 
   private hasDetailedScoreItem(item: StrategyScoredItem | null | undefined): boolean {

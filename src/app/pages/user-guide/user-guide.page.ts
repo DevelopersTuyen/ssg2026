@@ -738,6 +738,27 @@ export class UserGuidePage {
     this.guideSearchTerm = '';
   }
 
+  downloadWordGuide(): void {
+    const guideRoot = document.querySelector('.guide-main') as HTMLElement | null;
+    if (!guideRoot) {
+      return;
+    }
+
+    const clone = guideRoot.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('button').forEach((node) => node.remove());
+    const html = this.buildWordDocument(clone.innerHTML);
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    const fileName = `huong-dan-su-dung-${new Date().toISOString().slice(0, 10)}.doc`;
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }
+
   openRoute(route?: string): void {
     if (!route) {
       return;
@@ -764,6 +785,69 @@ export class UserGuidePage {
     }
     const keyword = this.normalizeText(this.guideSearchTerm);
     return values.some((value) => this.normalizeText(value).includes(keyword));
+  }
+
+  private buildWordDocument(content: string): string {
+    return `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:w="urn:schemas-microsoft-com:office:word"
+            xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="utf-8">
+          <title>Hướng dẫn sử dụng</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              color: #152033;
+              line-height: 1.6;
+              padding: 24px;
+            }
+            h1, h2, h3, h4, h5 {
+              color: #152033;
+              margin: 0 0 12px;
+            }
+            p, li {
+              font-size: 11pt;
+            }
+            .guide-panel {
+              border: 1px solid #dbe4ee;
+              padding: 16px;
+              margin-bottom: 18px;
+            }
+            .panel-kicker, .subheading, .page-kicker, .link-flow {
+              font-size: 9pt;
+              font-weight: 700;
+              text-transform: uppercase;
+              color: #0f766e;
+            }
+            .panel-title, .practical-card-title, .formula-card-title, .link-title {
+              font-size: 16pt;
+              font-weight: 700;
+              margin: 8px 0;
+            }
+            .panel-subtitle {
+              color: #5b6472;
+              margin-bottom: 12px;
+            }
+            .formula-snippet {
+              border: 1px solid #dbe4ee;
+              background: #f3f8ff;
+              padding: 10px 12px;
+              font-family: "Courier New", monospace;
+              font-size: 10pt;
+              white-space: pre-wrap;
+            }
+            ul, ol {
+              margin: 8px 0 0 18px;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Hướng dẫn sử dụng hệ thống</h1>
+          ${content}
+        </body>
+      </html>
+    `;
   }
 }
 

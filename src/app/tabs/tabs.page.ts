@@ -47,6 +47,7 @@ export class TabsPage implements OnInit, OnDestroy {
 
   globalLoadState: GlobalLoadState | null = null;
   sidebarCollapsed = false;
+  mobileMenuOpen = false;
   private globalLoadSub?: Subscription;
 
   constructor(
@@ -95,8 +96,17 @@ export class TabsPage implements OnInit, OnDestroy {
       return;
     }
 
+    this.mobileMenuOpen = false;
     this.auth.logout();
     this.router.navigateByUrl('/login');
+  }
+
+  toggleMobileMenu(): void {
+    this.mobileMenuOpen = !this.mobileMenuOpen;
+  }
+
+  closeMobileMenu(): void {
+    this.mobileMenuOpen = false;
   }
 
   globalBadgeText(): string {

@@ -100,6 +100,48 @@
   </aside>
 
   <div class="tabs-stage">
+    <header class="mobile-topbar">
+      <button
+        type="button"
+        class="mobile-topbar-toggle"
+        (click)="toggleMobileMenu()"
+        [attr.aria-expanded]="mobileMenuOpen"
+        aria-label="Open mobile menu"
+      >
+        <ion-icon [name]="mobileMenuOpen ? 'close-outline' : 'menu-outline'"></ion-icon>
+      </button>
+      <div class="mobile-topbar-brand">
+        <div class="brand-kicker">Market</div>
+        <div class="brand-title">Workspace</div>
+      </div>
+    </header>
+
+    <div class="mobile-menu-backdrop" *ngIf="mobileMenuOpen" (click)="closeMobileMenu()"></div>
+    <aside class="mobile-menu-panel" [class.is-open]="mobileMenuOpen">
+      <nav class="mobile-menu-nav">
+        <ng-container *ngFor="let item of menuItems">
+          <a
+            *ngIf="can(item.permission)"
+            class="mobile-menu-link"
+            [routerLink]="item.href"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+            (click)="closeMobileMenu()"
+          >
+            <span class="mobile-menu-icon">
+              <ion-icon [name]="item.icon"></ion-icon>
+            </span>
+            <span class="mobile-menu-label">{{ item.labelKey | translate }}</span>
+          </a>
+        </ng-container>
+      </nav>
+
+      <button type="button" class="mobile-menu-logout" (click)="logout()">
+        <ion-icon name="log-out-outline"></ion-icon>
+        <span>{{ 'common.logout' | translate }}</span>
+      </button>
+    </aside>
+
     <div class="tabs-content-shell">
       <ion-router-outlet class="tabs-router-outlet"></ion-router-outlet>
     </div>

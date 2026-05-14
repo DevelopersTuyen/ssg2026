@@ -1,4 +1,4 @@
-﻿<ion-content [fullscreen]="true" [scrollY]="false" class="strategy-content">
+<ion-content [fullscreen]="true" [scrollY]="isMobileViewport" class="strategy-content">
   <div class="strategy-shell">
     <app-page-load-indicator class="strategy-mini-loader" pageId="strategy-hub"></app-page-load-indicator>
 
@@ -22,7 +22,7 @@
             <div class="score-row" *ngFor="let item of rankings?.items || []" (click)="chooseScoreItem(item)">
               <div class="score-row-main">
                 <strong>{{ item.symbol }}</strong>
-                <small>{{ item.tradeDate || (item.createdAt | date:'dd/MM/yyyy') }} · {{ item.classification || ('strategyHub.common.unassigned' | translate) }}</small>
+                <small>{{ item.tradeDate || (item.createdAt | date:'dd/MM/yyyy') }} Â· {{ item.classification || ('strategyHub.common.unassigned' | translate) }}</small>
                 <div class="journal-meta-row">
                   <span>{{ 'strategyHub.common.strategy' | translate }}: {{ item.strategyName || ('strategyHub.common.unassigned' | translate) }}</span>
                   <span>SL: {{ item.stopLossPrice || '-' }}</span>
@@ -31,7 +31,7 @@
                   <span>{{ 'strategyHub.common.capitalShort' | translate }}: {{ item.totalCapital || '-' }}</span>
                 </div>
                 <p class="journal-psychology" *ngIf="item.psychology">{{ 'strategyHub.common.psychology' | translate }}: {{ item.psychology }}</p>
-                <small>{{ item.exchange }} · {{ 'strategyHub.common.score' | translate }} {{ item.winningScore | number:'1.0-0' }}</small>
+                <small>{{ item.exchange }} Â· {{ 'strategyHub.common.score' | translate }} {{ item.winningScore | number:'1.0-0' }}</small>
               </div>
               <div class="score-row-side">
                 <button type="button" class="icon-action-btn" [attr.title]="'strategyHub.common.addToJournal' | translate" (click)="openJournalFromItem(item, $event)">
@@ -401,13 +401,13 @@
               (keydown.enter)="openDecisionBreakdownModal(selectedScoreItem)"
             >
               <span>K?t lu?n nhanh</span>
-              <strong>{{ selectedScoreItem.passedAllLayers ? 'Ð?t b? l?c' : 'C?n xem l?i' }}</strong>
+              <strong>{{ selectedScoreItem.passedAllLayers ? 'Ã?t b? l?c' : 'C?n xem l?i' }}</strong>
               <p>
                 Winning {{ selectedScoreItem.winningScore | number:'1.0-0' }},
                 r?i ro {{ selectedScoreItem.riskScore | number:'1.0-0' }},
-                biên an toàn {{ selectedScoreItem.marginOfSafety | percent:'1.0-1' }}.
+                biÃªn an toÃ n {{ selectedScoreItem.marginOfSafety | percent:'1.0-1' }}.
               </p>
-              <small>Xem lý do</small>
+              <small>Xem lÃ½ do</small>
             </section>
 
             <section
@@ -433,13 +433,13 @@
               (click)="openFlowBreakdownModal(selectedScoreItem)"
               (keydown.enter)="openFlowBreakdownModal(selectedScoreItem)"
             >
-              <span>Dòng ti?n</span>
-              <strong>{{ countDetectedSignals(selectedScoreItem.candlestickSignals) + countDetectedSignals(selectedScoreItem.footprintSignals) }} tín hi?u</strong>
+              <span>DÃ²ng ti?n</span>
+              <strong>{{ countDetectedSignals(selectedScoreItem.candlestickSignals) + countDetectedSignals(selectedScoreItem.footprintSignals) }} tÃ­n hi?u</strong>
               <p>
                 Smart money {{ selectedScoreItem.volumeIntelligence?.smartMoneyInflow ? 'b?t' : 'chua b?t' }},
                 spike {{ optionalNumberLabel(selectedScoreItem.volumeIntelligence?.volumeSpikeRatio, 1) }}x.
               </p>
-              <small>Xem tín hi?u</small>
+              <small>Xem tÃ­n hi?u</small>
             </section>
 
             <section
@@ -449,10 +449,10 @@
               (click)="openRulesBreakdownModal(selectedScoreItem)"
               (keydown.enter)="openRulesBreakdownModal(selectedScoreItem)"
             >
-              <span>Lu?t & c?nh báo</span>
+              <span>Lu?t & c?nh bÃ¡o</span>
               <strong>{{ countPassedRules(selectedScoreItem.layerResults) }}/{{ selectedScoreItem.layerResults.length || 0 }} pass</strong>
               <p>
-                {{ countTriggeredAlerts(selectedScoreItem.alertResults) }} c?nh báo kích ho?t,
+                {{ countTriggeredAlerts(selectedScoreItem.alertResults) }} c?nh bÃ¡o kÃ­ch ho?t,
                 {{ countFailedRules(selectedScoreItem.checklistResults) }} checklist chua d?t.
               </p>
               <small>Xem pass / fail</small>
@@ -462,8 +462,8 @@
           <div class="detail-section-grid">
             <section class="detail-card" *ngIf="selectedScoreItem.fundamentalMetrics as fundamentals">
               <div class="detail-card-head">
-                <h4>Engine chá»‰ sá»‘ cÆ¡ báº£n</h4>
-                <small>P/E, P/B, tang tru?ng EPS, ROE, biên g?p và c? ch?t lu?ng</small>
+                <h4>Engine chÃ¡Â»â€° sÃ¡Â»â€˜ cÃ†Â¡ bÃ¡ÂºÂ£n</h4>
+                <small>P/E, P/B, tang tru?ng EPS, ROE, biÃªn g?p vÃ  c? ch?t lu?ng</small>
               </div>
               <div class="detail-metric-grid">
                 <div class="detail-metric">
@@ -483,7 +483,7 @@
                   <strong>{{ fundamentals.epsGrowthYear !== null ? (fundamentals.epsGrowthYear / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Tang tru?ng EPS quý</span>
+                  <span>Tang tru?ng EPS quÃ½</span>
                   <strong>{{ fundamentals.epsGrowthQuarter !== null ? (fundamentals.epsGrowthQuarter / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
@@ -495,11 +495,11 @@
                   <strong>{{ fundamentals.dar !== null ? (fundamentals.dar / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Biên g?p</span>
+                  <span>BiÃªn g?p</span>
                   <strong>{{ fundamentals.grossMargin !== null ? (fundamentals.grossMargin / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Bi?n d?ng biên g?p</span>
+                  <span>Bi?n d?ng biÃªn g?p</span>
                   <strong>{{ fundamentals.grossMarginChange !== null ? (fundamentals.grossMarginChange / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
@@ -509,15 +509,15 @@
               </div>
               <div class="signal-pill-row" *ngIf="fundamentals.qualityFlags?.length">
                 <span class="signal-pill" *ngFor="let item of fundamentals.qualityFlags" [class.bullish]="item.passed" [class.bearish]="!item.passed">
-                  {{ item.label }} · {{ item.passed ? 'PASS' : 'FAIL' }}
+                  {{ item.label }} Â· {{ item.passed ? 'PASS' : 'FAIL' }}
                 </span>
               </div>
             </section>
 
             <section class="detail-card" *ngIf="selectedScoreItem.volumeIntelligence as volumeIntelligence">
               <div class="detail-card-head">
-                <h4>Engine phân tích kh?i lu?ng</h4>
-                <small>MA10/MA20 volume, EMA gap, spike và tín hi?u dòng ti?n</small>
+                <h4>Engine phÃ¢n tÃ­ch kh?i lu?ng</h4>
+                <small>MA10/MA20 volume, EMA gap, spike vÃ  tÃ­n hi?u dÃ²ng ti?n</small>
               </div>
               <div class="detail-metric-grid">
                 <div class="detail-metric">
@@ -546,17 +546,17 @@
                 </div>
               </div>
               <div class="signal-pill-row">
-                <span class="signal-pill" [class.bullish]="volumeIntelligence.smartMoneyInflow" [class.neutral]="!volumeIntelligence.smartMoneyInflow">Dòng ti?n thông minh · {{ volumeIntelligence.smartMoneyInflow ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bearish]="volumeIntelligence.surgeTrap" [class.neutral]="!volumeIntelligence.surgeTrap">B?y tang t?c · {{ volumeIntelligence.surgeTrap ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bullish]="volumeIntelligence.noSupply" [class.neutral]="!volumeIntelligence.noSupply">C?n cung · {{ volumeIntelligence.noSupply ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bearish]="volumeIntelligence.volumeDivergence" [class.neutral]="!volumeIntelligence.volumeDivergence">Phân k? kh?i lu?ng · {{ volumeIntelligence.volumeDivergence ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="volumeIntelligence.smartMoneyInflow" [class.neutral]="!volumeIntelligence.smartMoneyInflow">DÃ²ng ti?n thÃ´ng minh Â· {{ volumeIntelligence.smartMoneyInflow ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="volumeIntelligence.surgeTrap" [class.neutral]="!volumeIntelligence.surgeTrap">B?y tang t?c Â· {{ volumeIntelligence.surgeTrap ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="volumeIntelligence.noSupply" [class.neutral]="!volumeIntelligence.noSupply">C?n cung Â· {{ volumeIntelligence.noSupply ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="volumeIntelligence.volumeDivergence" [class.neutral]="!volumeIntelligence.volumeDivergence">PhÃ¢n k? kh?i lu?ng Â· {{ volumeIntelligence.volumeDivergence ? 'B?T' : 'T?T' }}</span>
               </div>
             </section>
 
             <section class="detail-card" *ngIf="selectedScoreItem.moneyFlowIntelligence as moneyFlowIntelligence">
               <div class="detail-card-head">
-                <h4>Engine c?nh báo s?m dòng ti?n</h4>
-                <small>OBV, b?i c?nh giá, áp l?c tin t?c và tín hi?u dòng ti?n tru?c tin</small>
+                <h4>Engine c?nh bÃ¡o s?m dÃ²ng ti?n</h4>
+                <small>OBV, b?i c?nh giÃ¡, Ã¡p l?c tin t?c vÃ  tÃ­n hi?u dÃ²ng ti?n tru?c tin</small>
               </div>
               <div class="detail-metric-grid">
                 <div class="detail-metric">
@@ -568,39 +568,39 @@
                   <strong>{{ moneyFlowIntelligence.obvMa10 !== null ? (moneyFlowIntelligence.obvMa10 | number:'1.0-0') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Äá»™ dá»‘c OBV</span>
+                  <span>Ã„ÂÃ¡Â»â„¢ dÃ¡Â»â€˜c OBV</span>
                   <strong>{{ moneyFlowIntelligence.obvSlopePct !== null ? (moneyFlowIntelligence.obvSlopePct / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Äiá»ƒm xu hÆ°á»›ng OBV</span>
+                  <span>Ã„ÂiÃ¡Â»Æ’m xu hÃ†Â°Ã¡Â»â€ºng OBV</span>
                   <strong>{{ moneyFlowIntelligence.obvTrendScore !== null ? (moneyFlowIntelligence.obvTrendScore | number:'1.0-2') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Bá»‘i cáº£nh giÃ¡</span>
+                  <span>BÃ¡Â»â€˜i cÃ¡ÂºÂ£nh giÃƒÂ¡</span>
                   <strong>{{ moneyFlowIntelligence.priceContextScore !== null ? (moneyFlowIntelligence.priceContextScore | number:'1.0-2') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Äiá»ƒm dÃ²ng tiá»n</span>
+                  <span>Ã„ÂiÃ¡Â»Æ’m dÃƒÂ²ng tiÃ¡Â»Ân</span>
                   <strong>{{ moneyFlowIntelligence.moneyFlowScore !== null ? (moneyFlowIntelligence.moneyFlowScore | number:'1.0-2') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Äá»™ cháº·t ná»n giÃ¡</span>
+                  <span>Ã„ÂÃ¡Â»â„¢ chÃ¡ÂºÂ·t nÃ¡Â»Ân giÃƒÂ¡</span>
                   <strong>{{ moneyFlowIntelligence.baseTightnessPct !== null ? (moneyFlowIntelligence.baseTightnessPct / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Ãp lá»±c tin tá»©c</span>
+                  <span>ÃƒÂp lÃ¡Â»Â±c tin tÃ¡Â»Â©c</span>
                   <strong>{{ moneyFlowIntelligence.newsPressureScore !== null ? (moneyFlowIntelligence.newsPressureScore | number:'1.0-2') : '-' }}</strong>
                 </div>
               </div>
               <div class="signal-pill-row">
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.obvAboveMa" [class.neutral]="!moneyFlowIntelligence.obvAboveMa">OBV trên MA · {{ moneyFlowIntelligence.obvAboveMa ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.nearBreakoutZone" [class.neutral]="!moneyFlowIntelligence.nearBreakoutZone">Sát vùng breakout · {{ moneyFlowIntelligence.nearBreakoutZone ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.baseIsTight" [class.neutral]="!moneyFlowIntelligence.baseIsTight">N?n giá ch?t · {{ moneyFlowIntelligence.baseIsTight ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.preNewsAccumulation" [class.neutral]="!moneyFlowIntelligence.preNewsAccumulation">Tích luy tru?c tin · {{ moneyFlowIntelligence.preNewsAccumulation ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.obvBreakoutConfirmation" [class.neutral]="!moneyFlowIntelligence.obvBreakoutConfirmation">OBV xác nh?n breakout · {{ moneyFlowIntelligence.obvBreakoutConfirmation ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.smartMoneyBeforeNews" [class.neutral]="!moneyFlowIntelligence.smartMoneyBeforeNews">Dòng ti?n tru?c tin · {{ moneyFlowIntelligence.smartMoneyBeforeNews ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bearish]="moneyFlowIntelligence.obvDistribution" [class.neutral]="!moneyFlowIntelligence.obvDistribution">Phân ph?i OBV · {{ moneyFlowIntelligence.obvDistribution ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bearish]="moneyFlowIntelligence.weakNewsChase" [class.neutral]="!moneyFlowIntelligence.weakNewsChase">Ðu?i giá theo tin y?u · {{ moneyFlowIntelligence.weakNewsChase ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.obvAboveMa" [class.neutral]="!moneyFlowIntelligence.obvAboveMa">OBV trÃªn MA Â· {{ moneyFlowIntelligence.obvAboveMa ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.nearBreakoutZone" [class.neutral]="!moneyFlowIntelligence.nearBreakoutZone">SÃ¡t vÃ¹ng breakout Â· {{ moneyFlowIntelligence.nearBreakoutZone ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.baseIsTight" [class.neutral]="!moneyFlowIntelligence.baseIsTight">N?n giÃ¡ ch?t Â· {{ moneyFlowIntelligence.baseIsTight ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.preNewsAccumulation" [class.neutral]="!moneyFlowIntelligence.preNewsAccumulation">TÃ­ch luy tru?c tin Â· {{ moneyFlowIntelligence.preNewsAccumulation ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.obvBreakoutConfirmation" [class.neutral]="!moneyFlowIntelligence.obvBreakoutConfirmation">OBV xÃ¡c nh?n breakout Â· {{ moneyFlowIntelligence.obvBreakoutConfirmation ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.smartMoneyBeforeNews" [class.neutral]="!moneyFlowIntelligence.smartMoneyBeforeNews">DÃ²ng ti?n tru?c tin Â· {{ moneyFlowIntelligence.smartMoneyBeforeNews ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="moneyFlowIntelligence.obvDistribution" [class.neutral]="!moneyFlowIntelligence.obvDistribution">PhÃ¢n ph?i OBV Â· {{ moneyFlowIntelligence.obvDistribution ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="moneyFlowIntelligence.weakNewsChase" [class.neutral]="!moneyFlowIntelligence.weakNewsChase">Ãu?i giÃ¡ theo tin y?u Â· {{ moneyFlowIntelligence.weakNewsChase ? 'B?T' : 'T?T' }}</span>
               </div>
               <div class="signal-list" *ngIf="moneyFlowIntelligence.items?.length">
                 <div class="signal-row" *ngFor="let signal of moneyFlowIntelligence.items">
@@ -609,7 +609,7 @@
                     <p>{{ signal.detail }}</p>
                   </div>
                   <span class="signal-pill" [class.bullish]="signal.bias === 'bullish'" [class.bearish]="signal.bias === 'bearish'" [class.neutral]="signal.bias === 'neutral'">
-                    {{ signal.detected ? 'ÐÃ PHÁT HI?N' : 'THEO DÕI' }}
+                    {{ signal.detected ? 'ÃÃƒ PHÃT HI?N' : 'THEO DÃ•I' }}
                   </span>
                 </div>
               </div>
@@ -618,7 +618,7 @@
             <section class="detail-card" *ngIf="selectedScoreItem.candlestickSignals?.length">
               <div class="detail-card-head">
                 <h4>Engine m?u n?n</h4>
-                <small>M?u n?n dang du?c h? th?ng nh?n di?n trên mã này</small>
+                <small>M?u n?n dang du?c h? th?ng nh?n di?n trÃªn mÃ£ nÃ y</small>
               </div>
               <div class="signal-list">
                 <div class="signal-row" *ngFor="let signal of selectedScoreItem.candlestickSignals">
@@ -627,7 +627,7 @@
                     <p>{{ signal.detail }}</p>
                   </div>
                   <span class="signal-pill" [class.bullish]="signal.detected && signal.bias === 'bullish'" [class.bearish]="signal.detected && signal.bias === 'bearish'" [class.neutral]="!signal.detected || signal.bias === 'neutral'">
-                    {{ signal.detected ? 'ÐÃ PHÁT HI?N' : 'THEO DÕI' }}
+                    {{ signal.detected ? 'ÃÃƒ PHÃT HI?N' : 'THEO DÃ•I' }}
                   </span>
                 </div>
               </div>
@@ -635,8 +635,8 @@
 
             <section class="detail-card" *ngIf="selectedScoreItem.footprintSignals?.length">
               <div class="detail-card-head">
-                <h4>Engine d?u chân t? ch?c</h4>
-                <small>D?u chân dòng ti?n t? ch?c và xác nh?n breakout/pullback</small>
+                <h4>Engine d?u chÃ¢n t? ch?c</h4>
+                <small>D?u chÃ¢n dÃ²ng ti?n t? ch?c vÃ  xÃ¡c nh?n breakout/pullback</small>
               </div>
               <div class="signal-list">
                 <div class="signal-row" *ngFor="let signal of selectedScoreItem.footprintSignals">
@@ -645,7 +645,7 @@
                     <p>{{ signal.detail }}</p>
                   </div>
                   <span class="signal-pill" [class.bullish]="signal.detected && signal.bias === 'bullish'" [class.bearish]="signal.detected && signal.bias === 'bearish'" [class.neutral]="!signal.detected || signal.bias === 'neutral'">
-                    {{ signal.detected ? 'ÐÃ PHÁT HI?N' : 'THEO DÕI' }}
+                    {{ signal.detected ? 'ÃÃƒ PHÃT HI?N' : 'THEO DÃ•I' }}
                   </span>
                 </div>
               </div>
@@ -654,13 +654,13 @@
             <section class="detail-card execution-card" *ngIf="selectedScoreItem.executionPlan as executionPlan">
               <div class="detail-card-head">
                 <h4>Engine th?c thi l?nh</h4>
-                <small>Mua tham dò, mua gia tang, stop-loss và tín hi?u d?ng ngoài</small>
+                <small>Mua tham dÃ², mua gia tang, stop-loss vÃ  tÃ­n hi?u d?ng ngoÃ i</small>
               </div>
               <div class="signal-pill-row">
-                <span class="signal-pill" [class.bullish]="executionPlan.probeBuy30" [class.neutral]="!executionPlan.probeBuy30">Mua 30% · {{ executionPlan.probeBuy30 ? 'S?N SÀNG' : 'CH?' }}</span>
-                <span class="signal-pill" [class.bullish]="executionPlan.addBuy70" [class.neutral]="!executionPlan.addBuy70">Mua thêm 70% · {{ executionPlan.addBuy70 ? 'S?N SÀNG' : 'CH?' }}</span>
-                <span class="signal-pill" [class.bearish]="executionPlan.takeProfitSignal" [class.neutral]="!executionPlan.takeProfitSignal">Ch?t l?i · {{ executionPlan.takeProfitSignal ? 'B?T' : 'T?T' }}</span>
-                <span class="signal-pill" [class.bearish]="executionPlan.standAside" [class.neutral]="!executionPlan.standAside">Ð?ng ngoài · {{ executionPlan.standAside ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="executionPlan.probeBuy30" [class.neutral]="!executionPlan.probeBuy30">Mua 30% Â· {{ executionPlan.probeBuy30 ? 'S?N SÃ€NG' : 'CH?' }}</span>
+                <span class="signal-pill" [class.bullish]="executionPlan.addBuy70" [class.neutral]="!executionPlan.addBuy70">Mua thÃªm 70% Â· {{ executionPlan.addBuy70 ? 'S?N SÃ€NG' : 'CH?' }}</span>
+                <span class="signal-pill" [class.bearish]="executionPlan.takeProfitSignal" [class.neutral]="!executionPlan.takeProfitSignal">Ch?t l?i Â· {{ executionPlan.takeProfitSignal ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="executionPlan.standAside" [class.neutral]="!executionPlan.standAside">Ã?ng ngoÃ i Â· {{ executionPlan.standAside ? 'B?T' : 'T?T' }}</span>
               </div>
               <div class="detail-metric-grid compact">
                 <div class="detail-metric">
@@ -679,7 +679,7 @@
           </div>
 
           <div class="decision-summary" *ngIf="getDecisionNarratives(selectedScoreItem).length">
-            <h4>Vì sao mã này PASS ho?c FAIL</h4>
+            <h4>VÃ¬ sao mÃ£ nÃ y PASS ho?c FAIL</h4>
             <div class="decision-list">
               <div class="decision-item" *ngFor="let narrative of getDecisionNarratives(selectedScoreItem)" [class.pass]="narrative.status === 'pass'" [class.fail]="narrative.status === 'fail'" [class.warn]="narrative.status === 'warn'">
                 <div class="decision-label-row">
@@ -697,10 +697,10 @@
         @defer (when selectedTab === 'risk'; prefetch on idle) {
         <div class="panel-header">
           <div>
-            <div class="panel-title">Rà soát r?i ro</div>
-            <div class="panel-subtitle">Dùng d? stress test danh sách theo dõi và xác d?nh mã c?n xem xét stop-loss.</div>
+            <div class="panel-title">RÃ  soÃ¡t r?i ro</div>
+            <div class="panel-subtitle">DÃ¹ng d? stress test danh sÃ¡ch theo dÃµi vÃ  xÃ¡c d?nh mÃ£ c?n xem xÃ©t stop-loss.</div>
           </div>
-          <button type="button" class="btn-primary" (click)="reloadRisk()">Quét l?i r?i ro</button>
+          <button type="button" class="btn-primary" (click)="reloadRisk()">QuÃ©t l?i r?i ro</button>
         </div>
         <div class="risk-summary" *ngIf="risk">
           <div class="driver-card" *ngFor="let item of risk.summaryCards">
@@ -713,12 +713,12 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Mã</th>
+                <th>MÃ£</th>
                 <th>Winning</th>
                 <th>R?i ro</th>
-                <th>Biên an toàn</th>
+                <th>BiÃªn an toÃ n</th>
                 <th>Triggers</th>
-                <th class="table-action-cell">Nh?t ký</th>
+                <th class="table-action-cell">Nh?t kÃ½</th>
               </tr>
             </thead>
             <tbody>
@@ -729,7 +729,7 @@
                 <td>{{ item.marginOfSafety | percent:'1.0-1' }}</td>
                 <td>{{ item.alertResults.length }}</td>
                 <td class="table-action-cell">
-                  <button type="button" class="icon-action-btn" title="Ðua mã này sang nh?t ký" (click)="openJournalFromItem(item, $event)">
+                  <button type="button" class="icon-action-btn" title="Ãua mÃ£ nÃ y sang nh?t kÃ½" (click)="openJournalFromItem(item, $event)">
                     <ion-icon name="document-text-outline"></ion-icon>
                   </button>
                 </td>
@@ -739,8 +739,8 @@
         </div>
         } @placeholder {
         <div class="defer-placeholder">
-          <div class="panel-title">Ðang chu?n b? màn rà soát r?i ro...</div>
-          <div class="panel-subtitle">Tab này du?c hoãn d?ng d? gi? trang chính nh? hon.</div>
+          <div class="panel-title">Ãang chu?n b? mÃ n rÃ  soÃ¡t r?i ro...</div>
+          <div class="panel-subtitle">Tab nÃ y du?c hoÃ£n d?ng d? gi? trang chÃ­nh nh? hon.</div>
         </div>
         }
       </section>
@@ -748,12 +748,12 @@
         @defer (when selectedTab === 'settings'; prefetch on idle) {
         <div class="panel-header">
           <div>
-            <div class="panel-title">Cài d?t chi?n lu?c d?ng</div>
-            <div class="panel-subtitle">Hi?n th? tr?c ti?p công th?c, tham s? và lu?t d? ch?nh t? UI thay vì s?a code.</div>
+            <div class="panel-title">CÃ i d?t chi?n lu?c d?ng</div>
+            <div class="panel-subtitle">Hi?n th? tr?c ti?p cÃ´ng th?c, tham s? vÃ  lu?t d? ch?nh t? UI thay vÃ¬ s?a code.</div>
           </div>
           <div class="toolbar">
-            <button type="button" class="btn-light" (click)="saveConfig()" [disabled]="saving">{{ saving ? 'Ðang luu...' : 'Luu c?u hình' }}</button>
-            <button type="button" class="btn-primary" (click)="publishConfig()" [disabled]="publishing">{{ publishing ? 'Ðang phát hành...' : 'Phát hành phiên b?n' }}</button>
+            <button type="button" class="btn-light" (click)="saveConfig()" [disabled]="saving">{{ saving ? 'Ãang luu...' : 'Luu c?u hÃ¬nh' }}</button>
+            <button type="button" class="btn-primary" (click)="publishConfig()" [disabled]="publishing">{{ publishing ? 'Ãang phÃ¡t hÃ nh...' : 'PhÃ¡t hÃ nh phiÃªn b?n' }}</button>
           </div>
         </div>
 
@@ -764,7 +764,7 @@
               <strong>{{ getSettingsSectionCount('profiles') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'formulas'" (click)="selectSettingsSection('formulas')">
-              <span>Công th?c</span>
+              <span>CÃ´ng th?c</span>
               <strong>{{ getSettingsSectionCount('formulas') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'screenRules'" (click)="selectSettingsSection('screenRules')">
@@ -772,7 +772,7 @@
               <strong>{{ getSettingsSectionCount('screenRules') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'alertRules'" (click)="selectSettingsSection('alertRules')">
-              <span>Lu?t c?nh báo</span>
+              <span>Lu?t c?nh bÃ¡o</span>
               <strong>{{ getSettingsSectionCount('alertRules') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'checklists'" (click)="selectSettingsSection('checklists')">
@@ -780,7 +780,7 @@
               <strong>{{ getSettingsSectionCount('checklists') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'versions'" (click)="selectSettingsSection('versions')">
-              <span>Phiên b?n</span>
+              <span>PhiÃªn b?n</span>
               <strong>{{ getSettingsSectionCount('versions') }}</strong>
             </button>
           </aside>
@@ -799,21 +799,21 @@
                 <input class="form-control" [(ngModel)]="newProfile.code" />
               </div>
               <div class="form-item">
-                 <label>Tên</label>
+                 <label>TÃªn</label>
                 <input class="form-control" [(ngModel)]="newProfile.name" />
               </div>
               <div class="form-item full">
-                 <label>Mô t?</label>
+                 <label>MÃ´ t?</label>
                 <input class="form-control" [(ngModel)]="newProfile.description" />
               </div>
             </div>
-            <button type="button" class="btn-light create-profile-btn" *ngIf="selectedSettingsSection === 'profiles'" (click)="createProfile()">Táº¡o profile</button>
+            <button type="button" class="btn-light create-profile-btn" *ngIf="selectedSettingsSection === 'profiles'" (click)="createProfile()">TÃ¡ÂºÂ¡o profile</button>
 
-            <h3 *ngIf="selectedSettingsSection === 'versions'">Phiên b?n</h3>
+            <h3 *ngIf="selectedSettingsSection === 'versions'">PhiÃªn b?n</h3>
             <div class="version-list" *ngIf="selectedSettingsSection === 'versions'">
               <div class="version-row" *ngFor="let version of config.versions">
                 <strong>#{{ version.versionNo }}</strong>
-                <span>{{ version.changeSummary || 'Phát hành profile chi?n lu?c' }}</span>
+                <span>{{ version.changeSummary || 'PhÃ¡t hÃ nh profile chi?n lu?c' }}</span>
               </div>
             </div>
           </article>
@@ -821,33 +821,33 @@
           <article class="settings-panel settings-detail-panel" *ngIf="selectedSettingsSection === 'formulas'">
             <div class="settings-section-head">
               <div>
-                <h3>Công th?c</h3>
-                <p>Ch? m? công th?c dang ch?nh d? tránh r?i. B?m vào dòng nào thì bung dòng dó.</p>
+                <h3>CÃ´ng th?c</h3>
+                <p>Ch? m? cÃ´ng th?c dang ch?nh d? trÃ¡nh r?i. B?m vÃ o dÃ²ng nÃ o thÃ¬ bung dÃ²ng dÃ³.</p>
               </div>
             </div>
             <div class="config-card collapsible" *ngFor="let formula of config.formulas; trackBy: trackByCode" [class.open]="isSettingsCardOpen('formulas', formula)">
               <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('formulas', formula)">
                 <div>
                   <strong>{{ formula.label }}</strong>
-                  <small>{{ formula.formulaCode }} · công th?c k? thu?t</small>
+                  <small>{{ formula.formulaCode }} Â· cÃ´ng th?c k? thu?t</small>
                 </div>
                 <div class="config-header-actions">
-                  <span class="config-status" [class.off]="!formula.isEnabled">{{ formula.isEnabled ? 'Ðang b?t' : 'Ðang t?t' }}</span>
-                  <span class="config-arrow">{{ isSettingsCardOpen('formulas', formula) ? 'âˆ’' : '+' }}</span>
+                  <span class="config-status" [class.off]="!formula.isEnabled">{{ formula.isEnabled ? 'Ãang b?t' : 'Ãang t?t' }}</span>
+                  <span class="config-arrow">{{ isSettingsCardOpen('formulas', formula) ? 'Ã¢Ë†â€™' : '+' }}</span>
                 </div>
               </button>
               <div class="config-body" *ngIf="isSettingsCardOpen('formulas', formula)">
                 <label class="toggle-inline">
                   <input type="checkbox" [(ngModel)]="formula.isEnabled" />
-                  B?t dùng
+                  B?t dÃ¹ng
                 </label>
               <div class="formula-readable">
-                <span>Tên hi?n th? cho ngu?i dùng</span>
+                <span>TÃªn hi?n th? cho ngu?i dÃ¹ng</span>
                 <strong>{{ getFriendlyExpression(formula) }}</strong>
               </div>
               <div class="expression-builder">
-                <div class="builder-title">Builder công th?c</div>
-                <div class="builder-help">B?m vào toán t? ho?c bi?n bên du?i d? chèn th?ng vào công th?c.</div>
+                <div class="builder-title">Builder cÃ´ng th?c</div>
+                <div class="builder-help">B?m vÃ o toÃ¡n t? ho?c bi?n bÃªn du?i d? chÃ¨n th?ng vÃ o cÃ´ng th?c.</div>
                 <div class="builder-operators">
                   <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                     <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(formula, formulaEditor, operator)">
@@ -870,7 +870,7 @@
               </div>
               <textarea #formulaEditor class="form-control formula-editor" rows="3" [(ngModel)]="formula.expression"></textarea>
               <div class="variable-help" *ngIf="getVariableHints(formula).length">
-                <div class="variable-help-title">Các bi?n dang dùng trong công th?c</div>
+                <div class="variable-help-title">CÃ¡c bi?n dang dÃ¹ng trong cÃ´ng th?c</div>
                 <div class="variable-list">
                   <div class="variable-item" *ngFor="let variable of getVariableHints(formula)">
                     <div class="variable-label-row">
@@ -886,7 +886,7 @@
                   <label>{{ parameter.label }}</label>
                   <div class="parameter-meta">
                     <code>{{ parameter.paramKey }}</code>
-                    <span>Giá tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
+                    <span>GiÃ¡ tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
                   </div>
                   <input
                     *ngIf="parameter.dataType !== 'boolean'"
@@ -905,32 +905,32 @@
             <div class="settings-section-head" *ngIf="selectedSettingsSection === 'screenRules'">
               <div>
                 <h3>Lu?t l?c</h3>
-                <p>Tách riêng b? lu?t l?c 3 t?ng d? team ch? t?p trung vào logic l?c c? phi?u.</p>
+                <p>TÃ¡ch riÃªng b? lu?t l?c 3 t?ng d? team ch? t?p trung vÃ o logic l?c c? phi?u.</p>
               </div>
             </div>
             <div class="config-card collapsible" *ngFor="let rule of config.screenRules; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'screenRules'" [class.open]="isSettingsCardOpen('screenRules', rule)">
               <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('screenRules', rule)">
                 <div>
                   <strong>{{ rule.label }}</strong>
-                  <small>{{ rule.layerCode }} · lu?t l?c</small>
+                  <small>{{ rule.layerCode }} Â· lu?t l?c</small>
                 </div>
                 <div class="config-header-actions">
-                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Ðang b?t' : 'Ðang t?t' }}</span>
-                  <span class="config-arrow">{{ isSettingsCardOpen('screenRules', rule) ? 'âˆ’' : '+' }}</span>
+                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Ãang b?t' : 'Ãang t?t' }}</span>
+                  <span class="config-arrow">{{ isSettingsCardOpen('screenRules', rule) ? 'Ã¢Ë†â€™' : '+' }}</span>
                 </div>
               </button>
               <div class="config-body" *ngIf="isSettingsCardOpen('screenRules', rule)">
                 <label class="toggle-inline">
                   <input type="checkbox" [(ngModel)]="rule.isEnabled" />
-                  B?t dùng
+                  B?t dÃ¹ng
                 </label>
               <div class="formula-readable">
-                <span>Diá»…n giáº£i business</span>
+                <span>DiÃ¡Â»â€¦n giÃ¡ÂºÂ£i business</span>
                 <strong>{{ getFriendlyExpression(rule) }}</strong>
               </div>
               <div class="expression-builder">
-                <div class="builder-title">Builder rule lá»c</div>
-                <div class="builder-help">Ch?n bi?n và toán t? d? ghép lu?t thay vì gõ tay.</div>
+                <div class="builder-title">Builder rule lÃ¡Â»Âc</div>
+                <div class="builder-help">Ch?n bi?n vÃ  toÃ¡n t? d? ghÃ©p lu?t thay vÃ¬ gÃµ tay.</div>
                 <div class="builder-operators">
                   <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                     <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, screenRuleEditor, operator)">
@@ -953,7 +953,7 @@
               </div>
               <textarea #screenRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
               <div class="variable-help" *ngIf="getVariableHints(rule).length">
-                <div class="variable-help-title">Bi?n và ngu?ng c?a lu?t này</div>
+                <div class="variable-help-title">Bi?n vÃ  ngu?ng c?a lu?t nÃ y</div>
                 <div class="variable-list">
                   <div class="variable-item" *ngFor="let variable of getVariableHints(rule)">
                     <div class="variable-label-row">
@@ -969,7 +969,7 @@
                   <label>{{ parameter.label }}</label>
                   <div class="parameter-meta">
                     <code>{{ parameter.paramKey }}</code>
-                    <span>Giá tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
+                    <span>GiÃ¡ tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
                   </div>
                   <input class="form-control" [value]="parameter.value == null ? '' : parameter.value" (input)="updateParameterNumber(parameter, $event)" />
                 </div>
@@ -979,33 +979,33 @@
 
             <div class="settings-section-head" *ngIf="selectedSettingsSection === 'alertRules'">
               <div>
-                <h3>Lu?t c?nh báo</h3>
-                <p>Nhóm riêng lu?t c?nh báo d? xem, ch?nh và phát hành mà không b? l?n v?i scoring.</p>
+                <h3>Lu?t c?nh bÃ¡o</h3>
+                <p>NhÃ³m riÃªng lu?t c?nh bÃ¡o d? xem, ch?nh vÃ  phÃ¡t hÃ nh mÃ  khÃ´ng b? l?n v?i scoring.</p>
               </div>
             </div>
             <div class="config-card collapsible" *ngFor="let rule of config.alertRules; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'alertRules'" [class.open]="isSettingsCardOpen('alertRules', rule)">
               <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('alertRules', rule)">
                 <div>
                   <strong>{{ rule.label }}</strong>
-                  <small>{{ rule.ruleCode }} · lu?t c?nh báo</small>
+                  <small>{{ rule.ruleCode }} Â· lu?t c?nh bÃ¡o</small>
                 </div>
                 <div class="config-header-actions">
-                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Ðang b?t' : 'Ðang t?t' }}</span>
-                  <span class="config-arrow">{{ isSettingsCardOpen('alertRules', rule) ? 'âˆ’' : '+' }}</span>
+                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Ãang b?t' : 'Ãang t?t' }}</span>
+                  <span class="config-arrow">{{ isSettingsCardOpen('alertRules', rule) ? 'Ã¢Ë†â€™' : '+' }}</span>
                 </div>
               </button>
               <div class="config-body" *ngIf="isSettingsCardOpen('alertRules', rule)">
                 <label class="toggle-inline">
                   <input type="checkbox" [(ngModel)]="rule.isEnabled" />
-                  B?t dùng
+                  B?t dÃ¹ng
                 </label>
               <div class="formula-readable">
-                <span>Diá»…n giáº£i business</span>
+                <span>DiÃ¡Â»â€¦n giÃ¡ÂºÂ£i business</span>
                 <strong>{{ getFriendlyExpression(rule) }}</strong>
               </div>
               <div class="expression-builder">
-                <div class="builder-title">Builder lu?t c?nh báo</div>
-                <div class="builder-help">Dùng các chip bên du?i d? l?p lu?t c?nh báo d? hi?u hon.</div>
+                <div class="builder-title">Builder lu?t c?nh bÃ¡o</div>
+                <div class="builder-help">DÃ¹ng cÃ¡c chip bÃªn du?i d? l?p lu?t c?nh bÃ¡o d? hi?u hon.</div>
                 <div class="builder-operators">
                   <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                     <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, alertRuleEditor, operator)">
@@ -1027,9 +1027,9 @@
                 </div>
               </div>
               <textarea #alertRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
-              <input class="form-control mb-2" [(ngModel)]="rule.messageTemplate" placeholder="M?u n?i dung c?nh báo" />
+              <input class="form-control mb-2" [(ngModel)]="rule.messageTemplate" placeholder="M?u n?i dung c?nh bÃ¡o" />
               <div class="variable-help" *ngIf="getVariableHints(rule).length">
-                <div class="variable-help-title">Bi?n và ngu?ng c?a c?nh báo này</div>
+                <div class="variable-help-title">Bi?n vÃ  ngu?ng c?a c?nh bÃ¡o nÃ y</div>
                 <div class="variable-list">
                   <div class="variable-item" *ngFor="let variable of getVariableHints(rule)">
                     <div class="variable-label-row">
@@ -1045,7 +1045,7 @@
                   <label>{{ parameter.label }}</label>
                   <div class="parameter-meta">
                     <code>{{ parameter.paramKey }}</code>
-                    <span>Giá tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
+                    <span>GiÃ¡ tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
                   </div>
                   <input class="form-control" [value]="parameter.value == null ? '' : parameter.value" (input)="updateParameterNumber(parameter, $event)" />
                 </div>
@@ -1056,32 +1056,32 @@
             <div class="settings-section-head" *ngIf="selectedSettingsSection === 'checklists'">
               <div>
                 <h3>Checklist</h3>
-                <p>Gi? riêng checklist d? ngu?i dùng t?p trung vào quy trình thay vì d?c l?n công th?c ch?m di?m.</p>
+                <p>Gi? riÃªng checklist d? ngu?i dÃ¹ng t?p trung vÃ o quy trÃ¬nh thay vÃ¬ d?c l?n cÃ´ng th?c ch?m di?m.</p>
               </div>
             </div>
             <div class="config-card collapsible" *ngFor="let item of config.checklists; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'checklists'" [class.open]="isSettingsCardOpen('checklists', item)">
               <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('checklists', item)">
                 <div>
                   <strong>{{ item.label }}</strong>
-                  <small>{{ item.checklistType }} Â· checklist</small>
+                  <small>{{ item.checklistType }} Ã‚Â· checklist</small>
                 </div>
                 <div class="config-header-actions">
-                  <span class="config-status" [class.off]="!item.isEnabled">{{ item.isEnabled ? 'Ðang b?t' : 'Ðang t?t' }}</span>
-                  <span class="config-arrow">{{ isSettingsCardOpen('checklists', item) ? 'âˆ’' : '+' }}</span>
+                  <span class="config-status" [class.off]="!item.isEnabled">{{ item.isEnabled ? 'Ãang b?t' : 'Ãang t?t' }}</span>
+                  <span class="config-arrow">{{ isSettingsCardOpen('checklists', item) ? 'Ã¢Ë†â€™' : '+' }}</span>
                 </div>
               </button>
               <div class="config-body" *ngIf="isSettingsCardOpen('checklists', item)">
                 <label class="toggle-inline">
                   <input type="checkbox" [(ngModel)]="item.isEnabled" />
-                  B?t dùng
+                  B?t dÃ¹ng
                 </label>
               <div class="formula-readable">
-                <span>Diá»…n giáº£i business</span>
+                <span>DiÃ¡Â»â€¦n giÃ¡ÂºÂ£i business</span>
                 <strong>{{ getFriendlyExpression(item) }}</strong>
               </div>
               <div class="expression-builder">
                 <div class="builder-title">Builder checklist</div>
-                <div class="builder-help">B?m vào bi?n/ngu?ng d? t?o checklist nhanh cho t?ng giai do?n giao d?ch.</div>
+                <div class="builder-help">B?m vÃ o bi?n/ngu?ng d? t?o checklist nhanh cho t?ng giai do?n giao d?ch.</div>
                 <div class="builder-operators">
                   <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                     <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(item, checklistEditor, operator)">
@@ -1104,7 +1104,7 @@
               </div>
               <textarea #checklistEditor class="form-control formula-editor" rows="2" [(ngModel)]="item.expression"></textarea>
               <div class="variable-help" *ngIf="getVariableHints(item).length">
-                <div class="variable-help-title">Bi?n và ngu?ng c?a checklist này</div>
+                <div class="variable-help-title">Bi?n vÃ  ngu?ng c?a checklist nÃ y</div>
                 <div class="variable-list">
                   <div class="variable-item" *ngFor="let variable of getVariableHints(item)">
                     <div class="variable-label-row">
@@ -1120,7 +1120,7 @@
                   <label>{{ parameter.label }}</label>
                   <div class="parameter-meta">
                     <code>{{ parameter.paramKey }}</code>
-                    <span>Giá tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
+                    <span>GiÃ¡ tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
                   </div>
                   <input class="form-control" [value]="parameter.value == null ? '' : parameter.value" (input)="updateParameterNumber(parameter, $event)" />
                 </div>
@@ -1131,8 +1131,8 @@
         </div>
         } @placeholder {
         <div class="defer-placeholder">
-          <div class="panel-title">Đang chuẩn bị cấu hình chiến lược...</div>
-          <div class="panel-subtitle">Trình chỉnh công thức và luật sẽ chỉ tải khi bạn vào tab cài đặt.</div>
+          <div class="panel-title">Äang chuáº©n bá»‹ cáº¥u hÃ¬nh chiáº¿n lÆ°á»£c...</div>
+          <div class="panel-subtitle">TrÃ¬nh chá»‰nh cÃ´ng thá»©c vÃ  luáº­t sáº½ chá»‰ táº£i khi báº¡n vÃ o tab cÃ i Ä‘áº·t.</div>
         </div>
         }
       </section>
@@ -1143,10 +1143,10 @@
     <section class="rule-modal" (click)="$event.stopPropagation()">
       <div class="rule-modal-head">
         <div>
-          <span>Chi tiết đánh giá</span>
+          <span>Chi tiáº¿t Ä‘Ã¡nh giÃ¡</span>
           <h3>{{ ruleModalTitle }}</h3>
         </div>
-        <button type="button" class="rule-modal-close" (click)="closeRuleModal()" aria-label="Đóng">
+        <button type="button" class="rule-modal-close" (click)="closeRuleModal()" aria-label="ÄÃ³ng">
           <ion-icon name="close-outline"></ion-icon>
         </button>
       </div>
@@ -1166,7 +1166,7 @@
               <p *ngIf="item.message">{{ item.message }}</p>
               <code *ngIf="item.expression">{{ item.expression }}</code>
             </div>
-            <div class="rule-modal-empty" *ngIf="!ruleModalPassItems.length">Không có mục nào.</div>
+            <div class="rule-modal-empty" *ngIf="!ruleModalPassItems.length">KhÃ´ng cÃ³ má»¥c nÃ o.</div>
           </div>
         </article>
 
@@ -1184,7 +1184,7 @@
               <p *ngIf="item.message">{{ item.message }}</p>
               <code *ngIf="item.expression">{{ item.expression }}</code>
             </div>
-            <div class="rule-modal-empty" *ngIf="!ruleModalFailItems.length">Không có mục nào.</div>
+            <div class="rule-modal-empty" *ngIf="!ruleModalFailItems.length">KhÃ´ng cÃ³ má»¥c nÃ o.</div>
           </div>
         </article>
       </div>
