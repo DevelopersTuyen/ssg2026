@@ -15,6 +15,7 @@ async def init_db() -> None:
         MarketFinancialIncomeStatement,
         MarketFinancialNote,
         MarketFinancialRatio,
+        MarketNewsArticle,
         MarketSymbol,
         MarketQuoteSnapshot,
         MarketIntradayPoint,

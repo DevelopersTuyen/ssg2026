@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.json_utils import make_json_safe
 from app.core.logging import get_logger
 from app.models.market import MarketAlertEvent
 from app.repositories.market_read_repo import MarketReadRepository
@@ -32,7 +33,7 @@ class AlertDeliveryService:
         now = datetime.now()
 
         for alert in alerts:
-            payload = dict(alert)
+            payload = make_json_safe(dict(alert))
             symbol = str(alert.get("symbol") or "").upper() or None
             title = str(alert.get("title") or alert.get("headline") or "Market alert").strip()
             message = str(alert.get("message") or alert.get("detail") or title).strip()
@@ -93,11 +94,11 @@ class AlertDeliveryService:
         failed = 0
         for event in rows:
             results = await self._deliver_event(event)
-            event.payload_json = {
+            event.payload_json = make_json_safe({
                 **(event.payload_json or {}),
                 "delivery_results": results,
                 "delivery_attempted_at": datetime.now().isoformat(),
-            }
+            })
             has_failure = any(item.get("status") == "failed" for item in results)
             has_delivery = any(item.get("status") in {"sent", "stored"} for item in results)
             if has_failure and not has_delivery:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from math import isnan
+from math import isfinite
 from typing import Any
 
 from app.utils.json_safe import to_jsonable
@@ -56,7 +56,7 @@ class NormalizationService:
             return None
         try:
             number = float(str(value).replace(",", "").strip()) if isinstance(value, str) else float(value)
-            if isnan(number):
+            if not isfinite(number):
                 return None
             return number
         except Exception:

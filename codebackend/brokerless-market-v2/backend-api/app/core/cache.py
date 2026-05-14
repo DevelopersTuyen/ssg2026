@@ -48,6 +48,31 @@ class CacheService:
         except Exception as exc:  # pragma: no cover
             self._mark_unavailable(exc, action="set")
 
+    async def delete(self, key: str) -> None:
+        client = await self.get_client()
+        if client is None:
+            return
+        try:
+            await client.delete(key)
+        except Exception as exc:  # pragma: no cover
+            self._mark_unavailable(exc, action="delete")
+
+    async def delete_prefix(self, prefix: str) -> None:
+        client = await self.get_client()
+        if client is None:
+            return
+        try:
+            cursor = 0
+            pattern = f"{prefix}*"
+            while True:
+                cursor, keys = await client.scan(cursor=cursor, match=pattern, count=200)
+                if keys:
+                    await client.delete(*keys)
+                if cursor == 0:
+                    break
+        except Exception as exc:  # pragma: no cover
+            self._mark_unavailable(exc, action="delete_prefix")
+
     def _mark_unavailable(self, exc: Exception, *, action: str) -> None:
         self._client = None
         self._disabled = True

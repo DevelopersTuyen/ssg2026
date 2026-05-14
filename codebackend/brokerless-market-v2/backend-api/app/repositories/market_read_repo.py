@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.json_utils import make_json_safe
 from app.models.market import (
     MarketFinancialBalanceSheet,
     MarketFinancialCashFlow,
@@ -105,6 +106,64 @@ class MarketReadRepository:
 
         latest_point_time = await self.session.scalar(stmt)
         return latest_point_time.date() if latest_point_time else None
+
+    async def get_data_coverage_snapshot(self) -> dict[str, Any]:
+        exchanges = ["HSX", "HNX", "UPCOM"]
+        latest_intraday_date = await self._resolve_latest_intraday_date()
+        intraday_start = datetime.combine(latest_intraday_date, time.min) if latest_intraday_date else None
+        intraday_end = intraday_start + timedelta(days=1) if intraday_start else None
+
+        async def count_active_symbols(exchange: str | None = None) -> int:
+            stmt = select(func.count()).select_from(MarketSymbol).where(MarketSymbol.is_active.is_(True))
+            if exchange:
+                stmt = stmt.where(MarketSymbol.exchange == exchange)
+            return int(await self.session.scalar(stmt) or 0)
+
+        async def count_distinct_symbols(model: Any, exchange: str | None = None) -> int:
+            stmt = select(func.count(func.distinct(model.symbol)))
+            if exchange:
+                stmt = stmt.where(model.exchange == exchange)
+            return int(await self.session.scalar(stmt) or 0)
+
+        async def count_intraday_symbols(exchange: str | None = None) -> int:
+            if not intraday_start or not intraday_end:
+                return 0
+            stmt = select(func.count(func.distinct(MarketIntradayPoint.symbol))).where(
+                MarketIntradayPoint.point_time >= intraday_start,
+                MarketIntradayPoint.point_time < intraday_end,
+            )
+            if exchange:
+                stmt = stmt.where(MarketIntradayPoint.exchange == exchange)
+            return int(await self.session.scalar(stmt) or 0)
+
+        def pct(numerator: int, denominator: int) -> float:
+            if denominator <= 0:
+                return 0.0
+            return round((numerator / denominator) * 100, 2)
+
+        async def build_bucket(exchange: str | None) -> dict[str, Any]:
+            total_symbols = await count_active_symbols(exchange)
+            intraday_symbols = await count_intraday_symbols(exchange)
+            financial_symbols = await count_distinct_symbols(MarketFinancialBalanceSheet, exchange)
+            cash_flow_symbols = await count_distinct_symbols(MarketFinancialCashFlow, exchange)
+            return {
+                "exchange": exchange or "ALL",
+                "totalSymbols": total_symbols,
+                "intradaySymbols": intraday_symbols,
+                "intradayPct": pct(intraday_symbols, total_symbols),
+                "financialSymbols": financial_symbols,
+                "financialPct": pct(financial_symbols, total_symbols),
+                "cashFlowSymbols": cash_flow_symbols,
+                "cashFlowPct": pct(cash_flow_symbols, total_symbols),
+            }
+
+        all_bucket = await build_bucket(None)
+        by_exchange = {exchange: await build_bucket(exchange) for exchange in exchanges}
+        return {
+            "latestIntradayDate": latest_intraday_date.isoformat() if latest_intraday_date else None,
+            "all": all_bucket,
+            "byExchange": by_exchange,
+        }
 
     @staticmethod
     def _normalize_reference_price(reference_price: float | None, current_price: float | None) -> float | None:
@@ -1706,7 +1765,7 @@ class MarketReadRepository:
             published_at = payload.get("published_at")
             published_text = payload.get("published_text")
             summary = payload.get("summary")
-            raw_json = payload.get("raw_json")
+            raw_json = make_json_safe(payload.get("raw_json"))
 
             if row is None:
                 row = MarketNewsArticle(

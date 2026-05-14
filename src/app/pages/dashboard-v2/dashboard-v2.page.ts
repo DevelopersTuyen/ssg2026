@@ -1,6 +1,6 @@
 ﻿import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Observable, Subscription, forkJoin, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, timeout } from 'rxjs/operators';
 import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import { AuthService } from 'src/app/core/services/auth.service';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
@@ -15,11 +15,19 @@ import {
   MarketAlertsOverviewResponse,
   MarketDataQualityIssue,
   MarketExchangeRule,
+  MarketSyncJobStatus,
+  MarketSyncStatusData,
   StrategyAlertRule,
   StrategyChecklistItem,
   StrategyDriver,
   StrategyFormula,
+  StrategyFormulaVerdict,
+  StrategyActionHistoryItem,
+  StrategyActionHistoryResponse,
   StrategyJournalEntry,
+  StrategyActionWorkflowOverviewResponse,
+  StrategyOperationsOverviewResponse,
+  StrategyPortfolioOverviewResponse,
   StrategyParameter,
   StrategyProfileConfigResponse,
   StrategyProfile,
@@ -35,21 +43,48 @@ declare const ApexCharts: any;
 type DashboardChartTab = 'allocation' | 'equity' | 'outcomes';
 type DashboardAlertTab = 'priority' | 'alerts' | 'news' | 'ai';
 type DashboardDetailTab = 'overview' | 'rules' | 'snapshot';
+type DashboardJournalWorkspaceTab = 'journal' | 'operations' | 'portfolio' | 'workflow' | 'history';
+type DashboardJournalPagerKey =
+  | 'journal'
+  | 'operations-open'
+  | 'operations-actions'
+  | 'portfolio-holdings'
+  | 'portfolio-alerts'
+  | 'workflow-suggestions'
+  | 'workflow-pending'
+  | 'history';
 type DashboardConfigEntity = StrategyFormula | StrategyScreenRule | StrategyAlertRule | StrategyChecklistItem;
 type DashboardExchange = ExchangeTab | 'ALL';
 
 interface DashboardV2JournalRowVm {
   id: number;
+  timestamp: number;
   date: string;
   symbol: string;
+  isOpen: boolean;
   sideLabel: string;
-  tradeLabel: string;
+  setupLabel: string;
+  strategyLabel: string;
   note: string;
+  workflowReason: string;
+  capitalValue: number;
   capitalLabel: string;
+  pnlValue: number;
   pnlLabel: string;
   pnlTone: 'positive' | 'danger' | 'default';
+  resultTone: 'open' | 'profit' | 'loss' | 'flat';
   resultLabel: string;
+  portfolioStateLabel: string;
+  portfolioStateTone: 'positive' | 'warning' | 'default';
+  workflowStateLabel: string;
+  workflowStateTone: 'positive' | 'warning' | 'default';
+  hasWorkflowOpen: boolean;
+  hasWorkflowSuggested: boolean;
 }
+
+type DashboardV2JournalSortBy = 'date' | 'capital' | 'pnl';
+type DashboardV2JournalSortDir = 'desc' | 'asc';
+type DashboardV2JournalFilter = 'all' | 'open' | 'profit' | 'loss';
 
 interface DashboardV2AlertVm {
   id: string;
@@ -137,6 +172,130 @@ interface DashboardV2InsightVm {
   meta: string;
 }
 
+interface DashboardV2OperationRowVm {
+  id: number;
+  symbol: string;
+  actionLabel: string;
+  actionTone: 'default' | 'positive' | 'warning' | 'danger';
+  capitalLabel: string;
+  pnlLabel: string;
+  pnlTone: 'positive' | 'danger' | 'default';
+  currentPriceLabel: string;
+  helper: string;
+}
+
+interface DashboardV2ActionVm {
+  key: string;
+  title: string;
+  body: string;
+  tone: 'default' | 'positive' | 'warning' | 'danger';
+  symbol: string;
+}
+
+interface DashboardV2HoldingVm {
+  symbol: string;
+  strategyLabel: string;
+  industryLabel: string;
+  marketValueLabel: string;
+  costBasisLabel: string;
+  unrealizedLabel: string;
+  unrealizedTone: 'positive' | 'danger' | 'default';
+  exposureLabel: string;
+}
+
+interface DashboardV2ExposureVm {
+  label: string;
+  valueLabel: string;
+  weightLabel: string;
+}
+
+interface DashboardV2PortfolioAlertVm {
+  key: string;
+  title: string;
+  body: string;
+  tone: 'default' | 'positive' | 'warning' | 'danger';
+}
+
+interface DashboardV2WorkflowSuggestionVm {
+  sourceType: string;
+  sourceKey: string;
+  journalEntryId?: number | null;
+  symbol: string;
+  actionCode: string;
+  actionLabel: string;
+  executionMode: 'manual' | 'automatic';
+  title: string;
+  body: string;
+  tone: 'default' | 'positive' | 'warning' | 'danger';
+  existingActionId?: number | null;
+  existingStatus?: string | null;
+}
+
+interface DashboardV2WorkflowActionVm {
+  id: number;
+  symbol: string;
+  title: string;
+  body: string;
+  tone: 'default' | 'positive' | 'warning' | 'danger';
+  status: string;
+  runtimeLabel: string;
+  runtimeTone: 'positive' | 'warning' | 'default';
+  executionMode: 'manual' | 'automatic';
+  sourceLabel: string;
+  createdAtLabel: string;
+  updatedAtLabel: string;
+  note: string;
+  resolutionType: string | null;
+}
+
+interface DashboardV2WorkflowHistoryVm {
+  id: number;
+  symbol: string;
+  title: string;
+  status: string;
+  runtimeLabel: string;
+  runtimeTone: 'positive' | 'warning' | 'default';
+  effectLabel: string;
+  effectTone: 'default' | 'positive' | 'warning' | 'danger';
+  sourceLabel: string;
+  actionLabel: string;
+  executionMode: 'manual' | 'automatic';
+  processLabel: string;
+  handledBy: string;
+  handledAtLabel: string;
+  handledPriceLabel: string;
+  currentPriceLabel: string;
+  effectPctLabel: string;
+  effectValueLabel: string;
+  note: string;
+  basis: string;
+  auditSummary: string[];
+  resolutionType: string | null;
+}
+
+interface DashboardV2SymbolHistoryVm {
+  key: string;
+  kind: 'journal' | 'workflow';
+  title: string;
+  subtitle: string;
+  body: string;
+  meta: string[];
+  tone: 'default' | 'positive' | 'warning' | 'danger';
+  timestamp: number;
+}
+
+interface DashboardV2SymbolIntelligenceVm {
+  summary: string;
+  biasLabel: string;
+  actionLabel: string;
+  riskLabel: string;
+  confidenceLabel: string;
+  bullCase: string[];
+  bearCase: string[];
+  riskItems: string[];
+  actionItems: string[];
+}
+
 @Component({
   selector: 'app-dashboard-v2',
   templateUrl: './dashboard-v2.page.html',
@@ -144,6 +303,23 @@ interface DashboardV2InsightVm {
   standalone: false,
 })
 export class DashboardV2Page implements OnInit, OnDestroy {
+  private readonly alertPageSizes: Record<DashboardAlertTab, number> = {
+    priority: 6,
+    alerts: 8,
+    news: 6,
+    ai: 4,
+  };
+  private readonly journalWorkspacePageSizes: Record<DashboardJournalPagerKey, number> = {
+    journal: 12,
+    'operations-open': 6,
+    'operations-actions': 6,
+    'portfolio-holdings': 6,
+    'portfolio-alerts': 5,
+    'workflow-suggestions': 5,
+    'workflow-pending': 5,
+    history: 6,
+  };
+
   readonly exchangeOptions: DashboardV2ExchangeOption[] = [
     { value: 'ALL', label: 'Tất cả sàn' },
     { value: 'HSX', label: 'HSX' },
@@ -156,6 +332,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   selectedExchange: DashboardExchange = 'ALL';
   selectedChartTab: DashboardChartTab = 'allocation';
   selectedAlertTab: DashboardAlertTab = 'priority';
+  selectedJournalWorkspaceTab: DashboardJournalWorkspaceTab = 'journal';
   compactTableEnabled = true;
   stickyHeaderEnabled = true;
   dataHealthIssues: string[] = [];
@@ -165,15 +342,53 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   overview: StrategyOverviewResponse | null = null;
   alertsOverview: MarketAlertsOverviewResponse | null = null;
+  syncStatus: MarketSyncStatusData | null = null;
   exchangeRules: MarketExchangeRule[] = [];
   dataQualityOpenIssues: MarketDataQualityIssue[] = [];
   pendingAlertEvents: MarketAlertEventItem[] = [];
 
   journalRows: DashboardV2JournalRowVm[] = [];
+  journalSortBy: DashboardV2JournalSortBy = 'date';
+  journalSortDir: DashboardV2JournalSortDir = 'desc';
+  journalFilter: DashboardV2JournalFilter = 'all';
   alertItems: DashboardV2AlertVm[] = [];
   priorityItems: DashboardV2PriorityVm[] = [];
   aiAnalysisItems: DashboardV2PriorityVm[] = [];
   newsItems: MarketAlertNewsItem[] = [];
+  operationsOverview: StrategyOperationsOverviewResponse | null = null;
+  portfolioOverview: StrategyPortfolioOverviewResponse | null = null;
+  workflowOverview: StrategyActionWorkflowOverviewResponse | null = null;
+  workflowHistoryOverview: StrategyActionHistoryResponse | null = null;
+  openPositionRows: DashboardV2OperationRowVm[] = [];
+  reviewQueueRows: DashboardV2OperationRowVm[] = [];
+  nextActionItems: DashboardV2ActionVm[] = [];
+  holdingRows: DashboardV2HoldingVm[] = [];
+  exposureByStrategyRows: DashboardV2ExposureVm[] = [];
+  exposureByIndustryRows: DashboardV2ExposureVm[] = [];
+  portfolioAlertItems: DashboardV2PortfolioAlertVm[] = [];
+  jobHealthAlerts: DashboardV2PriorityVm[] = [];
+  workflowSuggestionItems: DashboardV2WorkflowSuggestionVm[] = [];
+  workflowPendingItems: DashboardV2WorkflowActionVm[] = [];
+  workflowHistoryItems: DashboardV2WorkflowHistoryVm[] = [];
+  workflowBusyKey = '';
+  jobHealthSummary = '';
+  jobHealthCheckedLabel = '';
+  alertTabPages: Record<DashboardAlertTab, number> = {
+    priority: 1,
+    alerts: 1,
+    news: 1,
+    ai: 1,
+  };
+  journalWorkspacePages: Record<DashboardJournalPagerKey, number> = {
+    journal: 1,
+    'operations-open': 1,
+    'operations-actions': 1,
+    'portfolio-holdings': 1,
+    'portfolio-alerts': 1,
+    'workflow-suggestions': 1,
+    'workflow-pending': 1,
+    history: 1,
+  };
   stats: DashboardV2StatsVm = {
     totalCapital: 0,
     realizedProfit: 0,
@@ -208,6 +423,13 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   selectedDetailTab: DashboardDetailTab = 'overview';
   symbolDetailOpen = false;
   symbolDetailSymbol = '';
+  symbolDetailFormulaLoading = false;
+  symbolDetailFormulaError = '';
+  symbolDetailFormulaGroups: DashboardV2DetailGroupVm[] = [];
+  symbolDetailFormulaMetrics: DashboardV2MetricChipVm[] = [];
+  symbolDetailFormulaVerdict: StrategyFormulaVerdict | null = null;
+  symbolDetailIntelligence: DashboardV2SymbolIntelligenceVm | null = null;
+  symbolDetailHistoryItems: DashboardV2SymbolHistoryVm[] = [];
 
   private readonly currency = new Intl.NumberFormat('vi-VN', {
     maximumFractionDigits: 0,
@@ -224,14 +446,17 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   private renderTimer?: number;
   private dashboardSub?: Subscription;
+  private dashboardSupplementalSub?: Subscription;
   private alertsSub?: Subscription;
   private detailSub?: Subscription;
+  private symbolFormulaSub?: Subscription;
   private backgroundSub?: Subscription;
   private insightChart: any;
   private journalEntries: StrategyJournalEntry[] = [];
   private hasInitialLoad = false;
   private refreshHandle: ReturnType<typeof window.setInterval> | null = null;
   private activeView = false;
+  private readonly dashboardRequestTimeoutMs = 6000;
 
   constructor(
     private readonly api: MarketApiService,
@@ -294,8 +519,10 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.dashboardSub?.unsubscribe();
+    this.dashboardSupplementalSub?.unsubscribe();
     this.alertsSub?.unsubscribe();
     this.detailSub?.unsubscribe();
+    this.symbolFormulaSub?.unsubscribe();
     this.backgroundSub?.unsubscribe();
     this.stopAutoRefresh();
     this.destroyChart();
@@ -306,6 +533,182 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   refreshData(): void {
     this.loadDashboard(true);
+  }
+
+  createWorkflowAction(item: DashboardV2WorkflowSuggestionVm, executionMode: 'manual' | 'automatic' = 'manual'): void {
+    const busyKey = `create:${item.sourceKey}:${executionMode}`;
+    if (this.workflowBusyKey === busyKey) {
+      return;
+    }
+    this.workflowBusyKey = busyKey;
+    this.api.createStrategyActionWorkflow({
+      profile_id: this.overview?.activeProfile?.id || null,
+      journal_entry_id: item.journalEntryId || null,
+      symbol: item.symbol || null,
+      exchange: this.selectedExchange === 'ALL' ? null : this.selectedExchange,
+      source_type: item.sourceType,
+      source_key: item.sourceKey,
+      action_code: item.actionCode,
+      action_label: item.actionLabel,
+      execution_mode: executionMode,
+      severity: item.tone === 'danger' ? 'critical' : item.tone === 'warning' ? 'warning' : 'info',
+      title: item.title,
+      message: item.body,
+      metadata_json: { executionMode },
+    }).subscribe({
+      next: () => {
+        this.workflowBusyKey = '';
+        this.loadDashboard(true, true);
+      },
+      error: () => {
+        this.workflowBusyKey = '';
+        this.error = this.t('dashboardV2.error.load');
+      },
+    });
+  }
+
+  completeWorkflowAction(item: DashboardV2WorkflowActionVm, resolutionType: string): void {
+    const busyKey = `update:${item.id}:${resolutionType}`;
+    if (this.workflowBusyKey === busyKey) {
+      return;
+    }
+    this.workflowBusyKey = busyKey;
+    this.api.updateStrategyActionWorkflowStatus(item.id, {
+      status: 'completed',
+      resolution_type: resolutionType,
+      resolution_note: `${resolutionType}: ${item.title}`,
+    }).subscribe({
+      next: () => {
+        this.workflowBusyKey = '';
+        this.loadDashboard(true, true);
+      },
+      error: () => {
+        this.workflowBusyKey = '';
+        this.error = this.t('dashboardV2.error.load');
+      },
+    });
+  }
+
+  dismissWorkflowAction(item: DashboardV2WorkflowActionVm): void {
+    const busyKey = `dismiss:${item.id}`;
+    if (this.workflowBusyKey === busyKey) {
+      return;
+    }
+    this.workflowBusyKey = busyKey;
+    this.api.updateStrategyActionWorkflowStatus(item.id, {
+      status: 'dismissed',
+      resolution_type: 'dismissed',
+      resolution_note: `Dismissed: ${item.title}`,
+    }).subscribe({
+      next: () => {
+        this.workflowBusyKey = '';
+        this.loadDashboard(true, true);
+      },
+      error: () => {
+        this.workflowBusyKey = '';
+        this.error = this.t('dashboardV2.error.load');
+      },
+    });
+  }
+
+  updateWorkflowNote(item: DashboardV2WorkflowActionVm): void {
+    const currentNote = item.note || item.body || '';
+    const nextNote = window.prompt(this.t('dashboardV2.workflow.notePrompt'), currentNote);
+    if (nextNote === null) {
+      return;
+    }
+    const trimmed = nextNote.trim();
+    const busyKey = `note:${item.id}`;
+    if (this.workflowBusyKey === busyKey) {
+      return;
+    }
+    this.workflowBusyKey = busyKey;
+    this.api.updateStrategyActionWorkflowStatus(item.id, {
+      status: 'open',
+      resolution_type: item.resolutionType || item.status || 'open',
+      resolution_note: trimmed,
+    }).subscribe({
+      next: () => {
+        this.workflowBusyKey = '';
+        this.loadDashboard(true, true);
+      },
+      error: () => {
+        this.workflowBusyKey = '';
+        this.error = this.t('dashboardV2.error.load');
+      },
+    });
+  }
+
+  reopenWorkflowAction(item: DashboardV2WorkflowHistoryVm): void {
+    const busyKey = `reopen:${item.id}`;
+    if (this.workflowBusyKey === busyKey) {
+      return;
+    }
+    this.workflowBusyKey = busyKey;
+    this.api.updateStrategyActionWorkflowStatus(item.id, {
+      status: 'open',
+      resolution_type: item.resolutionType || item.status || 'open',
+      resolution_note: `${this.t('dashboardV2.workflow.reopenedNote')}: ${item.title}`,
+    }).subscribe({
+      next: () => {
+        this.workflowBusyKey = '';
+        this.loadDashboard(true, true);
+      },
+      error: () => {
+        this.workflowBusyKey = '';
+        this.error = this.t('dashboardV2.error.load');
+      },
+    });
+  }
+
+  canCreateWorkflowFromRow(row: DashboardV2JournalRowVm): boolean {
+    return row.isOpen && !row.hasWorkflowOpen;
+  }
+
+  createJournalWorkflow(row: DashboardV2JournalRowVm, event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+
+    const busyKey = `journal-workflow:${row.id}`;
+    if (this.workflowBusyKey === busyKey) {
+      return;
+    }
+
+    const entry = this.journalEntries.find((item) => item.id === row.id) || null;
+    if (!entry) {
+      this.error = this.t('dashboardV2.detail.error.entry');
+      return;
+    }
+
+    this.workflowBusyKey = busyKey;
+    this.api.createStrategyActionWorkflow({
+      profile_id: entry.profileId || null,
+      journal_entry_id: entry.id,
+      symbol: entry.symbol,
+      exchange: entry.exchange || null,
+      source_type: 'journal_operation',
+      source_key: `journal:${entry.id}:manual_review`,
+      action_code: 'review',
+      action_label: this.t('dashboardV2.workflow.followAction'),
+      execution_mode: 'manual',
+      severity: 'warning',
+      title: `${(entry.symbol || '').toUpperCase()}: ${this.t('dashboardV2.workflow.followAction')}`,
+      message: entry.notes || entry.psychology || this.t('dashboardV2.workflow.manualReviewHelp'),
+      metadata_json: {
+        trigger: 'journal_manual',
+        classification: entry.classification || null,
+        tradeSide: entry.tradeSide || null,
+      },
+    }).subscribe({
+      next: () => {
+        this.workflowBusyKey = '';
+        this.loadDashboard(true, true);
+      },
+      error: () => {
+        this.workflowBusyKey = '';
+        this.error = this.t('dashboardV2.error.load');
+      },
+    });
   }
 
   changeExchange(exchange: DashboardExchange): void {
@@ -344,6 +747,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   changeAlertTab(tab: DashboardAlertTab): void {
     this.selectedAlertTab = tab;
+    this.ensureAlertPageWithinBounds(tab);
     this.setInsightPanel(
       this.t(`dashboardV2.alertTab.${tab}`),
       this.alertTabHelp(tab),
@@ -361,6 +765,108 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   alertTabHelp(tab: DashboardAlertTab): string {
     return this.t(`dashboardV2.alertTabHelp.${tab}`);
+  }
+
+  currentAlertItemsCount(tab: DashboardAlertTab): number {
+    return this.getAlertTabItems(tab).length;
+  }
+
+  currentAlertPageItems(tab: DashboardAlertTab): Array<DashboardV2PriorityVm | DashboardV2AlertVm | MarketAlertNewsItem> {
+    const items = this.getAlertTabItems(tab);
+    const pageSize = this.alertPageSizes[tab];
+    const currentPage = this.alertTabPages[tab];
+    const start = (currentPage - 1) * pageSize;
+    return items.slice(start, start + pageSize);
+  }
+
+  currentAlertPage(tab: DashboardAlertTab): number {
+    return this.alertTabPages[tab];
+  }
+
+  totalAlertPages(tab: DashboardAlertTab): number {
+    const total = this.getAlertTabItems(tab).length;
+    return Math.max(1, Math.ceil(total / this.alertPageSizes[tab]));
+  }
+
+  canMoveAlertPage(tab: DashboardAlertTab, delta: number): boolean {
+    const nextPage = this.alertTabPages[tab] + delta;
+    return nextPage >= 1 && nextPage <= this.totalAlertPages(tab);
+  }
+
+  moveAlertPage(tab: DashboardAlertTab, delta: number): void {
+    if (!this.canMoveAlertPage(tab, delta)) {
+      return;
+    }
+    this.alertTabPages[tab] += delta;
+  }
+
+  pagedOpenPositionRows(): DashboardV2OperationRowVm[] {
+    return this.currentJournalWorkspacePageItems('operations-open', this.openPositionRows);
+  }
+
+  pagedNextActionItems(): DashboardV2ActionVm[] {
+    return this.currentJournalWorkspacePageItems('operations-actions', this.nextActionItems);
+  }
+
+  pagedHoldingRows(): DashboardV2HoldingVm[] {
+    return this.currentJournalWorkspacePageItems('portfolio-holdings', this.holdingRows);
+  }
+
+  pagedPortfolioAlertItems(): DashboardV2PortfolioAlertVm[] {
+    return this.currentJournalWorkspacePageItems('portfolio-alerts', this.portfolioAlertItems);
+  }
+
+  pagedWorkflowSuggestionItems(): DashboardV2WorkflowSuggestionVm[] {
+    return this.currentJournalWorkspacePageItems('workflow-suggestions', this.workflowSuggestionItems);
+  }
+
+  pagedWorkflowPendingItems(): DashboardV2WorkflowActionVm[] {
+    return this.currentJournalWorkspacePageItems('workflow-pending', this.workflowPendingItems);
+  }
+
+  pagedWorkflowHistoryItems(): DashboardV2WorkflowHistoryVm[] {
+    return this.currentJournalWorkspacePageItems('history', this.workflowHistoryItems);
+  }
+
+  pagedVisibleJournalRows(): DashboardV2JournalRowVm[] {
+    return this.currentJournalWorkspacePageItems('journal', this.visibleJournalRows());
+  }
+
+  currentJournalWorkspacePage(key: DashboardJournalPagerKey, total: number): number {
+    this.ensureJournalWorkspacePageWithinBounds(key, total);
+    return this.journalWorkspacePages[key];
+  }
+
+  totalJournalWorkspacePages(key: DashboardJournalPagerKey, total: number): number {
+    return Math.max(1, Math.ceil(total / this.journalWorkspacePageSizes[key]));
+  }
+
+  canMoveJournalWorkspacePage(key: DashboardJournalPagerKey, total: number, delta: number): boolean {
+    const nextPage = this.currentJournalWorkspacePage(key, total) + delta;
+    return nextPage >= 1 && nextPage <= this.totalJournalWorkspacePages(key, total);
+  }
+
+  moveJournalWorkspacePage(key: DashboardJournalPagerKey, total: number, delta: number): void {
+    if (!this.canMoveJournalWorkspacePage(key, total, delta)) {
+      return;
+    }
+    this.journalWorkspacePages[key] = this.currentJournalWorkspacePage(key, total) + delta;
+  }
+
+  pagedPriorityItems(): DashboardV2PriorityVm[] {
+    return this.currentAlertPageItems('priority') as DashboardV2PriorityVm[];
+  }
+
+  pagedAlertItems(): DashboardV2AlertVm[] {
+    return this.currentAlertPageItems('alerts') as DashboardV2AlertVm[];
+  }
+
+  pagedNewsItems(): MarketAlertNewsItem[] {
+    return this.currentAlertPageItems('news') as MarketAlertNewsItem[];
+  }
+
+  pagedAiAnalysisItems(): DashboardV2PriorityVm[] {
+    return this.currentAlertPageItems('ai') as DashboardV2PriorityVm[];
   }
 
   openJournalDetail(row: DashboardV2JournalRowVm): void {
@@ -418,10 +924,29 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     }
     this.symbolDetailSymbol = normalized;
     this.symbolDetailOpen = true;
+    this.symbolDetailHistoryItems = this.buildSymbolHistoryItems(normalized);
+    this.symbolDetailIntelligence = this.buildSymbolIntelligence(normalized);
+    this.loadSymbolFormulaDetail(normalized);
+  }
+
+  hasJournalFormulaForSymbol(symbol: string | null | undefined): boolean {
+    const normalized = (symbol || '').trim().toUpperCase();
+    if (!normalized) {
+      return false;
+    }
+    return this.journalEntries.some((item) => (item.symbol || '').trim().toUpperCase() === normalized);
   }
 
   closeSymbolDetail(): void {
     this.symbolDetailOpen = false;
+    this.symbolDetailFormulaLoading = false;
+    this.symbolDetailFormulaError = '';
+    this.symbolDetailFormulaGroups = [];
+    this.symbolDetailFormulaMetrics = [];
+    this.symbolDetailFormulaVerdict = null;
+    this.symbolDetailIntelligence = null;
+    this.symbolDetailHistoryItems = [];
+    this.symbolFormulaSub?.unsubscribe();
   }
 
   closeJournalDetail(): void {
@@ -441,7 +966,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   showJournalInsight(row: DashboardV2JournalRowVm): void {
     this.setInsightPanel(
       `${row.symbol} - ${row.resultLabel}`,
-      `${row.tradeLabel}. ${row.note}`,
+      `${row.setupLabel}${row.strategyLabel && row.strategyLabel !== '--' ? ` / ${row.strategyLabel}` : ''}. ${row.note}`,
       `${row.capitalLabel} / ${row.pnlLabel}`
     );
   }
@@ -470,6 +995,94 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     this.setInsightPanel(metric.label, metric.value, this.currentChartTitle());
   }
 
+  workflowToneClass(tone?: string | null): 'default' | 'positive' | 'warning' | 'danger' {
+    return tone === 'positive' ? 'positive' : tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'default';
+  }
+
+  workflowStatusClass(status?: string | null): 'positive' | 'warning' | 'default' {
+    return status === 'completed' ? 'positive' : status === 'dismissed' ? 'default' : 'warning';
+  }
+
+  formatWorkflowStatusLabel(status?: string | null): string {
+    switch ((status || '').toLowerCase()) {
+      case 'completed':
+        return this.t('marketSettings.history.statusCompleted');
+      case 'dismissed':
+        return this.t('marketSettings.history.statusDismissed');
+      default:
+        return this.t('marketSettings.history.statusOpen');
+    }
+  }
+
+  workflowRuntimeClass(
+    status?: string | null,
+    executionMode?: 'manual' | 'automatic' | string | null
+  ): 'positive' | 'warning' | 'default' {
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    if (normalizedStatus === 'completed') {
+      return 'positive';
+    }
+    if (normalizedStatus === 'dismissed') {
+      return 'default';
+    }
+    const normalizedMode = String(executionMode || '').trim().toLowerCase();
+    return normalizedMode === 'automatic' ? 'warning' : 'default';
+  }
+
+  formatWorkflowRuntimeLabel(
+    status?: string | null,
+    executionMode?: 'manual' | 'automatic' | string | null
+  ): string {
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    if (normalizedStatus === 'completed') {
+      return this.t('dashboardV2.workflow.runtime.done');
+    }
+    if (normalizedStatus === 'dismissed') {
+      return this.t('dashboardV2.workflow.runtime.stopped');
+    }
+    const normalizedMode = String(executionMode || '').trim().toLowerCase();
+    if (normalizedMode === 'automatic') {
+      return this.t('dashboardV2.workflow.runtime.running');
+    }
+    return this.t('dashboardV2.workflow.runtime.waiting');
+  }
+
+  formatHistoryActionLabel(item: StrategyActionHistoryItem): string {
+    const normalized = String(item.resolutionType || item.actionCode || '').trim().toLowerCase();
+    switch (normalized) {
+      case 'take_profit':
+        return this.t('dashboardV2.workflow.doneTakeProfit');
+      case 'cut_loss':
+        return this.t('dashboardV2.workflow.doneCutLoss');
+      case 'rebalance':
+        return this.t('dashboardV2.workflow.doneRebalance');
+      case 'dismissed':
+        return this.t('dashboardV2.workflow.dismiss');
+      case 'probe_buy':
+        return 'Mua thăm dò';
+      case 'add_position':
+        return 'Gia tăng vị thế';
+      case 'review_portfolio':
+        return 'Review danh mục';
+      default:
+        return item.actionLabel || item.actionCode || '--';
+    }
+  }
+
+  formatWorkflowProcessLabel(item: StrategyActionHistoryItem): string {
+    const actionLabel = this.formatHistoryActionLabel(item);
+    if (item.status === 'dismissed') {
+      return `${actionLabel}. ${this.t('dashboardV2.workflow.dismissedHelp')}`;
+    }
+    if (item.status !== 'completed') {
+      return this.t('dashboardV2.workflow.manualHelp');
+    }
+    if (item.executionMode === 'automatic') {
+      return `${actionLabel}. ${this.t('dashboardV2.workflow.automaticDoneHelp')}`;
+    }
+    return `${actionLabel}. ${this.t('dashboardV2.workflow.manualDoneHelp')}`;
+  }
+
   resetInsightPanel(): void {
     this.setInsightPanel(
       this.outlookTitle || this.t('dashboardV2.defaultInsightTitle'),
@@ -479,6 +1092,10 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   }
 
   trackByJournal(_: number, item: DashboardV2JournalRowVm): number {
+    return item.id;
+  }
+
+  trackByWorkflowHistory(_: number, item: DashboardV2WorkflowHistoryVm): number {
     return item.id;
   }
 
@@ -654,10 +1271,12 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     return [
       { label: this.t('dashboardV2.fact.tradeDate'), value: this.formatDate(entry.tradeDate || null) },
       { label: this.t('dashboardV2.fact.side'), value: this.tradeSideLabel(entry.tradeSide) },
-      { label: this.t('dashboardV2.fact.entry'), value: this.formatMoney(entry.entryPrice) },
-      { label: this.t('dashboardV2.fact.exit'), value: entry.exitPrice ? this.formatMoney(entry.exitPrice) : this.t('dashboardV2.result.open') },
-      { label: this.t('dashboardV2.fact.quantity'), value: this.formatMoney(entry.quantity) },
-      { label: this.t('dashboardV2.fact.capital'), value: this.formatMoney(entry.totalCapital) },
+      { label: this.t('dashboardV2.fact.entry'), value: this.formatJournalEntryPriceLabel(entry) },
+      { label: this.t('dashboardV2.fact.exit'), value: this.formatJournalExitPriceLabel(entry) },
+      { label: this.t('dashboardV2.fact.stopLoss'), value: this.formatJournalStopLossPriceLabel(entry) },
+      { label: this.t('dashboardV2.fact.takeProfit'), value: this.formatJournalTakeProfitPriceLabel(entry) },
+      { label: this.t('dashboardV2.fact.quantity'), value: this.formatNullableNumber(entry.quantity) },
+      { label: this.t('dashboardV2.fact.capital'), value: this.formatNullableMoney(entry.totalCapital) },
       { label: this.t('dashboardV2.fact.strategy'), value: entry.strategyName || this.t('dashboardV2.trade.unspecified') },
       {
         label: this.t('dashboardV2.fact.execution'),
@@ -689,34 +1308,101 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     }
     this.error = '';
     this.dashboardSub?.unsubscribe();
-    this.loadAlertsOverview(true);
+    this.dashboardSupplementalSub?.unsubscribe();
+    this.alertsSub?.unsubscribe();
 
     this.dashboardSub = forkJoin({
       profiles: this.safeList(this.api.listStrategyProfiles()),
-      journal: this.safeList(this.api.listStrategyJournal(18, this.selectedExchange)),
-      rules: this.safeList(this.api.getExchangeRules()),
-      dataQuality: this.safeList(this.api.getDataQualityIssues(80)),
-      alertEvents: this.safeList(this.api.getAlertEvents('pending', 60)),
+      journal: this.safeList(this.api.listStrategyJournal(18)),
+      syncStatus: this.safeNullable(this.api.getSyncStatus()),
     }).subscribe({
-      next: ({ profiles, journal, rules, dataQuality, alertEvents }) => {
+      next: ({ profiles, journal, syncStatus }) => {
         this.overview = this.buildLightOverview(profiles.data);
-        this.exchangeRules = rules.data || [];
-        this.dataQualityOpenIssues = this.filterFoundationByExchange(dataQuality.data || []);
-        this.pendingAlertEvents = this.filterFoundationByExchange(alertEvents.data || []);
+        this.syncStatus = syncStatus.data || null;
+        this.jobHealthAlerts = this.buildJobHealthAlerts(this.syncStatus);
+        this.jobHealthSummary = this.buildJobHealthSummary(this.syncStatus, this.jobHealthAlerts);
+        this.jobHealthCheckedLabel = this.formatRelativeTime(this.syncStatus?.checkedAt);
 
         const journalEntries = journal.data || [];
         this.journalEntries = journalEntries;
         this.journalRows = this.buildJournalRows(journalEntries);
         this.stats = this.computeStats(journalEntries);
+        this.ensureAllJournalWorkspacePagesWithinBounds();
         this.applyAlertsState();
         this.applyAlertNarrative();
 
         this.loading = false;
         this.scheduleChartRender();
+        this.loadSupplementalDashboardData();
       },
       error: () => {
         this.loading = false;
         this.error = this.t('dashboardV2.error.load');
+      },
+    });
+  }
+
+  private loadSupplementalDashboardData(): void {
+    this.dashboardSupplementalSub?.unsubscribe();
+
+    this.dashboardSupplementalSub = forkJoin({
+      operations: this.safeNullable(
+        this.api.getStrategyOperationsOverview({
+          exchange: this.selectedExchange,
+          limit: 120,
+        })
+      ),
+      portfolio: this.safeNullable(
+        this.api.getStrategyPortfolioOverview({
+          exchange: this.selectedExchange,
+          limit: 300,
+        })
+      ),
+      workflow: this.safeNullable(
+        this.api.getStrategyActionWorkflowOverview({
+          exchange: this.selectedExchange,
+          limit: 100,
+        })
+      ),
+      workflowHistory: this.safeNullable(
+        this.api.getStrategyActionHistory({
+          exchange: this.selectedExchange,
+          days: 7,
+          limit: 80,
+        })
+      ),
+      rules: this.safeList(this.api.getExchangeRules()),
+      dataQuality: this.safeList(this.api.getDataQualityIssues(80)),
+      alertEvents: this.safeList(this.api.getAlertEvents('pending', 60)),
+    }).subscribe({
+      next: ({ operations, portfolio, workflow, workflowHistory, rules, dataQuality, alertEvents }) => {
+        this.exchangeRules = rules.data || [];
+        this.dataQualityOpenIssues = this.filterFoundationByExchange(dataQuality.data || []);
+        this.pendingAlertEvents = this.filterFoundationByExchange(alertEvents.data || []);
+        this.operationsOverview = operations.data || null;
+        this.openPositionRows = this.buildOperationRows(this.operationsOverview?.openPositions || []);
+        this.reviewQueueRows = this.buildOperationRows(this.operationsOverview?.reviewQueue || []);
+        this.nextActionItems = this.buildActionItems(this.operationsOverview);
+        this.portfolioOverview = portfolio.data || null;
+        this.holdingRows = this.buildHoldingRows(this.portfolioOverview);
+        this.exposureByStrategyRows = this.buildExposureRows(this.portfolioOverview?.exposureByStrategy || []);
+        this.exposureByIndustryRows = this.buildExposureRows(this.portfolioOverview?.exposureByIndustry || []);
+        this.portfolioAlertItems = this.buildPortfolioAlertItems(this.portfolioOverview);
+        this.workflowOverview = workflow.data || null;
+        this.workflowSuggestionItems = this.buildWorkflowSuggestionItems(this.workflowOverview);
+        this.workflowPendingItems = this.buildWorkflowPendingItems(this.workflowOverview);
+        this.workflowHistoryOverview = workflowHistory.data || null;
+        this.workflowHistoryItems = this.buildWorkflowHistoryItems(this.workflowHistoryOverview);
+        this.journalRows = this.buildJournalRows(this.journalEntries);
+        this.ensureAllJournalWorkspacePagesWithinBounds();
+        if (this.symbolDetailOpen && this.symbolDetailSymbol) {
+          this.symbolDetailHistoryItems = this.buildSymbolHistoryItems(this.symbolDetailSymbol);
+          this.symbolDetailIntelligence = this.buildSymbolIntelligence(this.symbolDetailSymbol);
+        }
+        this.applyAlertsState();
+        this.applyAlertNarrative();
+        this.scheduleChartRender();
+        this.loadAlertsOverview(true);
       },
     });
   }
@@ -762,8 +1448,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     const alerts: MarketAlertItem[] = items.reduce<MarketAlertItem[]>((acc, item) => acc.concat(item.alerts || []), []);
     const newsItems = items
       .reduce<MarketAlertNewsItem[]>((acc, item) => acc.concat(item.news_items || []), [])
-      .filter((item, index, arr) => arr.findIndex((candidate) => candidate.url === item.url && candidate.title === item.title) === index)
-      .slice(0, 20);
+      .filter((item, index, arr) => arr.findIndex((candidate) => candidate.url === item.url && candidate.title === item.title) === index);
     const watchlistSymbols = Array.from(new Set(items.reduce<string[]>((acc, item) => acc.concat(item.watchlist_symbols || []), [])));
     const generatedDates = items.map((item) => item.generated_at).filter(Boolean).sort();
     const generatedAt = generatedDates.length ? generatedDates[generatedDates.length - 1] : '';
@@ -829,10 +1514,99 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   }
 
   private buildDataQualityIssues(): string[] {
-    return this.dataQualityOpenIssues.slice(0, 4).map((issue) => {
+    return this.dataQualityOpenIssues.map((issue) => {
       const target = issue.symbol || issue.exchange || issue.scope;
       return `${target}: ${issue.message}`;
     });
+  }
+
+  journalFilterItems(): Array<{ key: DashboardV2JournalFilter; label: string }> {
+    return [
+      { key: 'all', label: this.t('dashboardV2.journalFilter.all') },
+      { key: 'open', label: this.t('dashboardV2.journalFilter.open') },
+      { key: 'profit', label: this.t('dashboardV2.journalFilter.profit') },
+      { key: 'loss', label: this.t('dashboardV2.journalFilter.loss') },
+    ];
+  }
+
+  journalWorkspaceItems(): Array<{ key: DashboardJournalWorkspaceTab; label: string; count: number }> {
+    return [
+      { key: 'journal', label: this.t('dashboardV2.workspace.journal'), count: this.journalRows.length },
+      { key: 'operations', label: this.t('dashboardV2.workspace.operations'), count: this.operationsOverview?.totals.openCount || 0 },
+      { key: 'portfolio', label: this.t('dashboardV2.workspace.portfolio'), count: this.portfolioOverview?.totals.holdingCount || 0 },
+      { key: 'workflow', label: this.t('dashboardV2.workspace.workflow'), count: this.workflowOverview?.counts.pending || 0 },
+      { key: 'history', label: this.t('dashboardV2.workspace.history'), count: this.workflowHistoryItems.length },
+    ];
+  }
+
+  isJournalWorkspaceTab(tab: DashboardJournalWorkspaceTab): boolean {
+    return this.selectedJournalWorkspaceTab === tab;
+  }
+
+  changeJournalWorkspaceTab(tab: DashboardJournalWorkspaceTab): void {
+    this.selectedJournalWorkspaceTab = tab;
+  }
+
+  journalSortItems(): Array<{ key: DashboardV2JournalSortBy; label: string }> {
+    return [
+      { key: 'date', label: this.t('dashboardV2.journalSort.date') },
+      { key: 'capital', label: this.t('dashboardV2.journalSort.capital') },
+      { key: 'pnl', label: this.t('dashboardV2.journalSort.pnl') },
+    ];
+  }
+
+  setJournalFilter(filter: DashboardV2JournalFilter): void {
+    this.journalFilter = filter;
+    this.journalWorkspacePages.journal = 1;
+  }
+
+  setJournalSortBy(sortBy: DashboardV2JournalSortBy): void {
+    this.journalSortBy = sortBy;
+    this.journalWorkspacePages.journal = 1;
+  }
+
+  onJournalSortChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement | null)?.value as DashboardV2JournalSortBy | '';
+    if (value === 'date' || value === 'capital' || value === 'pnl') {
+      this.setJournalSortBy(value);
+    }
+  }
+
+  toggleJournalSortDir(): void {
+    this.journalSortDir = this.journalSortDir === 'desc' ? 'asc' : 'desc';
+    this.journalWorkspacePages.journal = 1;
+  }
+
+  visibleJournalRows(): DashboardV2JournalRowVm[] {
+    const filtered = this.journalRows.filter((row) => {
+      if (this.journalFilter === 'all') {
+        return true;
+      }
+      return row.resultTone === this.journalFilter;
+    });
+
+    const factor = this.journalSortDir === 'desc' ? -1 : 1;
+    return [...filtered].sort((left, right) => {
+      let delta = 0;
+      if (this.journalSortBy === 'capital') {
+        delta = left.capitalValue - right.capitalValue;
+      } else if (this.journalSortBy === 'pnl') {
+        delta = left.pnlValue - right.pnlValue;
+      } else {
+        delta = left.timestamp - right.timestamp;
+      }
+      if (delta === 0) {
+        delta = left.id - right.id;
+      }
+      return delta * factor;
+    });
+  }
+
+  journalResultCount(filter: DashboardV2JournalFilter): number {
+    if (filter === 'all') {
+      return this.journalRows.length;
+    }
+    return this.journalRows.filter((row) => row.resultTone === filter).length;
   }
 
   private buildExchangeSessionSummary(): string {
@@ -879,12 +1653,12 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     this.alertItems = [
       ...this.buildAlertItems(this.alertsOverview?.alerts || []),
       ...this.buildAlertItemsFromEvents(this.pendingAlertEvents),
-    ].slice(0, 12);
+    ];
     this.newsItems = this.alertsOverview?.news_items || [];
     this.priorityItems = [
       ...this.buildFoundationPriorityItems(),
       ...this.buildPriorityItems(this.journalEntries, this.alertsOverview, this.newsItems),
-    ].slice(0, 8);
+    ];
     this.dataHealthIssues = [
       ...this.buildDataQualityIssues(),
       ...this.buildDataHealthIssues(this.overview, this.alertsOverview, this.journalEntries),
@@ -892,14 +1666,21 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     this.dataHealthSummary = this.buildDataHealthSummary(this.journalEntries);
     this.exchangeSessionSummary = this.buildExchangeSessionSummary();
     this.aiAnalysisItems = this.buildAiAnalysisItems(this.alertsOverview);
+    this.ensureAllAlertPagesWithinBounds();
   }
 
   private safeNullable<T>(source$: Observable<ApiEnvelope<T | null>>): Observable<ApiEnvelope<T | null>> {
-    return source$.pipe(catchError(() => of({ data: null } as ApiEnvelope<T | null>)));
+    return source$.pipe(
+      timeout(this.dashboardRequestTimeoutMs),
+      catchError(() => of({ data: null } as ApiEnvelope<T | null>))
+    );
   }
 
   private safeList<T>(source$: Observable<ApiEnvelope<T[]>>): Observable<ApiEnvelope<T[]>> {
-    return source$.pipe(catchError(() => of({ data: [] as T[] } as ApiEnvelope<T[]>)));
+    return source$.pipe(
+      timeout(this.dashboardRequestTimeoutMs),
+      catchError(() => of({ data: [] as T[] } as ApiEnvelope<T[]>))
+    );
   }
 
   private buildLightOverview(profiles: StrategyProfile[]): StrategyOverviewResponse | null {
@@ -948,28 +1729,180 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     return [...entries]
       .filter((entry) => Boolean(entry && entry.symbol))
       .sort((left, right) => this.resolveJournalTimestamp(right) - this.resolveJournalTimestamp(left) || right.id - left.id)
-      .slice(0, 12)
       .map((entry) => {
         const trade = this.computeTradeMetrics(entry);
+        const journalState = this.resolveJournalWorkflowState(entry, trade.isOpen);
+        const resultTone: DashboardV2JournalRowVm['resultTone'] = entry.resultLabel
+          ? this.resolveJournalResultTone(entry.resultLabel)
+          : trade.isOpen
+            ? 'open'
+            : trade.pnl > 0
+              ? 'profit'
+              : trade.pnl < 0
+                ? 'loss'
+                : 'flat';
         return {
           id: entry.id,
+          timestamp: this.resolveJournalTimestamp(entry),
           date: this.formatDate(entry.tradeDate || null),
           symbol: entry.symbol.toUpperCase(),
+          isOpen: trade.isOpen,
           sideLabel: this.tradeSideLabel(entry.tradeSide),
-          tradeLabel: this.getTradeLabel(entry),
+          setupLabel: (entry.classification || '').trim() || this.t('dashboardV2.trade.unspecified'),
+          strategyLabel: (entry.strategyName || '').trim() || '--',
           note: this.buildJournalNote(entry),
+          workflowReason: journalState.reason,
+          capitalValue: trade.capital,
           capitalLabel: this.formatMoney(trade.capital),
+          pnlValue: trade.pnl,
           pnlLabel: this.formatSignedMoney(trade.pnl),
           pnlTone: trade.pnl > 0 ? 'positive' : trade.pnl < 0 ? 'danger' : 'default',
-          resultLabel: trade.isOpen
-            ? this.t('dashboardV2.result.open')
-            : trade.pnl > 0
-              ? this.t('dashboardV2.result.profit')
-              : trade.pnl < 0
-                ? this.t('dashboardV2.result.loss')
-                : this.t('dashboardV2.result.flat'),
+          resultTone,
+          resultLabel: entry.resultLabel || (
+            trade.isOpen
+              ? this.t('dashboardV2.result.open')
+              : trade.pnl > 0
+                ? this.t('dashboardV2.result.profit')
+                : trade.pnl < 0
+                  ? this.t('dashboardV2.result.loss')
+                  : this.t('dashboardV2.result.flat')
+          ),
+          portfolioStateLabel: journalState.portfolioLabel,
+          portfolioStateTone: journalState.portfolioTone,
+          workflowStateLabel: journalState.workflowLabel,
+          workflowStateTone: journalState.workflowTone,
+          hasWorkflowOpen: journalState.hasWorkflowOpen,
+          hasWorkflowSuggested: journalState.hasWorkflowSuggested,
         };
       });
+  }
+
+  private resolveJournalWorkflowState(
+    entry: StrategyJournalEntry,
+    isOpen: boolean
+  ): {
+    portfolioLabel: string;
+    portfolioTone: 'positive' | 'warning' | 'default';
+    workflowLabel: string;
+    workflowTone: 'positive' | 'warning' | 'default';
+    reason: string;
+    hasWorkflowOpen: boolean;
+    hasWorkflowSuggested: boolean;
+  } {
+    const symbol = (entry.symbol || '').trim().toUpperCase();
+    const holding = (this.portfolioOverview?.holdings || []).find((item) => (item.symbol || '').trim().toUpperCase() === symbol) || null;
+    const pendingWorkflow = (this.workflowOverview?.pendingActions || []).find((item) => Number(item.journalEntryId || 0) === entry.id)
+      || (this.workflowOverview?.pendingActions || []).find((item) => (item.symbol || '').trim().toUpperCase() === symbol)
+      || null;
+    const suggestedWorkflow = (this.workflowOverview?.suggestedActions || []).find((item) => Number(item.journalEntryId || 0) === entry.id)
+      || (this.workflowOverview?.suggestedActions || []).find((item) => (item.symbol || '').trim().toUpperCase() === symbol)
+      || null;
+    const historyWorkflow = (this.workflowHistoryOverview?.items || []).find((item) => Number(item.journalEntryId || 0) === entry.id)
+      || (this.workflowHistoryOverview?.items || []).find((item) => (item.symbol || '').trim().toUpperCase() === symbol)
+      || null;
+
+    const portfolioLabel = !isOpen
+      ? this.t('dashboardV2.journalState.closed')
+      : holding
+        ? this.t('dashboardV2.journalState.inPortfolio')
+        : this.t('dashboardV2.journalState.openOnly');
+    const portfolioTone: 'positive' | 'warning' | 'default' = !isOpen ? 'default' : holding ? 'positive' : 'warning';
+
+    if (pendingWorkflow) {
+      return {
+        portfolioLabel,
+        portfolioTone,
+        workflowLabel: this.t('dashboardV2.journalState.workflowOpen'),
+        workflowTone: 'warning',
+        reason: pendingWorkflow.message || pendingWorkflow.title || this.t('dashboardV2.journalReason.workflowOpen'),
+        hasWorkflowOpen: true,
+        hasWorkflowSuggested: false,
+      };
+    }
+
+    if (suggestedWorkflow) {
+      return {
+        portfolioLabel,
+        portfolioTone,
+        workflowLabel: this.t('dashboardV2.journalState.workflowSuggested'),
+        workflowTone: 'warning',
+        reason: suggestedWorkflow.message || suggestedWorkflow.title || this.t('dashboardV2.journalReason.workflowSuggested'),
+        hasWorkflowOpen: false,
+        hasWorkflowSuggested: true,
+      };
+    }
+
+    if (historyWorkflow && !isOpen) {
+      return {
+        portfolioLabel,
+        portfolioTone,
+        workflowLabel: this.t('dashboardV2.journalState.workflowHandled'),
+        workflowTone: 'positive',
+        reason: historyWorkflow.resolutionNote || historyWorkflow.message || this.t('dashboardV2.journalReason.workflowHandled'),
+        hasWorkflowOpen: false,
+        hasWorkflowSuggested: false,
+      };
+    }
+
+    if (!isOpen) {
+      return {
+        portfolioLabel,
+        portfolioTone,
+        workflowLabel: this.t('dashboardV2.journalState.noWorkflowNeeded'),
+        workflowTone: 'default',
+        reason: this.t('dashboardV2.journalReason.closedEntry'),
+        hasWorkflowOpen: false,
+        hasWorkflowSuggested: false,
+      };
+    }
+
+    if (!entry.stopLossPrice && !entry.takeProfitPrice) {
+      return {
+        portfolioLabel,
+        portfolioTone,
+        workflowLabel: this.t('dashboardV2.journalState.noWorkflowYet'),
+        workflowTone: 'default',
+        reason: this.t('dashboardV2.journalReason.noTrigger'),
+        hasWorkflowOpen: false,
+        hasWorkflowSuggested: false,
+      };
+    }
+
+    if (entry.reviewReasons?.length) {
+      return {
+        portfolioLabel,
+        portfolioTone,
+        workflowLabel: this.t('dashboardV2.journalState.noWorkflowYet'),
+        workflowTone: 'default',
+        reason: entry.reviewReasons[0],
+        hasWorkflowOpen: false,
+        hasWorkflowSuggested: false,
+      };
+    }
+
+    return {
+      portfolioLabel,
+      portfolioTone,
+      workflowLabel: this.t('dashboardV2.journalState.noWorkflowYet'),
+      workflowTone: 'default',
+      reason: this.t('dashboardV2.journalReason.normalOpen'),
+      hasWorkflowOpen: false,
+      hasWorkflowSuggested: false,
+    };
+  }
+
+  private resolveJournalResultTone(value: string | null | undefined): DashboardV2JournalRowVm['resultTone'] {
+    const normalized = (value || '').trim().toLowerCase();
+    if (normalized.includes('open') || normalized.includes('mở')) {
+      return 'open';
+    }
+    if (normalized.includes('profit') || normalized.includes('lãi') || normalized.includes('loi')) {
+      return 'profit';
+    }
+    if (normalized.includes('loss') || normalized.includes('lỗ') || normalized.includes('lo')) {
+      return 'loss';
+    }
+    return 'flat';
   }
 
   private buildJournalNote(entry: StrategyJournalEntry): string {
@@ -979,10 +1912,413 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     return parts[0] || this.t('dashboardV2.empty.note');
   }
 
+  private buildOperationRows(entries: StrategyJournalEntry[]): DashboardV2OperationRowVm[] {
+    return [...entries]
+      .filter((entry) => Boolean(entry?.symbol))
+      .map((entry) => {
+        const pnlValue = Number(entry.pnlValue || 0);
+        const actionTone = this.normalizeTone(entry.actionTone);
+        return {
+          id: entry.id,
+          symbol: entry.symbol.toUpperCase(),
+          actionLabel: entry.actionLabel || this.t('dashboardV2.operations.follow'),
+          actionTone,
+          capitalLabel: this.formatMoney(entry.totalCapital),
+          pnlLabel: this.formatSignedMoney(pnlValue),
+          pnlTone: pnlValue > 0 ? 'positive' : pnlValue < 0 ? 'danger' : 'default',
+          currentPriceLabel: entry.currentPrice ? this.formatMoney(entry.currentPrice) : '--',
+          helper: this.buildOperationHelper(entry),
+        };
+      });
+  }
+
+  private buildActionItems(overview: StrategyOperationsOverviewResponse | null): DashboardV2ActionVm[] {
+    return (overview?.actionItems || []).map((item) => ({
+      key: item.key,
+      title: item.title,
+      body: item.body,
+      tone: this.normalizeTone(item.tone),
+      symbol: (item.symbol || '').toUpperCase(),
+    }));
+  }
+
+  private buildHoldingRows(overview: StrategyPortfolioOverviewResponse | null): DashboardV2HoldingVm[] {
+    return (overview?.holdings || []).map((item) => ({
+      symbol: item.symbol.toUpperCase(),
+      strategyLabel: item.strategies?.length ? item.strategies.join(', ') : this.t('dashboardV2.portfolio.unassignedStrategy'),
+      industryLabel: item.industry || item.sector || this.t('dashboardV2.portfolio.unknownIndustry'),
+      marketValueLabel: this.formatMoney(item.marketValue),
+      costBasisLabel: this.formatMoney(item.costBasisValue),
+      unrealizedLabel: this.formatSignedMoney(item.unrealizedPnlValue),
+      unrealizedTone: item.unrealizedPnlValue > 0 ? 'positive' : item.unrealizedPnlValue < 0 ? 'danger' : 'default',
+      exposureLabel: `${this.decimal.format(item.exposurePct)}%`,
+    }));
+  }
+
+  private buildExposureRows(
+    items: Array<{ label: string; value: number; weightPct: number }>
+  ): DashboardV2ExposureVm[] {
+    return items.slice(0, 6).map((item) => ({
+      label: item.label,
+      valueLabel: this.formatMoney(item.value),
+      weightLabel: `${this.decimal.format(item.weightPct)}%`,
+    }));
+  }
+
+  private buildPortfolioAlertItems(overview: StrategyPortfolioOverviewResponse | null): DashboardV2PortfolioAlertVm[] {
+    return (overview?.alerts || []).map((item) => ({
+      key: item.code,
+      title: item.title,
+      body: `${item.message} (${item.metricLabel}: ${this.decimal.format(item.metricValue)} / ${this.t('dashboardV2.portfolio.threshold')}: ${this.decimal.format(item.threshold)})`,
+      tone: this.normalizeTone(item.severity === 'critical' ? 'danger' : item.severity === 'warning' ? 'warning' : 'default'),
+    }));
+  }
+
+  private buildWorkflowSuggestionItems(overview: StrategyActionWorkflowOverviewResponse | null): DashboardV2WorkflowSuggestionVm[] {
+    return (overview?.suggestedActions || []).map((item) => ({
+      sourceType: item.sourceType,
+      sourceKey: item.sourceKey,
+      journalEntryId: item.journalEntryId,
+      symbol: (item.symbol || '').toUpperCase(),
+      actionCode: item.actionCode,
+      actionLabel: item.actionLabel,
+      executionMode: item.executionMode === 'automatic' ? 'automatic' : 'manual',
+      title: item.title,
+      body: item.message,
+      tone: this.normalizeTone(item.severity === 'critical' ? 'danger' : item.severity === 'warning' ? 'warning' : 'default'),
+      existingActionId: item.existingActionId,
+      existingStatus: item.existingStatus,
+    }));
+  }
+
+  private buildWorkflowPendingItems(overview: StrategyActionWorkflowOverviewResponse | null): DashboardV2WorkflowActionVm[] {
+    return (overview?.pendingActions || []).map((item) => ({
+      id: item.id,
+      symbol: (item.symbol || '').toUpperCase(),
+      title: item.title || item.actionLabel,
+      body: item.message || '',
+      tone: this.normalizeTone(item.severity === 'critical' ? 'danger' : item.severity === 'warning' ? 'warning' : 'default'),
+      status: item.status,
+      runtimeLabel: this.formatWorkflowRuntimeLabel(item.status, item.executionMode),
+      runtimeTone: this.workflowRuntimeClass(item.status, item.executionMode),
+      executionMode: item.executionMode === 'automatic' ? 'automatic' : 'manual',
+      sourceLabel: item.sourceType || '--',
+      createdAtLabel: item.createdAt ? this.formatDateTimeLabel(item.createdAt) : '--',
+      updatedAtLabel: item.updatedAt ? this.formatDateTimeLabel(item.updatedAt) : '--',
+      note: item.resolutionNote || '',
+      resolutionType: item.resolutionType || null,
+    }));
+  }
+
+  private buildWorkflowHistoryItems(overview: StrategyActionHistoryResponse | null): DashboardV2WorkflowHistoryVm[] {
+    return (overview?.items || []).map((item) => ({
+      id: item.id,
+      symbol: (item.symbol || '--').toUpperCase(),
+      title: item.title || item.actionLabel || item.actionCode,
+      status: item.status || 'open',
+      runtimeLabel: this.formatWorkflowRuntimeLabel(item.status, item.executionMode),
+      runtimeTone: this.workflowRuntimeClass(item.status, item.executionMode),
+      effectLabel: item.effectLabel,
+      effectTone: this.workflowToneClass(item.effectTone),
+      sourceLabel: item.sourceLabel || item.sourceType || '--',
+      actionLabel: this.formatHistoryActionLabel(item),
+      executionMode: item.executionMode === 'automatic' ? 'automatic' : 'manual',
+      processLabel: this.formatWorkflowProcessLabel(item),
+      handledBy: item.handledBy || '--',
+      handledAtLabel: item.handledAt ? this.formatDateTimeLabel(item.handledAt) : '--',
+      handledPriceLabel: this.formatNullableNumber(item.handledPrice),
+      currentPriceLabel: this.formatNullableNumber(item.currentPrice),
+      effectPctLabel: this.formatNullablePercent(item.effectPct),
+      effectValueLabel: this.formatNullableSignedMoney(item.effectValue),
+      note: item.resolutionNote || this.formatWorkflowProcessLabel(item),
+      basis: item.effectBasis || '',
+      resolutionType: item.resolutionType || null,
+      auditSummary: (item.auditTrail || []).slice(0, 3).map((audit) => {
+        const actor = audit.changedBy || '--';
+        const time = audit.changedAt ? this.formatDateTimeLabel(audit.changedAt) : '--';
+        return `${audit.action} / ${actor} / ${time}`;
+      }),
+    }));
+  }
+
+  private buildSymbolHistoryItems(symbol: string): DashboardV2SymbolHistoryVm[] {
+    const normalized = (symbol || '').trim().toUpperCase();
+    if (!normalized) {
+      return [];
+    }
+
+    const journalItems: DashboardV2SymbolHistoryVm[] = this.journalEntries
+      .filter((entry) => (entry.symbol || '').trim().toUpperCase() === normalized)
+      .map((entry) => {
+        const metrics = this.computeTradeMetrics(entry);
+        const formulaVerdict = this.resolveJournalFormulaVerdict(entry);
+        const pnlLabel = this.formatSignedMoney(metrics.pnl);
+        const resultLabel = metrics.isOpen
+          ? this.t('dashboardV2.result.open')
+          : metrics.pnl > 0
+            ? this.t('dashboardV2.result.profit')
+            : metrics.pnl < 0
+              ? this.t('dashboardV2.result.loss')
+              : this.t('dashboardV2.result.flat');
+        const timestamp = this.resolveJournalTimestamp(entry);
+        return {
+          key: `journal-${entry.id}`,
+          kind: 'journal',
+          title: `Journal #${entry.id}`,
+          subtitle: `${this.tradeSideLabel(entry.tradeSide)} / ${this.getTradeLabel(entry)}`,
+          body: (entry.notes || entry.psychology || '').trim(),
+          meta: [
+            `${this.t('dashboardV2.table.date')}: ${this.formatDate(entry.tradeDate)}`,
+            `${this.t('dashboardV2.history.beforeActionPrice')}: ${this.formatJournalBeforeActionPriceLabel(entry)}`,
+            `${this.t('dashboardV2.history.afterActionPrice')}: ${this.formatJournalAfterActionPriceLabel(entry)}`,
+            `${this.t('dashboardV2.fact.stopLoss')}: ${this.formatJournalStopLossPriceLabel(entry)}`,
+            `${this.t('dashboardV2.fact.takeProfit')}: ${this.formatJournalTakeProfitPriceLabel(entry)}`,
+            `${this.t('dashboardV2.table.capital')}: ${this.formatNullableMoney(entry.totalCapital)}`,
+            `${this.t('dashboardV2.table.pnl')}: ${pnlLabel}`,
+            `${this.t('dashboardV2.table.result')}: ${resultLabel}`,
+            ...(formulaVerdict ? [`${this.t('marketWatch.formulaVerdictTitle')}: ${this.formatFormulaVerdictSummary(formulaVerdict)}`] : []),
+          ],
+          tone: metrics.pnl > 0 ? 'positive' : metrics.pnl < 0 ? 'danger' : metrics.isOpen ? 'warning' : 'default',
+          timestamp,
+        };
+      });
+
+    const workflowItems: DashboardV2SymbolHistoryVm[] = (this.workflowHistoryOverview?.items || [])
+      .filter((item) => (item.symbol || '').trim().toUpperCase() === normalized)
+      .map((item) => {
+        const relatedJournal = item.journalEntryId
+          ? this.journalEntries.find((entry) => entry.id === item.journalEntryId) || null
+          : null;
+        const timestamp = item.handledAt ? new Date(item.handledAt).getTime() : item.completedAt ? new Date(item.completedAt).getTime() : item.updatedAt ? new Date(item.updatedAt).getTime() : item.createdAt ? new Date(item.createdAt).getTime() : 0;
+        return {
+          key: `workflow-${item.id}`,
+          kind: 'workflow',
+          title: this.formatHistoryActionLabel(item),
+          subtitle: `${item.executionMode === 'automatic' ? this.t('dashboardV2.workflow.mode.automatic') : this.t('dashboardV2.workflow.mode.manual')} / ${this.formatWorkflowRuntimeLabel(item.status, item.executionMode)}`,
+          body: item.resolutionNote || item.message || this.formatWorkflowProcessLabel(item),
+          meta: [
+            `${this.t('marketSettings.history.source')}: ${item.sourceLabel || item.sourceType || '--'}`,
+            `${this.t('marketSettings.history.time')}: ${item.handledAt ? this.formatDateTimeLabel(item.handledAt) : '--'}`,
+            `${this.t('dashboardV2.history.beforeActionPrice')}: ${this.formatWorkflowEntryPriceLabel(item, relatedJournal)}`,
+            `${this.t('dashboardV2.history.afterActionPrice')}: ${this.formatWorkflowAfterPriceLabel(item, relatedJournal)}`,
+            `${this.t('dashboardV2.fact.stopLoss')}: ${relatedJournal ? this.formatJournalStopLossPriceLabel(relatedJournal) : '--'}`,
+            `${this.t('dashboardV2.fact.takeProfit')}: ${relatedJournal ? this.formatJournalTakeProfitPriceLabel(relatedJournal) : '--'}`,
+            `${this.t('marketSettings.history.currentPrice')}: ${this.formatNullableNumber(item.currentPrice)}`,
+            `${this.t('marketSettings.history.effectPct')}: ${this.formatNullablePercent(item.effectPct)}`,
+          ],
+          tone: this.workflowToneClass(item.effectTone),
+          timestamp: Number.isFinite(timestamp) ? timestamp : 0,
+        };
+      });
+
+    return [...workflowItems, ...journalItems]
+      .sort((left, right) => right.timestamp - left.timestamp)
+      .slice(0, 24);
+  }
+
+  private buildSymbolIntelligence(symbol: string): DashboardV2SymbolIntelligenceVm | null {
+    const normalized = (symbol || '').trim().toUpperCase();
+    if (!normalized) {
+      return null;
+    }
+
+    const latestJournal = [...this.journalEntries]
+      .filter((entry) => (entry.symbol || '').trim().toUpperCase() === normalized)
+      .sort((left, right) => this.resolveJournalTimestamp(right) - this.resolveJournalTimestamp(left) || right.id - left.id)[0] || null;
+    const verdict = this.symbolDetailFormulaVerdict || this.resolveJournalFormulaVerdict(latestJournal);
+    const holding = (this.portfolioOverview?.holdings || []).find((item) => (item.symbol || '').trim().toUpperCase() === normalized) || null;
+    const pendingActions = (this.workflowOverview?.pendingActions || []).filter((item) => (item.symbol || '').trim().toUpperCase() === normalized);
+    const suggestedActions = (this.workflowOverview?.suggestedActions || []).filter((item) => (item.symbol || '').trim().toUpperCase() === normalized);
+    const historyActions = (this.workflowHistoryOverview?.items || []).filter((item) => (item.symbol || '').trim().toUpperCase() === normalized);
+    const portfolioAlerts = (this.portfolioOverview?.alerts || []).filter((item) => {
+      const target = (item.target || '').toUpperCase();
+      const title = (item.title || '').toUpperCase();
+      const message = (item.message || '').toUpperCase();
+      return target.includes(normalized) || title.includes(normalized) || message.includes(normalized);
+    });
+
+    if (!verdict && !holding && !pendingActions.length && !suggestedActions.length && !historyActions.length && !portfolioAlerts.length) {
+      return null;
+    }
+
+    const bullCase = [
+      ...(verdict?.keyPasses || []),
+      ...(holding && holding.unrealizedPnlValue > 0
+        ? [
+            `${this.t('dashboardV2.portfolio.unrealized')}: ${this.formatSignedMoney(holding.unrealizedPnlValue)} (${this.decimal.format(holding.unrealizedPnlPct)}%)`,
+          ]
+        : []),
+      ...(suggestedActions
+        .filter((item) => item.actionCode === 'probe_buy' || item.actionCode === 'add_position' || item.actionCode === 'candidate')
+        .slice(0, 2)
+        .map((item) => `${item.actionLabel}: ${item.message}`)),
+    ].filter(Boolean);
+
+    const bearCase = [
+      ...(verdict?.keyFails || []),
+      ...(holding && holding.unrealizedPnlValue < 0
+        ? [
+            `${this.t('dashboardV2.portfolio.unrealized')}: ${this.formatSignedMoney(holding.unrealizedPnlValue)} (${this.decimal.format(holding.unrealizedPnlPct)}%)`,
+          ]
+        : []),
+      ...(pendingActions
+        .filter((item) => item.actionCode === 'cut_loss' || item.actionCode === 'stand_aside' || item.actionCode === 'take_profit')
+        .slice(0, 2)
+        .map((item) => `${item.actionLabel}: ${item.message || item.title || '--'}`)),
+    ].filter(Boolean);
+
+    const riskItems = [
+      ...(verdict?.keyAlerts || []),
+      ...(holding && holding.exposurePct >= 20
+        ? [`${this.t('dashboardV2.portfolio.exposureTitle')}: ${this.decimal.format(holding.exposurePct)}%`]
+        : []),
+      ...portfolioAlerts.slice(0, 3).map((item) => `${item.title}: ${item.message}`),
+      ...(historyActions
+        .filter((item) => item.effectTone === 'danger')
+        .slice(0, 1)
+        .map((item) => `${item.actionLabel}: ${item.effectBasis || item.resolutionNote || item.message || '--'}`)),
+    ].filter(Boolean);
+
+    const actionItems = [
+      verdict ? this.buildIntelligencePrimaryAction(verdict, holding) : '',
+      ...pendingActions.slice(0, 2).map((item) => `${item.actionLabel}: ${item.message || item.title || '--'}`),
+      ...(!pendingActions.length
+        ? suggestedActions.slice(0, 2).map((item) => `${item.actionLabel}: ${item.message}`)
+        : []),
+      ...(!pendingActions.length && !suggestedActions.length && !holding && verdict?.action === 'candidate'
+        ? [this.t('marketWatch.intelligence.monitorCandidate')]
+        : []),
+    ].filter(Boolean);
+
+    return {
+      summary: verdict?.summary || verdict?.headline || this.t('marketWatch.intelligence.empty'),
+      biasLabel: verdict?.bias || '--',
+      actionLabel: this.formatFormulaVerdictAction(verdict),
+      riskLabel: verdict?.riskLevel || '--',
+      confidenceLabel: verdict ? `${this.decimal.format(verdict.confidence)}%` : '--',
+      bullCase: bullCase.length ? bullCase.slice(0, 4) : [this.t('marketWatch.intelligence.emptyBull')],
+      bearCase: bearCase.length ? bearCase.slice(0, 4) : [this.t('marketWatch.intelligence.emptyBear')],
+      riskItems: riskItems.length ? riskItems.slice(0, 4) : [this.t('marketWatch.intelligence.emptyRisk')],
+      actionItems: actionItems.length ? actionItems.slice(0, 4) : [this.t('marketWatch.intelligence.emptyAction')],
+    };
+  }
+
+  private buildIntelligencePrimaryAction(
+    verdict: StrategyFormulaVerdict,
+    holding: StrategyPortfolioOverviewResponse['holdings'][number] | null
+  ): string {
+    switch (verdict.action) {
+      case 'take_profit':
+        return holding
+          ? `${this.t('dashboardV2.workflow.doneTakeProfit')}: ${this.t('marketWatch.intelligence.reviewOpenPosition')}`
+          : this.t('marketWatch.intelligence.noPositionTakeProfit');
+      case 'stand_aside':
+        return this.t('marketWatch.intelligence.standAsideAction');
+      case 'add_position':
+        return this.t('marketWatch.intelligence.addPositionAction');
+      case 'probe_buy':
+        return this.t('marketWatch.intelligence.probeBuyAction');
+      case 'candidate':
+        return this.t('marketWatch.intelligence.candidateAction');
+      case 'review':
+        return this.t('marketWatch.intelligence.reviewAction');
+      default:
+        return verdict.headline || this.t('marketWatch.intelligence.reviewAction');
+    }
+  }
+
+  private buildOperationHelper(entry: StrategyJournalEntry): string {
+    const parts: string[] = [];
+    if (typeof entry.distanceToStopLossPct === 'number') {
+      parts.push(`${this.t('dashboardV2.operations.distanceToStop')} ${this.decimal.format(entry.distanceToStopLossPct)}%`);
+    }
+    if (typeof entry.distanceToTakeProfitPct === 'number') {
+      parts.push(`${this.t('dashboardV2.operations.distanceToTakeProfit')} ${this.decimal.format(entry.distanceToTakeProfitPct)}%`);
+    }
+    if (entry.reviewReasons?.length) {
+      parts.push(entry.reviewReasons[0]);
+    }
+    return parts[0] || this.buildJournalNote(entry);
+  }
+
+  private normalizeTone(value: string | null | undefined): 'default' | 'positive' | 'warning' | 'danger' {
+    if (value === 'positive' || value === 'warning' || value === 'danger') {
+      return value;
+    }
+    return 'default';
+  }
+
+  private getSyncJobs(status: MarketSyncStatusData): Array<{ key: keyof MarketSyncStatusData; job: MarketSyncJobStatus }> {
+    return [
+      { key: 'quotes', job: status.quotes },
+      { key: 'intraday', job: status.intraday },
+      { key: 'indexDaily', job: status.indexDaily },
+      { key: 'financial', job: status.financial },
+      { key: 'seedSymbols', job: status.seedSymbols },
+      { key: 'foundationCandles', job: status.foundationCandles },
+      { key: 'foundationDataQuality', job: status.foundationDataQuality },
+      { key: 'foundationAlerts', job: status.foundationAlerts },
+      { key: 'news', job: status.news },
+    ];
+  }
+
+  private getSyncJobLabel(key: keyof MarketSyncStatusData): string {
+    switch (key) {
+      case 'quotes':
+        return this.t('dashboardV2.syncHealth.job.quotes');
+      case 'intraday':
+        return this.t('dashboardV2.syncHealth.job.intraday');
+      case 'indexDaily':
+        return this.t('dashboardV2.syncHealth.job.indexDaily');
+      case 'financial':
+        return this.t('dashboardV2.syncHealth.job.financial');
+      case 'seedSymbols':
+        return this.t('dashboardV2.syncHealth.job.seedSymbols');
+      case 'foundationCandles':
+        return this.t('dashboardV2.syncHealth.job.foundationCandles');
+      case 'foundationDataQuality':
+        return this.t('dashboardV2.syncHealth.job.foundationDataQuality');
+      case 'foundationAlerts':
+        return this.t('dashboardV2.syncHealth.job.foundationAlerts');
+      case 'news':
+        return this.t('dashboardV2.syncHealth.job.news');
+      default:
+        return String(key);
+    }
+  }
+
+  private getSyncJobAlertThresholdSeconds(key: keyof MarketSyncStatusData): number {
+    switch (key) {
+      case 'quotes':
+      case 'intraday':
+      case 'news':
+      case 'foundationAlerts':
+        return 300;
+      case 'indexDaily':
+      case 'foundationCandles':
+      case 'foundationDataQuality':
+        return 900;
+      case 'financial':
+      case 'seedSymbols':
+        return 1800;
+      default:
+        return 600;
+    }
+  }
+
+  private isOverdueHardFailure(key: keyof MarketSyncStatusData, job: MarketSyncJobStatus): boolean {
+    if (job.health !== 'hard-failed') {
+      return false;
+    }
+    if (typeof job.ageSeconds === 'number') {
+      return job.ageSeconds >= this.getSyncJobAlertThresholdSeconds(key);
+    }
+    return Number(job.consecutiveFailures || 0) >= 3;
+  }
+
   private buildAlertItems(alerts: MarketAlertItem[]): DashboardV2AlertVm[] {
     return [...alerts]
       .sort((left, right) => new Date(right.time || 0).getTime() - new Date(left.time || 0).getTime())
-      .slice(0, 8)
       .map((item) => ({
         id: item.id,
         title: item.title,
@@ -1003,7 +2339,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   }
 
   private buildAlertItemsFromEvents(events: MarketAlertEventItem[]): DashboardV2AlertVm[] {
-    return events.slice(0, 6).map((event) => ({
+    return events.map((event) => ({
       id: `event-${event.id}`,
       title: event.title,
       message: event.message,
@@ -1026,16 +2362,16 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     if (criticalIssues.length) {
       items.push({
         key: 'foundation-data-quality-critical',
-        title: 'Data quality cần kiểm tra',
-        body: `${criticalIssues.length} lỗi critical đang mở. ${criticalIssues[0]?.symbol || criticalIssues[0]?.scope || ''} - ${criticalIssues[0]?.message || ''}`,
+        title: this.t('dashboardV2.priority.dataQualityTitle'),
+        body: `${criticalIssues.length} ${this.t('dashboardV2.priority.criticalIssuesBody')} ${criticalIssues[0]?.symbol || criticalIssues[0]?.scope || ''} - ${criticalIssues[0]?.message || ''}`,
         meta: this.selectedExchange,
         tone: 'danger',
       });
     } else if (this.dataQualityOpenIssues.length) {
       items.push({
         key: 'foundation-data-quality-warning',
-        title: 'Data health',
-        body: `${this.dataQualityOpenIssues.length} cảnh báo dữ liệu đang mở.`,
+        title: this.t('dashboardV2.priority.dataHealthTitle'),
+        body: `${this.dataQualityOpenIssues.length} ${this.t('dashboardV2.priority.dataHealthBody')}`,
         meta: this.selectedExchange,
         tone: 'warning',
       });
@@ -1044,9 +2380,9 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     if (this.pendingAlertEvents.length) {
       items.push({
         key: 'foundation-alert-events',
-        title: 'Alert events pending',
-        body: `${this.pendingAlertEvents.length} cảnh báo đã được materialize và chờ delivery.`,
-        meta: this.pendingAlertEvents[0]?.delivery_channels?.join(', ') || 'in-app',
+        title: this.t('dashboardV2.priority.alertEventsTitle'),
+        body: `${this.pendingAlertEvents.length} ${this.t('dashboardV2.priority.alertEventsBody')}`,
+        meta: this.pendingAlertEvents[0]?.delivery_channels?.join(', ') || this.t('dashboardV2.priority.inApp'),
         tone: 'warning',
       });
     }
@@ -1054,7 +2390,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     if (this.exchangeSessionSummary) {
       items.push({
         key: 'foundation-exchange-session',
-        title: 'Trạng thái phiên',
+        title: this.t('dashboardV2.priority.sessionTitle'),
         body: this.exchangeSessionSummary,
         meta: this.selectedExchange,
         tone: 'default',
@@ -1062,6 +2398,44 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     }
 
     return items;
+  }
+
+  private buildJobHealthAlerts(status: MarketSyncStatusData | null): DashboardV2PriorityVm[] {
+    if (!status) {
+      return [];
+    }
+
+    return this.getSyncJobs(status)
+      .filter(({ key, job }) => this.isOverdueHardFailure(key, job))
+      .map(({ key, job }) => {
+        const thresholdMinutes = Math.max(1, Math.round(this.getSyncJobAlertThresholdSeconds(key) / 60));
+        const ageLabel = this.formatAgeSeconds(job.ageSeconds);
+        const lastError = (job.lastError || job.message || this.t('dashboardV2.syncHealth.noError')).trim();
+        return {
+          key: `sync-health-${String(key)}`,
+          title: `${this.getSyncJobLabel(key)} ${this.t('dashboardV2.syncHealth.hardFailedTooLong')} ${thresholdMinutes} ${this.t('dashboardV2.syncHealth.minuteUnit')}`,
+          body: `${lastError}${ageLabel !== '--' ? ` ${this.t('dashboardV2.syncHealth.agePrefix')}: ${ageLabel}.` : ''}`,
+          meta: `${this.t('dashboardV2.syncHealth.failStreak')}: ${job.consecutiveFailures || 0} / ${this.t('dashboardV2.syncHealth.lastOk')}: ${this.formatRelativeTime(job.lastSuccessAt || job.finishedAt)}`,
+          tone: 'danger' as const,
+        };
+      })
+      .slice(0, 4);
+  }
+
+  private buildJobHealthSummary(status: MarketSyncStatusData | null, alerts: DashboardV2PriorityVm[]): string {
+    if (!status) {
+      return '';
+    }
+    if (alerts.length) {
+      return `${alerts.length} ${this.t('dashboardV2.syncHealth.summaryHard')}`;
+    }
+
+    const softFailedCount = this.getSyncJobs(status).filter(({ job }) => job.health === 'soft-failed').length;
+    if (softFailedCount) {
+      return `${softFailedCount} ${this.t('dashboardV2.syncHealth.summarySoft')}`;
+    }
+
+    return '';
   }
 
   private buildPriorityItems(
@@ -1132,7 +2506,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
       }
     }
 
-    return items.slice(0, 6);
+    return items;
   }
 
   private buildAiAnalysisItems(overview: MarketAlertsOverviewResponse | null): DashboardV2PriorityVm[] {
@@ -1179,7 +2553,58 @@ export class DashboardV2Page implements OnInit, OnDestroy {
       });
     }
 
-    return items.slice(0, 5);
+    return items;
+  }
+
+  private getAlertTabItems(tab: DashboardAlertTab): Array<DashboardV2PriorityVm | DashboardV2AlertVm | MarketAlertNewsItem> {
+    if (tab === 'priority') {
+      return this.priorityItems;
+    }
+    if (tab === 'alerts') {
+      return this.alertItems;
+    }
+    if (tab === 'news') {
+      return this.newsItems;
+    }
+    return this.aiAnalysisItems;
+  }
+
+  private ensureAlertPageWithinBounds(tab: DashboardAlertTab): void {
+    const totalPages = this.totalAlertPages(tab);
+    const current = this.alertTabPages[tab];
+    this.alertTabPages[tab] = Math.min(Math.max(current, 1), totalPages);
+  }
+
+  private ensureAllAlertPagesWithinBounds(): void {
+    this.ensureAlertPageWithinBounds('priority');
+    this.ensureAlertPageWithinBounds('alerts');
+    this.ensureAlertPageWithinBounds('news');
+    this.ensureAlertPageWithinBounds('ai');
+  }
+
+  private currentJournalWorkspacePageItems<T>(key: DashboardJournalPagerKey, items: T[]): T[] {
+    this.ensureJournalWorkspacePageWithinBounds(key, items.length);
+    const pageSize = this.journalWorkspacePageSizes[key];
+    const currentPage = this.journalWorkspacePages[key];
+    const start = (currentPage - 1) * pageSize;
+    return items.slice(start, start + pageSize);
+  }
+
+  private ensureJournalWorkspacePageWithinBounds(key: DashboardJournalPagerKey, totalItems: number): void {
+    const totalPages = Math.max(1, Math.ceil(totalItems / this.journalWorkspacePageSizes[key]));
+    const current = this.journalWorkspacePages[key];
+    this.journalWorkspacePages[key] = Math.min(Math.max(current, 1), totalPages);
+  }
+
+  private ensureAllJournalWorkspacePagesWithinBounds(): void {
+    this.ensureJournalWorkspacePageWithinBounds('journal', this.visibleJournalRows().length);
+    this.ensureJournalWorkspacePageWithinBounds('operations-open', this.openPositionRows.length);
+    this.ensureJournalWorkspacePageWithinBounds('operations-actions', this.nextActionItems.length);
+    this.ensureJournalWorkspacePageWithinBounds('portfolio-holdings', this.holdingRows.length);
+    this.ensureJournalWorkspacePageWithinBounds('portfolio-alerts', this.portfolioAlertItems.length);
+    this.ensureJournalWorkspacePageWithinBounds('workflow-suggestions', this.workflowSuggestionItems.length);
+    this.ensureJournalWorkspacePageWithinBounds('workflow-pending', this.workflowPendingItems.length);
+    this.ensureJournalWorkspacePageWithinBounds('history', this.workflowHistoryItems.length);
   }
 
   private applyAlertNarrative(): void {
@@ -1250,6 +2675,17 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     pnl: number;
     isOpen: boolean;
   } {
+    const derivedCapital = Number(entry.totalCapital || 0);
+    const derivedPnl = Number(entry.pnlValue || 0);
+    const derivedOpen = typeof entry.isOpen === 'boolean' ? entry.isOpen : null;
+    if (derivedOpen !== null) {
+      return {
+        capital: Math.abs(derivedCapital) || 0,
+        pnl: Number.isFinite(derivedPnl) ? derivedPnl : 0,
+        isOpen: derivedOpen,
+      };
+    }
+
     const quantity = Number(entry.quantity || 0);
     const entryPrice = Number(entry.entryPrice || 0);
     const exitPrice = Number(entry.exitPrice || 0);
@@ -1473,7 +2909,22 @@ export class DashboardV2Page implements OnInit, OnDestroy {
       return [];
     }
 
+    const metrics: DashboardV2MetricChipVm[] = [];
+    if (score.formulaVerdict) {
+      metrics.push({
+        label: this.t('dashboardV2.ai.confidence'),
+        value: `${this.decimal.format(score.formulaVerdict.confidence)}%`,
+        tone:
+          score.formulaVerdict.confidence >= 70
+            ? 'positive'
+            : score.formulaVerdict.confidence >= 45
+              ? 'warning'
+              : 'danger',
+      });
+    }
+
     return [
+      ...metrics,
       { label: this.t('dashboardV2.metric.winning'), value: score.winningScore.toFixed(2), tone: score.winningScore >= 0 ? 'positive' : 'default' },
       { label: this.t('dashboardV2.metric.qScore'), value: score.qScore.toFixed(2), tone: score.qScore >= 0 ? 'positive' : 'default' },
       { label: this.t('dashboardV2.metric.mScore'), value: score.mScore.toFixed(2), tone: score.mScore >= 0 ? 'positive' : 'default' },
@@ -1568,15 +3019,36 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     return this.currency.format(Math.round(safeValue));
   }
 
+  private formatNullableMoney(value: number | null | undefined): string {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+      return '--';
+    }
+    return this.formatMoney(Number(value));
+  }
+
   private formatSignedMoney(value: number | null | undefined): string {
     const safeValue = Number(value || 0);
     const sign = safeValue > 0 ? '+' : '';
     return `${sign}${this.formatMoney(safeValue)}`;
   }
 
+  private formatNullableSignedMoney(value: number | null | undefined): string {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+      return '--';
+    }
+    return this.formatSignedMoney(Number(value));
+  }
+
   private formatPercent(value: number | null | undefined): string {
     const safeValue = Number(value || 0) * 100;
     return `${this.percent.format(safeValue)}%`;
+  }
+
+  private formatNullablePercent(value: number | null | undefined): string {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+      return '--';
+    }
+    return `${this.decimal.format(Number(value))}%`;
   }
 
   private formatSignedPercent(value: number | null | undefined): string {
@@ -1601,6 +3073,243 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     }).format(date);
   }
 
+  private formatDateTimeLabel(value: string | null | undefined): string {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+    return new Intl.DateTimeFormat('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  private formatNullableNumber(value: number | null | undefined): string {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+      return '--';
+    }
+    return this.decimal.format(Number(value));
+  }
+
+  private resolveSnapshotPrice(snapshot: Record<string, any> | null | undefined, keys: string[]): number | null {
+    if (!snapshot || typeof snapshot !== 'object') {
+      return null;
+    }
+    for (const key of keys) {
+      const value = Number(snapshot[key]);
+      if (Number.isFinite(value) && value > 0) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private resolveJournalFormulaVerdict(entry: StrategyJournalEntry | null | undefined): StrategyFormulaVerdict | null {
+    const verdict = entry?.resultSnapshot?.['formulaVerdict'];
+    return verdict && typeof verdict === 'object' ? (verdict as StrategyFormulaVerdict) : null;
+  }
+
+  private formatFormulaVerdictSummary(verdict: StrategyFormulaVerdict | null | undefined): string {
+    if (!verdict) {
+      return '--';
+    }
+    const confidence = typeof verdict.confidence === 'number' ? `${this.decimal.format(verdict.confidence)}%` : '--';
+    return `${verdict.headline || verdict.action || verdict.bias} / ${confidence}`;
+  }
+
+  private formatFormulaVerdictAction(verdict: StrategyFormulaVerdict | null | undefined): string {
+    const action = verdict?.action || '';
+    switch (action) {
+      case 'take_profit':
+        return 'Take profit';
+      case 'stand_aside':
+        return 'Stand aside';
+      case 'add_position':
+        return 'Add position';
+      case 'probe_buy':
+        return 'Probe buy';
+      case 'candidate':
+        return 'Candidate';
+      case 'review':
+        return 'Review';
+      default:
+        return action || '--';
+    }
+  }
+
+  private preferredPrice(...values: Array<number | null | undefined>): number | null {
+    for (const rawValue of values) {
+      const value = Number(rawValue);
+      if (Number.isFinite(value) && value > 0) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private resolveJournalEntryPrice(entry: StrategyJournalEntry | null | undefined): number | null {
+    if (!entry) {
+      return null;
+    }
+    return this.preferredPrice(
+      entry.entryPrice,
+      this.resolveSnapshotPrice(entry.signalSnapshot, ['entryPrice', 'currentPrice', 'price', 'close']),
+      this.resolveSnapshotPrice(entry.resultSnapshot, ['entryPrice', 'currentPrice', 'price', 'close']),
+      entry.currentPrice
+    );
+  }
+
+  private resolveJournalExitPrice(entry: StrategyJournalEntry | null | undefined): number | null {
+    if (!entry) {
+      return null;
+    }
+    return this.preferredPrice(
+      entry.exitPrice,
+      this.resolveSnapshotPrice(entry.resultSnapshot, ['exitPrice', 'handledPrice']),
+      this.resolveSnapshotPrice(entry.signalSnapshot, ['exitPrice', 'handledPrice'])
+    );
+  }
+
+  private resolveJournalStopLossPrice(entry: StrategyJournalEntry | null | undefined): number | null {
+    if (!entry) {
+      return null;
+    }
+    return this.preferredPrice(
+      entry.stopLossPrice,
+      this.resolveSnapshotPrice(entry.signalSnapshot, ['stopLossPrice']),
+      this.resolveSnapshotPrice(entry.resultSnapshot, ['stopLossPrice'])
+    );
+  }
+
+  private resolveJournalTakeProfitPrice(entry: StrategyJournalEntry | null | undefined): number | null {
+    if (!entry) {
+      return null;
+    }
+    return this.preferredPrice(
+      entry.takeProfitPrice,
+      this.resolveSnapshotPrice(entry.signalSnapshot, ['takeProfitPrice']),
+      this.resolveSnapshotPrice(entry.resultSnapshot, ['takeProfitPrice'])
+    );
+  }
+
+  private formatJournalEntryPriceLabel(entry: StrategyJournalEntry | null | undefined): string {
+    if (!entry) {
+      return '--';
+    }
+    const direct = this.preferredPrice(entry.entryPrice);
+    if (direct !== null) {
+      return this.formatMoney(direct);
+    }
+    const snapshot = this.preferredPrice(
+      this.resolveSnapshotPrice(entry.signalSnapshot, ['entryPrice', 'currentPrice', 'price', 'close']),
+      this.resolveSnapshotPrice(entry.resultSnapshot, ['entryPrice', 'currentPrice', 'price', 'close'])
+    );
+    if (snapshot !== null) {
+      return `${this.formatMoney(snapshot)} (${this.t('dashboardV2.history.snapshotFallback')})`;
+    }
+    const current = this.preferredPrice(entry.currentPrice);
+    if (current !== null) {
+      return `${this.formatMoney(current)} (${this.t('dashboardV2.history.currentPriceFallback')})`;
+    }
+    return '--';
+  }
+
+  private formatJournalExitPriceLabel(entry: StrategyJournalEntry | null | undefined): string {
+    if (!entry) {
+      return '--';
+    }
+    const direct = this.preferredPrice(entry.exitPrice);
+    if (direct !== null) {
+      return this.formatMoney(direct);
+    }
+    const handled = this.preferredPrice(
+      this.resolveSnapshotPrice(entry.resultSnapshot, ['exitPrice', 'handledPrice']),
+      this.resolveSnapshotPrice(entry.signalSnapshot, ['exitPrice', 'handledPrice'])
+    );
+    if (handled !== null) {
+      return `${this.formatMoney(handled)} (${this.t('dashboardV2.history.handledPriceFallback')})`;
+    }
+    return this.t('dashboardV2.result.open');
+  }
+
+  private formatJournalBeforeActionPriceLabel(entry: StrategyJournalEntry | null | undefined): string {
+    return this.formatJournalEntryPriceLabel(entry);
+  }
+
+  private formatJournalAfterActionPriceLabel(entry: StrategyJournalEntry | null | undefined): string {
+    if (!entry) {
+      return '--';
+    }
+    const directExit = this.preferredPrice(entry.exitPrice);
+    if (directExit !== null) {
+      return this.formatMoney(directExit);
+    }
+    const handled = this.preferredPrice(
+      this.resolveSnapshotPrice(entry.resultSnapshot, ['handledPrice', 'exitPrice']),
+      this.resolveSnapshotPrice(entry.signalSnapshot, ['handledPrice', 'exitPrice'])
+    );
+    if (handled !== null) {
+      return `${this.formatMoney(handled)} (${this.t('dashboardV2.history.handledPriceFallback')})`;
+    }
+    const current = this.preferredPrice(entry.currentPrice);
+    if (current !== null) {
+      return `${this.formatMoney(current)} (${this.t('dashboardV2.history.currentPriceFallback')})`;
+    }
+    return this.t('dashboardV2.result.open');
+  }
+
+  private formatJournalStopLossPriceLabel(entry: StrategyJournalEntry | null | undefined): string {
+    const value = this.resolveJournalStopLossPrice(entry);
+    return value !== null ? this.formatMoney(value) : '--';
+  }
+
+  private formatJournalTakeProfitPriceLabel(entry: StrategyJournalEntry | null | undefined): string {
+    const value = this.resolveJournalTakeProfitPrice(entry);
+    return value !== null ? this.formatMoney(value) : '--';
+  }
+
+  private formatWorkflowEntryPriceLabel(
+    item: StrategyActionHistoryItem,
+    relatedJournal: StrategyJournalEntry | null
+  ): string {
+    const journalPrice = this.resolveJournalEntryPrice(relatedJournal);
+    if (journalPrice !== null) {
+      return this.formatMoney(journalPrice);
+    }
+    const handled = this.preferredPrice(item.handledPrice);
+    if (handled !== null) {
+      return `${this.formatMoney(handled)} (${this.t('dashboardV2.history.handledPriceFallback')})`;
+    }
+    const current = this.preferredPrice(item.currentPrice);
+    if (current !== null) {
+      return `${this.formatMoney(current)} (${this.t('dashboardV2.history.currentPriceFallback')})`;
+    }
+    return '--';
+  }
+
+  private formatWorkflowAfterPriceLabel(
+    item: StrategyActionHistoryItem,
+    relatedJournal: StrategyJournalEntry | null
+  ): string {
+    const journalExit = this.resolveJournalExitPrice(relatedJournal);
+    if (journalExit !== null) {
+      return this.formatMoney(journalExit);
+    }
+    const handled = this.preferredPrice(item.handledPrice);
+    if (handled !== null) {
+      return this.formatMoney(handled);
+    }
+    const current = this.preferredPrice(item.currentPrice);
+    if (current !== null) {
+      return `${this.formatMoney(current)} (${this.t('dashboardV2.history.currentPriceFallback')})`;
+    }
+    return '--';
+  }
+
   private formatRelativeTime(value: string | null | undefined): string {
     if (!value) return '--';
     const date = new Date(value);
@@ -1619,6 +3328,61 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     }
     const diffDays = Math.round(diffHours / 24);
     return `${diffDays}${this.t('dashboardV2.time.dayAgo')}`;
+  }
+
+  private loadSymbolFormulaDetail(symbol: string): void {
+    const normalized = (symbol || '').trim().toUpperCase();
+    this.symbolFormulaSub?.unsubscribe();
+    this.symbolDetailFormulaLoading = false;
+    this.symbolDetailFormulaError = '';
+    this.symbolDetailFormulaGroups = [];
+    this.symbolDetailFormulaMetrics = [];
+    this.symbolDetailFormulaVerdict = null;
+
+    if (!normalized) {
+      return;
+    }
+
+    const latestEntry = [...this.journalEntries]
+      .filter((item) => (item.symbol || '').trim().toUpperCase() === normalized)
+      .sort((left, right) => this.resolveJournalTimestamp(right) - this.resolveJournalTimestamp(left) || right.id - left.id)[0];
+
+    const profileId = latestEntry?.profileId || this.overview?.activeProfile?.id || null;
+    if (!latestEntry || !profileId) {
+      return;
+    }
+
+    this.symbolDetailFormulaLoading = true;
+    this.symbolFormulaSub = forkJoin({
+      config: this.safeNullable(this.api.getStrategyProfileConfig(profileId)),
+      score: this.safeNullable(this.api.getStrategySymbolScore(profileId, normalized)),
+    }).subscribe({
+      next: ({ config, score }) => {
+        this.symbolDetailFormulaGroups = this.buildDetailGroups(config.data || null, score.data || null);
+        this.symbolDetailFormulaMetrics = this.buildCurrentMetrics(score.data || null);
+        this.symbolDetailFormulaVerdict = score.data?.formulaVerdict || null;
+        this.symbolDetailIntelligence = this.buildSymbolIntelligence(normalized);
+        this.symbolDetailFormulaLoading = false;
+      },
+      error: () => {
+        this.symbolDetailFormulaLoading = false;
+        this.symbolDetailFormulaError = this.t('dashboardV2.detail.error.score');
+        this.symbolDetailIntelligence = this.buildSymbolIntelligence(normalized);
+      },
+    });
+  }
+
+  private formatAgeSeconds(value: number | null | undefined): string {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return '--';
+    }
+    if (value < 60) {
+      return `${Math.max(0, Math.round(value))} giây`;
+    }
+    if (value < 3600) {
+      return `${Math.max(1, Math.round(value / 60))} phút`;
+    }
+    return `${Math.max(1, Math.round(value / 3600))} giờ`;
   }
 
   private applyStoredSettings(): void {
@@ -1733,7 +3497,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   }
 
   private renderActiveChart(): void {
-    const el = document.getElementById('dashboard-v2-chart-host');
+    const el = document.getElementById('dashboard-v2-chart-host') as HTMLCanvasElement | null;
     if (!el || typeof ApexCharts === 'undefined') {
       return;
     }
@@ -1921,5 +3685,6 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     }
     return entry.id || Date.now();
   }
+
 }
 

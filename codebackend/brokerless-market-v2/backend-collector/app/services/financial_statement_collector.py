@@ -3,15 +3,16 @@ from __future__ import annotations
 import asyncio
 import re
 from datetime import date, datetime
-from math import ceil
+from math import ceil, isfinite
 from typing import Any
 
 from app.clients.cafef_financial_client import CafeFFinancialClient
 from app.clients.vnstock_client import VnstockClient
-from app.core.config import settings
+from app.core.config import get_runtime_sync_int, get_runtime_sync_str, settings
 from app.core.db import SessionLocal
 from app.core.logging import get_logger
 from app.repositories.market_repo import MarketRepository
+from app.services.sync_log_service import write_sync_log_safely
 
 logger = get_logger(__name__)
 
@@ -29,7 +30,34 @@ class FinancialStatementCollector:
         self.client = VnstockClient()
         self.cafef_client = CafeFFinancialClient()
 
-    async def _resolve_financial_symbols(self, repo: MarketRepository) -> list[str]:
+    async def _fetch_statement_result_async(
+        self,
+        *,
+        symbol: str,
+        statement_type: str,
+        period_type: str,
+        source: str,
+    ) -> Any:
+        return await asyncio.to_thread(
+            self._fetch_statement_result,
+            symbol=symbol,
+            statement_type=statement_type,
+            period_type=period_type,
+            source=source,
+        )
+
+    @staticmethod
+    def _is_financial_symbol_candidate(symbol: str) -> bool:
+        normalized = str(symbol or "").strip().upper()
+        return bool(re.fullmatch(r"[A-Z]{2,5}", normalized))
+
+    async def _resolve_financial_symbols(
+        self,
+        repo: MarketRepository,
+        *,
+        prioritize_uncovered: bool = False,
+        prefer_existing_financial: bool = False,
+    ) -> list[str]:
         symbols: list[str] = []
         watchlist_symbols = await repo.get_active_watchlist_symbols()
         if watchlist_symbols:
@@ -42,18 +70,67 @@ class FinancialStatementCollector:
         if not symbols and settings.fallback_to_env_symbols:
             symbols.extend(item.upper() for item in settings.hsx_symbol_list + settings.hnx_symbol_list + settings.upcom_symbol_list if item)
 
-        return list(dict.fromkeys(symbols))
+        unique_symbols = [
+            item for item in dict.fromkeys(symbols)
+            if self._is_financial_symbol_candidate(item)
+        ]
+        if prioritize_uncovered and unique_symbols:
+            coverage_counts = await repo.get_financial_coverage_counts()
+            cash_flow_covered = await repo.get_symbols_with_cash_flow_coverage()
+            if prefer_existing_financial:
+                unique_symbols.sort(
+                    key=lambda item: (
+                        0 if item not in cash_flow_covered else 1,
+                        -int(coverage_counts.get(item, 0)),
+                        item,
+                    )
+                )
+            else:
+                unique_symbols.sort(
+                    key=lambda item: (
+                        0 if item not in cash_flow_covered else 1,
+                        int(coverage_counts.get(item, 0)),
+                        item,
+                    )
+                )
+        return unique_symbols
 
-    def _resolve_symbol_batch(self, symbols: list[str], started_at: datetime) -> tuple[list[str], int, int]:
+    def _resolve_symbol_batch(
+        self,
+        symbols: list[str],
+        started_at: datetime,
+        *,
+        backfill_mode: bool = False,
+    ) -> tuple[list[str], int, int]:
         if not symbols:
             return [], 0, 0
 
-        batch_size = max(1, int(settings.financial_symbols_per_run or 1))
+        if backfill_mode:
+            batch_size = max(
+                1,
+                int(
+                    get_runtime_sync_int(
+                        "financialBackfillSymbolsPerRun",
+                        settings.financial_backfill_symbols_per_run or settings.financial_symbols_per_run or 1,
+                    )
+                ),
+            )
+            total_batches = max(1, ceil(len(symbols) / batch_size))
+            cycle = get_runtime_sync_int(
+                "financialBackfillIntervalSeconds",
+                settings.financial_backfill_interval_seconds or settings.financial_poll_seconds or 1,
+            )
+            batch_index = int(started_at.timestamp() // cycle) % total_batches
+            start = batch_index * batch_size
+            end = start + batch_size
+            return symbols[start:end], batch_index, total_batches
+
+        batch_size = get_runtime_sync_int("financialSymbolsPerRun", settings.financial_symbols_per_run or 1)
         if not settings.financial_rotate_batches:
             return symbols[:batch_size], 0, max(1, ceil(len(symbols) / batch_size))
 
         total_batches = max(1, ceil(len(symbols) / batch_size))
-        cycle = max(1, int(settings.financial_poll_seconds or 1))
+        cycle = get_runtime_sync_int("financialPollSeconds", settings.financial_poll_seconds or 1)
         batch_index = int(started_at.timestamp() // cycle) % total_batches
         start = batch_index * batch_size
         end = start + batch_size
@@ -250,7 +327,8 @@ class FinancialStatementCollector:
             return None
         try:
             text = str(value).replace(",", "").strip()
-            return float(text)
+            number = float(text)
+            return number if isfinite(number) else None
         except Exception:
             return None
 
@@ -297,28 +375,125 @@ class FinancialStatementCollector:
             "updated_at": captured_at,
         }
 
-    async def run(self) -> None:
+    def _fetch_statement_result(
+        self,
+        *,
+        symbol: str,
+        statement_type: str,
+        period_type: str,
+        source: str,
+    ) -> Any:
+        normalized_source = str(source or "").strip().upper() or "VNSTOCK"
+        errors: list[str] = []
+
+        if statement_type == "cash_flow":
+            result = self.client.get_financial_statement(
+                symbol=symbol,
+                statement_type=statement_type,
+                period=period_type,
+                source="KBS",
+            )
+            if result.rows:
+                return result
+            errors.extend(result.errors or [])
+            cafef_result = self.cafef_client.get_financial_statement(
+                symbol=symbol,
+                statement_type=statement_type,
+                period=period_type,
+            )
+            if cafef_result.rows:
+                return cafef_result
+            errors.extend(cafef_result.errors or [])
+            fallback_result = self.client.get_financial_statement(
+                symbol=symbol,
+                statement_type=statement_type,
+                period=period_type,
+                source="VCI",
+            )
+            if fallback_result.rows:
+                return fallback_result
+            fallback_result.errors = [*(errors or []), *(fallback_result.errors or [])]
+            return fallback_result
+
+        if normalized_source == "CAFEF":
+            result = self.cafef_client.get_financial_statement(
+                symbol=symbol,
+                statement_type=statement_type,
+                period=period_type,
+            )
+            if result.rows:
+                return result
+            errors.extend(result.errors or [])
+            vnstock_result = self.client.get_financial_statement(
+                symbol=symbol,
+                statement_type=statement_type,
+                period=period_type,
+                source="VCI",
+            )
+            vnstock_result.errors = [*(errors or []), *(vnstock_result.errors or [])]
+            return vnstock_result
+
+        result = self.client.get_financial_statement(
+            symbol=symbol,
+            statement_type=statement_type,
+            period=period_type,
+            source=normalized_source,
+        )
+        if result.rows:
+            return result
+        errors.extend(result.errors or [])
+        cafef_result = self.cafef_client.get_financial_statement(
+            symbol=symbol,
+            statement_type=statement_type,
+            period=period_type,
+        )
+        cafef_result.errors = [*(errors or []), *(cafef_result.errors or [])]
+        return cafef_result
+
+    async def run(
+        self,
+        *,
+        backfill_mode: bool = False,
+        statement_types: list[str] | None = None,
+        job_name_override: str | None = None,
+        symbols_per_run_override: int | None = None,
+    ) -> None:
         started_at = datetime.now()
-        source = str(settings.financial_source or settings.vnstock_source or "vnstock").strip() or "vnstock"
+        source = get_runtime_sync_str(
+            "financialSource",
+            str(settings.financial_source or settings.vnstock_source or "CAFEF").strip().upper() or "CAFEF",
+        )
         total_saved = 0
+        selected_statement_types = statement_types or STATEMENT_METHODS
+        job_name = job_name_override or ("collect_financial_statements_backfill" if backfill_mode else "collect_financial_statements")
 
         async with SessionLocal() as session:
             repo = MarketRepository(session)
 
             try:
-                symbols = await self._resolve_financial_symbols(repo)
-                batch_symbols, batch_index, total_batches = self._resolve_symbol_batch(symbols, started_at)
+                symbols = await self._resolve_financial_symbols(
+                    repo,
+                    prioritize_uncovered=backfill_mode,
+                    prefer_existing_financial=(selected_statement_types == ["cash_flow"]),
+                )
+                if symbols_per_run_override and symbols:
+                    symbols = symbols[: max(1, int(symbols_per_run_override))]
+                batch_symbols, batch_index, total_batches = self._resolve_symbol_batch(
+                    symbols,
+                    started_at,
+                    backfill_mode=backfill_mode,
+                )
                 exchange_map = await repo.get_symbol_exchange_map(batch_symbols)
                 periods = settings.financial_period_list
 
                 if not batch_symbols:
                     await repo.create_sync_log(
-                        job_name="collect_financial_statements",
+                        job_name=job_name,
                         status="success",
                         started_at=started_at,
                         finished_at=datetime.now(),
                         message="skip financial collection because no symbols resolved",
-                        extra_json={"source": source},
+                        extra_json={"source": source, "backfill_mode": backfill_mode},
                     )
                     await session.commit()
                     return
@@ -328,51 +503,30 @@ class FinancialStatementCollector:
 
                 for symbol in batch_symbols:
                     for period_type in periods:
-                        for statement_type in STATEMENT_METHODS:
-                            if source.upper() == "CAFEF":
-                                result = self.cafef_client.get_financial_statement(
+                        for statement_type in selected_statement_types:
+                            try:
+                                result = await self._fetch_statement_result_async(
                                     symbol=symbol,
                                     statement_type=statement_type,
-                                    period=period_type,
+                                    period_type=period_type,
+                                    source=source,
                                 )
-                            else:
-                                try:
-                                    result = self.client.get_financial_statement(
-                                        symbol=symbol,
-                                        statement_type=statement_type,
-                                        period=period_type,
-                                        source=source,
-                                    )
-                                except Exception as exc:
-                                    errors.append(f"{symbol}:{statement_type}:{period_type} {exc}")
-                                    logger.warning(
-                                        "financial fetch failed | symbol=%s | statement=%s | period=%s | err=%s",
-                                        symbol,
-                                        statement_type,
-                                        period_type,
-                                        exc,
-                                    )
-                                    continue
+                            except Exception as exc:
+                                errors.append(f"{symbol}:{statement_type}:{period_type} {exc}")
+                                logger.warning(
+                                    "financial fetch failed | symbol=%s | statement=%s | period=%s | err=%s",
+                                    symbol,
+                                    statement_type,
+                                    period_type,
+                                    exc,
+                                )
+                                continue
 
                             if result.errors:
                                 errors.extend(
                                     f"{symbol}:{statement_type}:{period_type} {error}"
                                     for error in result.errors[:4]
                                 )
-
-                            if not result.rows:
-                                cafef_result = self.cafef_client.get_financial_statement(
-                                    symbol=symbol,
-                                    statement_type=statement_type,
-                                    period=period_type,
-                                )
-                                if cafef_result.errors:
-                                    errors.extend(
-                                        f"{symbol}:{statement_type}:{period_type} {error}"
-                                        for error in cafef_result.errors[:4]
-                                    )
-                                if cafef_result.rows:
-                                    result = cafef_result
 
                             if not result.rows:
                                 continue
@@ -411,7 +565,7 @@ class FinancialStatementCollector:
                     status = "partial"
                 else:
                     status = "success"
-                total_request_units = len(batch_symbols) * len(periods) * len(STATEMENT_METHODS)
+                total_request_units = len(batch_symbols) * len(periods) * len(selected_statement_types)
                 summary_parts = [
                     f"saved financial rows: {total_saved}",
                     f"batch {batch_index + 1}/{max(1, total_batches)}",
@@ -419,17 +573,20 @@ class FinancialStatementCollector:
                     f"request units {total_request_units}",
                 ]
                 await repo.create_sync_log(
-                    job_name="collect_financial_statements",
+                    job_name=job_name,
                     status=status,
                     started_at=started_at,
                     finished_at=datetime.now(),
                     message=" | ".join(summary_parts),
                     extra_json={
                         "source": source,
+                        "backfill_mode": backfill_mode,
                         "batch_index": batch_index,
                         "total_batches": total_batches,
                         "batch_symbols": len(batch_symbols),
                         "resolved_symbols": len(symbols),
+                        "backfill_enabled": bool(settings.financial_backfill_enabled),
+                        "statement_types": selected_statement_types,
                         "periods": periods,
                         "statement_counts": statement_counts,
                         "errors": errors[:10],
@@ -437,7 +594,8 @@ class FinancialStatementCollector:
                 )
                 await session.commit()
                 logger.info(
-                    "collect_financial_statements done | rows=%s | batch=%s/%s | symbols=%s/%s",
+                    "collect_financial_statements done | backfill=%s | rows=%s | batch=%s/%s | symbols=%s/%s",
+                    backfill_mode,
                     total_saved,
                     batch_index + 1,
                     max(1, total_batches),
@@ -450,13 +608,30 @@ class FinancialStatementCollector:
                 raise
             except Exception as exc:
                 await session.rollback()
-                await repo.create_sync_log(
-                    job_name="collect_financial_statements",
+                await write_sync_log_safely(
+                    job_name=job_name,
                     status="error",
                     started_at=started_at,
                     finished_at=datetime.now(),
                     message=str(exc),
-                    extra_json={"source": source},
+                    extra_json={"source": source, "backfill_mode": backfill_mode},
                 )
-                await session.commit()
                 logger.exception("collect_financial_statements failed")
+
+    async def run_backfill(self) -> None:
+        if not settings.financial_backfill_enabled:
+            return
+        await self.run(backfill_mode=True)
+
+    async def run_cash_flow_backfill(self) -> None:
+        if not settings.financial_cash_flow_backfill_enabled:
+            return
+        await self.run(
+            backfill_mode=True,
+            statement_types=["cash_flow"],
+            job_name_override="collect_financial_cash_flow_backfill",
+            symbols_per_run_override=get_runtime_sync_int(
+                "cashFlowBackfillSymbolsPerRun",
+                settings.financial_cash_flow_backfill_symbols_per_run,
+            ),
+        )

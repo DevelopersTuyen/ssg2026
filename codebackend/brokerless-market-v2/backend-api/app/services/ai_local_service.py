@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 class AiLocalService(AiAgentService):
     STRATEGY_SIGNAL_CATEGORIES = ("money_flow", "candlestick", "footprint", "execution", "volume")
     _overview_cache: dict[tuple[str, bool, str], tuple[float, dict[str, Any]]] = {}
-    _provider_status_cache: tuple[float, tuple[bool, bool, list[str]]] | None = None
+    _provider_status_cache: dict[str, tuple[float, tuple[bool, bool, list[str]]]] = {}
     _provider_status_ttl_seconds = 30.0
     _overview_cache_ttl_seconds = 30.0
 
@@ -62,21 +62,27 @@ class AiLocalService(AiAgentService):
         self.ollama = ollama or OllamaService()
         self.cafef_news_service = cafef_news_service or CafeFNewsService()
 
+    def _resolve_local_model(self, user_settings: dict[str, Any] | None) -> str:
+        value = str((user_settings or {}).get("aiLocalModel") or settings.ollama_model).strip()
+        return value or settings.ollama_model
+
     async def get_overview(
         self,
         exchange: str = "HSX",
         *,
         include_financial_analysis: bool = False,
+        user_settings: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         exchange = self._normalize_exchange(exchange)
-        local_cache_key = (exchange, bool(include_financial_analysis), settings.ollama_model)
+        local_model = self._resolve_local_model(user_settings)
+        local_cache_key = (exchange, bool(include_financial_analysis), local_model)
         now = time.monotonic()
         cached_local = self._overview_cache.get(local_cache_key)
         if cached_local and now - cached_local[0] <= self._overview_cache_ttl_seconds:
             return deepcopy(cached_local[1])
 
         cache_key = (
-            f"ai-local:overview:{exchange}:{settings.ollama_model}:"
+            f"ai-local:overview:{exchange}:{local_model}:"
             f"financial:{int(include_financial_analysis)}"
         )
         cached = await cache_service.get_json(cache_key)
@@ -90,20 +96,20 @@ class AiLocalService(AiAgentService):
             focus_symbols=[],
             include_financial_analysis=include_financial_analysis,
         )
-        connected, model_available, installed_models = await self._get_provider_status()
-        forecast_cards = self._build_fallback_forecast_cards(context)
-        analysis_sections = self._build_fallback_analysis_sections(context)
-        symbol_outlooks = self._build_symbol_outlooks(
-            context,
+        connected, model_available, installed_models = await self._get_provider_status(local_model)
+        forecast_cards, analysis_sections, symbol_outlooks, used_fallback = await self._generate_overview_cards(
+            context=context,
+            connected=connected,
+            model_available=model_available,
             include_financial_analysis=include_financial_analysis,
+            local_model=local_model,
         )
-        used_fallback = True
         generated_at = datetime.now()
 
         response = AiLocalOverviewResponse(
             exchange=exchange,
             provider="ollama",
-            model=settings.ollama_model,
+            model=local_model,
             connected=connected,
             model_available=model_available,
             include_financial_analysis=include_financial_analysis,
@@ -116,6 +122,7 @@ class AiLocalService(AiAgentService):
                 installed_models=installed_models,
                 used_fallback=used_fallback,
                 include_financial_analysis=include_financial_analysis,
+                local_model=local_model,
             ),
             quick_prompts=self.QUICK_PROMPTS,
             forecast_cards=forecast_cards,
@@ -137,15 +144,16 @@ class AiLocalService(AiAgentService):
         await cache_service.set_json(cache_key, data, ttl=settings.ai_local_overview_ttl_seconds)
         return data
 
-    async def chat(self, body: AiChatRequest) -> dict[str, Any]:
+    async def chat(self, body: AiChatRequest, *, user_settings: dict[str, Any] | None = None) -> dict[str, Any]:
         exchange = self._normalize_exchange(body.exchange)
+        local_model = self._resolve_local_model(user_settings)
         context = await self._build_local_context(
             exchange=exchange,
             prompt=body.prompt,
             focus_symbols=body.focus_symbols,
             include_financial_analysis=body.include_financial_analysis,
         )
-        connected, model_available, _ = await self._get_provider_status()
+        connected, model_available, _ = await self._get_provider_status(local_model)
         generated_at = datetime.now()
 
         answer, used_fallback = await self._generate_chat_answer_local(
@@ -154,12 +162,13 @@ class AiLocalService(AiAgentService):
             history=[item.model_dump(mode="json") for item in body.history[-8:]],
             connected=connected,
             model_available=model_available,
+            local_model=local_model,
         )
 
         response = AiLocalChatResponse(
             exchange=exchange,
             provider="ollama",
-            model=settings.ollama_model,
+            model=local_model,
             connected=connected,
             model_available=model_available,
             used_fallback=used_fallback,
@@ -217,8 +226,9 @@ class AiLocalService(AiAgentService):
         context["cafef_storage"] = storage_status.model_dump(mode="json")
         return context
 
-    async def _get_provider_status(self) -> tuple[bool, bool, list[str]]:
-        cached = self._provider_status_cache
+    async def _get_provider_status(self, local_model: str) -> tuple[bool, bool, list[str]]:
+        cache_key = (local_model or settings.ollama_model).strip() or settings.ollama_model
+        cached = self._provider_status_cache.get(cache_key)
         now = time.monotonic()
         if cached and now - cached[0] <= self._provider_status_ttl_seconds:
             return cached[1]
@@ -227,16 +237,16 @@ class AiLocalService(AiAgentService):
         except OllamaServiceError as exc:
             logger.warning("ollama status fallback: %s", exc)
             result = (False, False, [])
-            self._provider_status_cache = (now, result)
+            self._provider_status_cache[cache_key] = (now, result)
             return result
 
         normalized_installed = {item.lower() for item in installed_models}
-        target_model = settings.ollama_model.lower()
+        target_model = cache_key.lower()
         model_available = target_model in normalized_installed or any(
             item.split(":")[0] == target_model.split(":")[0] for item in normalized_installed
         )
         result = (True, model_available, installed_models)
-        self._provider_status_cache = (now, result)
+        self._provider_status_cache[cache_key] = (now, result)
         return result
 
     async def _generate_overview_cards(
@@ -246,6 +256,7 @@ class AiLocalService(AiAgentService):
         connected: bool,
         model_available: bool,
         include_financial_analysis: bool,
+        local_model: str,
     ) -> tuple[list[AiForecastCard], list[AiLocalAnalysisSection], list[AiLocalSymbolOutlook], bool]:
         if not connected or not model_available:
             return (
@@ -275,6 +286,7 @@ class AiLocalService(AiAgentService):
             "- forecast_cards gom dung 4 the. Moi summary toi da 2 cau ngan.\n"
             "- analysis_sections gom dung 5 muc, moi muc phai co title, summary va 3-5 bullets cu the.\n"
             f"{requested_scope}"
+            "- Uu tien formula_verdicts lam ket luan quy tac trung tam neu context co san.\n"
             "- Phai neu ro tinh trang luu tru CafeF trong detail neu context co thong tin nay.\n"
             "- direction chi duoc la up, down, neutral.\n"
             "- confidence la so nguyen 55-95.\n"
@@ -285,7 +297,8 @@ class AiLocalService(AiAgentService):
 
         system_prompt = (
             "Ban la AI Local chay tren Ollama cho he thong chung khoan Viet Nam. "
-            "Khong duoc bo sung thong tin ngoai context. Tap trung vao index, dong tien, watchlist, tin CafeF "
+            "Khong duoc bo sung thong tin ngoai context. Uu tien formula_verdicts lam nguon quyet dinh trung tam. "
+            "Tap trung vao index, dong tien, watchlist, tin CafeF "
             + ("va bao cao tai chinh." if include_financial_analysis else "va du lieu local hien co.")
         )
 
@@ -293,6 +306,7 @@ class AiLocalService(AiAgentService):
             raw = await self.ollama.generate_text(
                 prompt=prompt,
                 system_prompt=system_prompt,
+                model=local_model,
                 temperature=0.15,
                 max_output_tokens=1800,
             )
@@ -336,18 +350,28 @@ class AiLocalService(AiAgentService):
         history: list[dict[str, str]],
         connected: bool,
         model_available: bool,
+        local_model: str,
     ) -> tuple[str, bool]:
         if not connected:
-            return self._build_ollama_unavailable_answer(context, reason="Ollama local server chua san sang."), True
+            return (
+                self._build_ollama_unavailable_answer(
+                    context,
+                    reason="Ollama local server chua san sang.",
+                    local_model=local_model,
+                ),
+                True,
+            )
         if not model_available:
             return self._build_ollama_unavailable_answer(
                 context,
-                reason=f"Model {settings.ollama_model} chua co trong Ollama local.",
+                reason=f"Model {local_model} chua co trong Ollama local.",
+                local_model=local_model,
             ), True
 
         system_prompt = (
             "Ban la AI Local cua nen tang chung khoan. "
             "Tra loi bang tieng Viet khong dau, ngan gon, ro rang, dua tren du lieu local trong context. "
+            "Uu tien formula_verdicts lam ket luan trung tam cho tung ma neu context co san. "
             "Khong dua khuyen nghi mua ban tuyet doi."
         )
         llm_prompt = (
@@ -359,6 +383,7 @@ class AiLocalService(AiAgentService):
             answer = await self.ollama.generate_text(
                 prompt=llm_prompt,
                 system_prompt=system_prompt,
+                model=local_model,
                 history=history,
                 temperature=0.2,
                 max_output_tokens=1200,
@@ -366,7 +391,14 @@ class AiLocalService(AiAgentService):
             return answer.strip(), False
         except Exception as exc:  # pragma: no cover
             logger.warning("ollama chat fallback: %s", exc)
-            return self._build_ollama_unavailable_answer(context, reason="Khong lay duoc phan hoi tu model local."), True
+            return (
+                self._build_ollama_unavailable_answer(
+                    context,
+                    reason="Khong lay duoc phan hoi tu model local.",
+                    local_model=local_model,
+                ),
+                True,
+            )
 
     def _build_prompt_context_local(self, context: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -378,6 +410,7 @@ class AiLocalService(AiAgentService):
             "top_losers": context.get("losers") or [],
             "watchlist": context.get("watchlist") or [],
             "focus_symbols": context.get("focus_symbols") or [],
+            "formula_verdicts": context.get("formula_verdicts") or [],
             "cafef_news": context.get("cafef_news") or [],
             "strategy_signals": context.get("strategy_signals") or [],
             "financial_reports": context.get("financial_reports") or [],
@@ -398,10 +431,11 @@ class AiLocalService(AiAgentService):
         installed_models: list[str],
         used_fallback: bool,
         include_financial_analysis: bool,
+        local_model: str,
     ) -> list[AiStatusItem]:
         return [
             AiStatusItem(label="Provider", value="Ollama local"),
-            AiStatusItem(label="Model", value=settings.ollama_model),
+            AiStatusItem(label="Model", value=local_model),
             AiStatusItem(
                 label="Trang thai",
                 value="San sang" if connected and model_available and not used_fallback else "Fallback local",
@@ -520,15 +554,21 @@ class AiLocalService(AiAgentService):
                     symbols.append(symbol)
         return symbols[:5]
 
-    def _build_ollama_unavailable_answer(self, context: dict[str, Any], *, reason: str) -> str:
-        fallback = self._build_local_fallback_chat_answer(context)
+    def _build_ollama_unavailable_answer(
+        self,
+        context: dict[str, Any],
+        *,
+        reason: str,
+        local_model: str,
+    ) -> str:
+        fallback = self._build_local_fallback_chat_answer(context, local_model=local_model)
         return (
             f"{reason}\n\n"
-            f"Hay dam bao da chay `ollama serve` va da pull model `{settings.ollama_model}`.\n\n"
+            f"Hay dam bao da chay `ollama serve` va da pull model `{local_model}`.\n\n"
             f"{fallback}"
         )
 
-    def _build_local_fallback_chat_answer(self, context: dict[str, Any]) -> str:
+    def _build_local_fallback_chat_answer(self, context: dict[str, Any], *, local_model: str) -> str:
         selected_index = context.get("selected_index") or {}
         focus_symbols = context.get("focus_symbols") or []
         actives = context.get("actives") or []
@@ -591,7 +631,7 @@ class AiLocalService(AiAgentService):
             )
 
         parts.append(
-            f"Khi Ollama phan hoi on dinh tro lai, he thong se tiep tuc dung model `{settings.ollama_model}` "
+            f"Khi Ollama phan hoi on dinh tro lai, he thong se tiep tuc dung model `{local_model}` "
             "de sinh nhan dinh chi tiet hon."
         )
         return "\n\n".join(parts)
@@ -654,6 +694,7 @@ class AiLocalService(AiAgentService):
         watchlist = context.get("watchlist") or []
         news_items = context.get("cafef_news") or []
         strategy_signals = context.get("strategy_signals") or []
+        formula_verdicts = context.get("formula_verdicts") or []
         storage = context.get("cafef_storage") or {}
         include_financial_analysis = bool(context.get("include_financial_analysis"))
 
@@ -706,6 +747,10 @@ class AiLocalService(AiAgentService):
                     "de doc dong tien som, OBV, nen gia, mau nen va boi canh vao lenh."
                 ),
                 bullets=[
+                    *[
+                        f"{item.get('symbol')}: {(item.get('formulaVerdict') or {}).get('headline') or '--'}"
+                        for item in formula_verdicts[:3]
+                    ],
                     *[
                         f"{item.get('symbol')}: {item.get('signal_label')} | "
                         f"{item.get('detail') or 'Tin hieu duoc phat hien boi Strategy engine'}"
@@ -762,19 +807,34 @@ class AiLocalService(AiAgentService):
             for item in (context.get("focus_symbols") or [])
             if item.get("symbol")
         }
+        formula_verdict_map = {
+            str(item.get("symbol") or "").upper(): item
+            for item in (context.get("formula_verdicts") or [])
+            if item.get("symbol")
+        }
         outlooks: list[AiLocalSymbolOutlook] = []
         for report in (context.get("financial_reports") or [])[:4]:
             symbol = str(report.get("symbol") or "").upper()
             if not symbol:
                 continue
             focus = focus_map.get(symbol, {})
+            verdict_snapshot = formula_verdict_map.get(symbol, {})
+            formula_verdict = verdict_snapshot.get("formulaVerdict") if isinstance(verdict_snapshot, dict) else {}
             change_percent = float(focus.get("change_percent") or 0)
             direction = self._to_direction(change_percent)
             confidence = self._confidence_from_change(change_percent)
             if len(report.get("highlights") or []) >= 3:
                 confidence = min(88, confidence + 8)
+            if isinstance(formula_verdict, dict) and formula_verdict:
+                direction = self._formula_verdict_direction(formula_verdict)
+                confidence = max(confidence, max(55, min(95, int(formula_verdict.get("confidence") or confidence))))
 
             basis: list[str] = []
+            if isinstance(formula_verdict, dict) and formula_verdict.get("headline"):
+                basis.append(
+                    f"Cong thuc: {formula_verdict.get('headline')} "
+                    f"(action {self._humanize_formula_action(formula_verdict.get('action'))})"
+                )
             for metric in (report.get("highlights") or [])[:3]:
                 label = str(metric.get("label") or "").strip()
                 value = str(metric.get("value") or "").strip()
@@ -788,7 +848,9 @@ class AiLocalService(AiAgentService):
             signal_basis = self._summarize_symbol_strategy_signals(context, symbol)
             basis.extend(signal_basis[:2])
 
-            if direction == "up":
+            if isinstance(formula_verdict, dict) and formula_verdict.get("summary"):
+                summary = str(formula_verdict.get("summary") or "").strip()
+            elif direction == "up":
                 summary = (
                     "Bao cao tai chinh dang duoc AI Local xem la khong xau, va gia hien tai "
                     "dang giu nhip tich cuc cho kha nang duy tri ngan han."

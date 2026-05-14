@@ -8,6 +8,7 @@ from typing import Any
 from app.core.cache import cache_service
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.models.market import StrategyProfile, StrategyStockScoreSnapshot
 from app.repositories.market_read_repo import MarketReadRepository
 from app.schemas.ai_agent import (
     AiActivityItem,
@@ -22,6 +23,7 @@ from app.schemas.ai_agent import (
 )
 from app.services.gemini_service import GeminiService, GeminiServiceError
 from app.services.settings_service import DEFAULT_MARKET_SETTINGS
+from sqlalchemy import func, select
 
 logger = get_logger(__name__)
 
@@ -211,6 +213,13 @@ class AiAgentService:
             (item for item in context["index_cards"] if (item.get("exchange") or "").upper() == selected_exchange),
             None,
         )
+        context["formula_verdicts"] = await self._build_formula_verdict_context(context)
+        formula_verdict_map = {item["symbol"]: item for item in context["formula_verdicts"] if item.get("symbol")}
+        context["focus_symbols"] = self._attach_formula_verdicts(context.get("focus_symbols") or [], formula_verdict_map)
+        context["watchlist"] = self._attach_formula_verdicts(context.get("watchlist") or [], formula_verdict_map)
+        context["actives"] = self._attach_formula_verdicts(context.get("actives") or [], formula_verdict_map)
+        context["gainers"] = self._attach_formula_verdicts(context.get("gainers") or [], formula_verdict_map)
+        context["losers"] = self._attach_formula_verdicts(context.get("losers") or [], formula_verdict_map)
         return context
 
     async def _get_stock_board(self, exchange: str, sort: str, limit: int) -> list[dict[str, Any]]:
@@ -322,6 +331,139 @@ class AiAgentService:
             )
         return results
 
+    async def _build_formula_verdict_context(self, context: dict[str, Any]) -> list[dict[str, Any]]:
+        symbols = self._resolve_formula_focus_symbols(context)
+        if not symbols:
+            return []
+
+        latest_date_stmt = select(func.max(StrategyStockScoreSnapshot.trading_date)).where(
+            StrategyStockScoreSnapshot.symbol.in_(symbols)
+        )
+        latest_date = await self.repo.session.scalar(latest_date_stmt)
+        if latest_date is None:
+            return []
+
+        stmt = (
+            select(StrategyStockScoreSnapshot, StrategyProfile)
+            .outerjoin(StrategyProfile, StrategyProfile.id == StrategyStockScoreSnapshot.profile_id)
+            .where(
+                StrategyStockScoreSnapshot.symbol.in_(symbols),
+                StrategyStockScoreSnapshot.trading_date == latest_date,
+            )
+            .order_by(
+                StrategyStockScoreSnapshot.symbol.asc(),
+                StrategyStockScoreSnapshot.computed_at.desc(),
+                StrategyStockScoreSnapshot.winning_score.desc().nullslast(),
+            )
+        )
+        rows = (await self.repo.session.execute(stmt)).all()
+
+        verdicts: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for snapshot, profile in rows:
+            symbol = str(snapshot.symbol or "").upper()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            verdict = self._extract_formula_verdict_snapshot(snapshot, profile)
+            if verdict is not None:
+                verdicts.append(verdict)
+        return verdicts[:8]
+
+    def _extract_formula_verdict_snapshot(
+        self,
+        snapshot: StrategyStockScoreSnapshot,
+        profile: StrategyProfile | None,
+    ) -> dict[str, Any] | None:
+        explanation = snapshot.explanation_json if isinstance(snapshot.explanation_json, dict) else {}
+        formula_verdict = explanation.get("formulaVerdict") if isinstance(explanation.get("formulaVerdict"), dict) else {}
+
+        winning_score = float(snapshot.winning_score or 0)
+        passed_layers = sum(
+            1
+            for passed in [snapshot.passed_layer_1, snapshot.passed_layer_2, snapshot.passed_layer_3]
+            if passed
+        )
+
+        if not formula_verdict:
+            if winning_score >= 70:
+                bias = "bullish"
+                action = "candidate"
+            elif winning_score >= 55:
+                bias = "constructive"
+                action = "review"
+            elif winning_score <= 25:
+                bias = "bearish"
+                action = "stand_aside"
+            else:
+                bias = "neutral"
+                action = "review"
+            formula_verdict = {
+                "bias": bias,
+                "action": action,
+                "riskLevel": "high" if float(snapshot.p_score or 0) >= 55 else "medium",
+                "confidence": max(55, min(95, int(55 + min(abs(winning_score), 40) * 0.9))),
+                "headline": f"{snapshot.symbol} duoc xep loai {bias} theo bo cong thuc hien tai.",
+                "summary": (
+                    f"Winning score {winning_score:.2f}, vuot {passed_layers}/3 lop loc. "
+                    "Can doi chieu them voi workflow va du lieu thi truong truoc khi hanh dong."
+                ),
+                "passCount": passed_layers,
+                "failCount": max(0, 3 - passed_layers),
+                "alertCount": 0,
+                "passedLayers": passed_layers,
+                "keyPasses": [],
+                "keyFails": [],
+                "keyAlerts": [],
+            }
+
+        return {
+            "symbol": str(snapshot.symbol or "").upper(),
+            "exchange": snapshot.exchange,
+            "profileId": snapshot.profile_id,
+            "profileCode": getattr(profile, "code", None),
+            "profileName": getattr(profile, "name", None),
+            "tradingDate": snapshot.trading_date.isoformat() if snapshot.trading_date else None,
+            "computedAt": self._iso(snapshot.computed_at),
+            "winningScore": winning_score,
+            "qScore": float(snapshot.q_score or 0),
+            "lScore": float(snapshot.l_score or 0),
+            "mScore": float(snapshot.m_score or 0),
+            "pScore": float(snapshot.p_score or 0),
+            "passedLayers": int(formula_verdict.get("passedLayers") or passed_layers),
+            "formulaVerdict": formula_verdict,
+        }
+
+    def _resolve_formula_focus_symbols(self, context: dict[str, Any]) -> list[str]:
+        symbols: list[str] = []
+        for collection in [
+            context.get("focus_symbols") or [],
+            context.get("watchlist") or [],
+            context.get("actives") or [],
+            context.get("gainers") or [],
+            context.get("losers") or [],
+        ]:
+            for item in collection:
+                symbol = str((item.get("symbol") if isinstance(item, dict) else "") or "").strip().upper()
+                if symbol and symbol not in symbols:
+                    symbols.append(symbol)
+        return symbols[:12]
+
+    def _attach_formula_verdicts(
+        self,
+        items: list[dict[str, Any]],
+        formula_verdict_map: dict[str, dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        enriched: list[dict[str, Any]] = []
+        for item in items:
+            symbol = str(item.get("symbol") or "").upper()
+            row = dict(item)
+            verdict = formula_verdict_map.get(symbol)
+            if verdict:
+                row["formula_verdict"] = verdict
+            enriched.append(row)
+        return enriched
+
     async def _generate_forecast_cards(
         self,
         context: dict[str, Any],
@@ -413,6 +555,7 @@ class AiAgentService:
             "top_losers": context.get("losers") or [],
             "watchlist": context.get("watchlist") or [],
             "focus_symbols": context.get("focus_symbols") or [],
+            "formula_verdicts": context.get("formula_verdicts") or [],
             "recent_sync_logs": context.get("news") or [],
         }
 
@@ -657,6 +800,7 @@ class AiAgentService:
         gainers = context.get("gainers") or []
         actives = context.get("actives") or []
         watchlist = context.get("watchlist") or []
+        formula_verdicts = context.get("formula_verdicts") or []
 
         if selected_index:
             index_change = float(selected_index.get("change_percent") or 0)
@@ -684,6 +828,24 @@ class AiAgentService:
                     ),
                     direction=self._to_direction(pct),
                     confidence=self._confidence_from_change(pct),
+                )
+            )
+
+        if formula_verdicts:
+            top_formula = max(
+                formula_verdicts,
+                key=lambda item: float(((item.get("formulaVerdict") or {}).get("confidence")) or 0),
+            )
+            verdict = top_formula.get("formulaVerdict") or {}
+            cards.append(
+                AiForecastCard(
+                    title="Cong thuc uu tien hien tai",
+                    summary=(
+                        f"{top_formula.get('symbol')}: {verdict.get('headline') or 'Da co ket luan cong thuc'} "
+                        f"Action {self._humanize_formula_action(verdict.get('action'))}, do tin cay {int(verdict.get('confidence') or 0)}%."
+                    ),
+                    direction=self._formula_verdict_direction(verdict),
+                    confidence=max(60, min(95, int(verdict.get("confidence") or 60))),
                 )
             )
 
@@ -737,6 +899,11 @@ class AiAgentService:
         gainers = context.get("gainers") or []
         losers = context.get("losers") or []
         watchlist = context.get("watchlist") or []
+        formula_verdicts = {
+            str(item.get("symbol") or "").upper(): item
+            for item in (context.get("formula_verdicts") or [])
+            if item.get("symbol")
+        }
 
         parts = [
             "Gemini hiện chưa phản hồi nên đây là phần phân tích fallback từ dữ liệu backend hiện có."
@@ -763,6 +930,16 @@ class AiAgentService:
                 f"So sánh nhanh: {a['symbol']} đang {self._format_pct(a.get('change_percent'))} với volume {self._format_compact(a.get('volume'))}; "
                 f"{b['symbol']} đang {self._format_pct(b.get('change_percent'))} với volume {self._format_compact(b.get('volume'))}."
             )
+            verdict_notes: list[str] = []
+            for item in [a, b]:
+                verdict_snapshot = formula_verdicts.get(item["symbol"])
+                if not verdict_snapshot:
+                    continue
+                verdict_notes.append(
+                    f"{item['symbol']}: {self._format_formula_verdict_brief(verdict_snapshot.get('formulaVerdict') or {})}"
+                )
+            if verdict_notes:
+                parts.append(" | ".join(verdict_notes))
         elif focus_symbols:
             details = []
             for item in focus_symbols[:2]:
@@ -771,6 +948,13 @@ class AiAgentService:
                     f"volume {self._format_compact(item.get('volume'))}"
                 )
             parts.append(" | ".join(details))
+            for item in focus_symbols[:2]:
+                verdict_snapshot = formula_verdicts.get(item["symbol"]) or item.get("formula_verdict")
+                if isinstance(verdict_snapshot, dict):
+                    parts.append(
+                        f"{item['symbol']} theo cong thuc: "
+                        f"{self._format_formula_verdict_brief(verdict_snapshot.get('formulaVerdict') or {})}."
+                    )
         else:
             if gainers:
                 parts.append(
@@ -786,7 +970,40 @@ class AiAgentService:
                 )
 
         parts.append("Nếu bạn cấu hình `GEMINI_API_KEY`, phần chat sẽ chuyển sang phân tích sinh ngôn ngữ từ Gemini trên cùng context này.")
+        if formula_verdicts:
+            top_formula = max(
+                formula_verdicts.values(),
+                key=lambda item: float(((item.get("formulaVerdict") or {}).get("confidence")) or 0),
+            )
+            parts.append(
+                f"Ma co ket luan cong thuc noi bat nhat hien tai la {top_formula.get('symbol')}: "
+                f"{self._format_formula_verdict_brief(top_formula.get('formulaVerdict') or {})}."
+            )
         return "\n\n".join(parts)
+
+    @staticmethod
+    def _formula_verdict_direction(verdict: dict[str, Any]) -> str:
+        bias = str(verdict.get("bias") or "").lower().strip()
+        if bias in {"bullish", "constructive"}:
+            return "up"
+        if bias in {"bearish", "cautious"}:
+            return "down"
+        return "neutral"
+
+    @staticmethod
+    def _humanize_formula_action(value: Any) -> str:
+        text = str(value or "").strip().replace("_", " ")
+        return text or "review"
+
+    def _format_formula_verdict_brief(self, verdict: dict[str, Any]) -> str:
+        if not verdict:
+            return "chua co ket luan cong thuc ro rang"
+        headline = str(verdict.get("headline") or "").strip()
+        action = self._humanize_formula_action(verdict.get("action"))
+        confidence = int(verdict.get("confidence") or 0)
+        if headline:
+            return f"{headline} | action {action} | confidence {confidence}%"
+        return f"action {action} | confidence {confidence}%"
 
     def _serialize_logs(self, logs: list[Any]) -> list[dict[str, Any]]:
         return [

@@ -40,6 +40,7 @@ class OllamaService:
     async def generate_text(
         self,
         *,
+        model: str | None = None,
         prompt: str,
         system_prompt: str | None = None,
         history: list[dict[str, str]] | None = None,
@@ -62,7 +63,7 @@ class OllamaService:
         messages.append({"role": "user", "content": prompt.strip()})
 
         payload: dict[str, Any] = {
-            "model": self.model,
+            "model": (model or self.model).strip(),
             "stream": False,
             "messages": messages,
             "options": {

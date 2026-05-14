@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.json_utils import make_json_safe
 from app.models.market import AppPermissionLog, AppRole, AppUser, AppUserSetting
 
 
@@ -23,6 +24,14 @@ class AuthRepository:
 
     async def list_users(self) -> list[AppUser]:
         result = await self.session.execute(select(AppUser).order_by(AppUser.company_code.asc(), AppUser.username.asc()))
+        return result.scalars().all()
+
+    async def list_active_users(self) -> list[AppUser]:
+        result = await self.session.execute(
+            select(AppUser)
+            .where(AppUser.is_active.is_(True))
+            .order_by(AppUser.company_code.asc(), AppUser.username.asc())
+        )
         return result.scalars().all()
 
     async def get_user_by_id(self, user_id: int) -> AppUser | None:
@@ -187,14 +196,14 @@ class AuthRepository:
         existing = await self.get_user_settings(user_id)
         now = datetime.now()
         if existing:
-            existing.settings_json = settings_json
+            existing.settings_json = make_json_safe(settings_json)
             existing.updated_at = now
             await self.session.flush()
             return existing
 
         item = AppUserSetting(
             user_id=user_id,
-            settings_json=settings_json,
+            settings_json=make_json_safe(settings_json),
             created_at=now,
             updated_at=now,
         )

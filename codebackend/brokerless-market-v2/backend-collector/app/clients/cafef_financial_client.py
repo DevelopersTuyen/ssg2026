@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
 import json
+from datetime import datetime
 from dataclasses import dataclass
+from html import unescape
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -59,6 +62,37 @@ class CafeFFinancialClient:
                     raw=raw,
                 )
 
+            if statement_type == "cash_flow":
+                last_raw: dict[str, Any] | None = None
+                for report_type in (3, 4, 5):
+                    try:
+                        raw = self._fetch_finance_report(
+                            symbol=normalized_symbol,
+                            report_type=report_type,
+                            period=period,
+                        )
+                        last_raw = raw
+                        rows = self._normalize_finance_report_rows(raw, period=period)
+                        if rows:
+                            return CafeFFinancialResult(
+                                rows=rows,
+                                raw=raw,
+                            )
+                        errors.append(f"Type {report_type}: empty response")
+                    except Exception as exc:
+                        errors.append(f"Type {report_type}: {exc}")
+                try:
+                    scraped = self._fetch_cash_flow_html(
+                        symbol=normalized_symbol,
+                        period=period,
+                    )
+                    if scraped.rows:
+                        scraped.errors = [*(errors or []), *(scraped.errors or [])]
+                        return scraped
+                except Exception as exc:
+                    errors.append(f"HTML cash flow fallback: {exc}")
+                return CafeFFinancialResult(rows=[], raw=last_raw, errors=errors)
+
             if statement_type == "ratio":
                 raw = self._fetch_ratio_report(
                     symbol=normalized_symbol,
@@ -115,6 +149,33 @@ class CafeFFinancialClient:
             "Year": 0,
         }
         return self._get_json("FileBCTC.ashx", params)
+
+    def _fetch_cash_flow_html(self, *, symbol: str, period: str) -> CafeFFinancialResult:
+        current_year = datetime.now().year
+        quarter = 4 if period.strip().lower() != "year" else 0
+        errors: list[str] = []
+        for year in range(current_year, current_year - 8, -1):
+            url = (
+                "https://cafef.vn/du-lieu/bao-cao-tai-chinh/"
+                f"{symbol}/cashflow/{year}/{quarter}/0/0/1/luu-chuyen-tien-te-gian-tiep-.chn"
+            )
+            try:
+                request = Request(url, headers={"User-Agent": self.user_agent})
+                with urlopen(request, timeout=self.timeout_seconds) as response:
+                    html = response.read().decode("utf-8", errors="ignore")
+                rows = self._normalize_cash_flow_html_rows(html, period=period)
+                if rows:
+                    return CafeFFinancialResult(
+                        rows=rows,
+                        raw={"url": url, "html_length": len(html), "year": year},
+                        source="CAFEF_HTML",
+                        errors=errors,
+                    )
+                errors.append(f"HTML year {year}: empty")
+            except Exception as exc:
+                errors.append(f"HTML year {year}: {exc}")
+
+        return CafeFFinancialResult(rows=[], raw=None, source="CAFEF_HTML", errors=errors)
 
     def _get_json(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}/{path}?{urlencode(params)}"
@@ -187,6 +248,77 @@ class CafeFFinancialClient:
             )
         return rows
 
+    def _normalize_cash_flow_html_rows(self, html: str, *, period: str) -> list[dict[str, Any]]:
+        header_match = re.search(
+            r'<table[^>]*id=["\']tblGridData["\'][^>]*>.*?</table>',
+            html,
+            re.IGNORECASE | re.DOTALL,
+        )
+        body_start = re.search(
+            r'<table[^>]*id=["\']tableContent["\'][^>]*>',
+            html,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not header_match or not body_start:
+            return []
+
+        headers = [
+            self._normalize_html_text(text)
+            for text in re.findall(
+                r'<td class="h_t"[^>]*>\s*(.*?)\s*</td>',
+                header_match.group(0),
+                re.IGNORECASE | re.DOTALL,
+            )
+        ]
+        headers = [item for item in headers if item]
+        if not headers:
+            return []
+
+        body_html = html[body_start.start() : body_start.start() + 200_000]
+
+        rows: list[dict[str, Any]] = []
+        row_starts = list(
+            re.finditer(r"<tr\s+class=['\"]r_item[^>]*>", body_html, re.IGNORECASE | re.DOTALL)
+        )
+        for index, row_match in enumerate(row_starts):
+            next_start = row_starts[index + 1].start() if index + 1 < len(row_starts) else len(body_html)
+            row_html = body_html[row_match.start() : next_start]
+            row_html = re.sub(
+                r"<table class=['\"]BaoCaoTaiChinh_Chart['\"].*?</table>",
+                "",
+                row_html,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            cells = re.findall(r"<td\b[^>]*>(.*?)</td>", row_html, re.IGNORECASE | re.DOTALL)
+            if len(cells) < len(headers) + 1:
+                continue
+
+            metric_label = self._normalize_html_text(cells[0])
+            if not metric_label:
+                continue
+
+            for idx, header in enumerate(headers):
+                raw_value = self._normalize_html_text(cells[idx + 1])
+                if raw_value in ("", "-", "--"):
+                    continue
+                fiscal_year, fiscal_quarter, report_period = self._resolve_cafef_header_period(header, period=period)
+                rows.append(
+                    {
+                        "metricCode": self._slugify(metric_label),
+                        "metricName": metric_label,
+                        "value": raw_value,
+                        "reportPeriod": report_period,
+                        "periodType": "quarter" if fiscal_quarter is not None else "year",
+                        "fiscal_year": fiscal_year,
+                        "fiscal_quarter": fiscal_quarter,
+                        "raw": {
+                            "header": header,
+                            "value": raw_value,
+                        },
+                    }
+                )
+        return rows
+
     @staticmethod
     def _resolve_report_period(
         explicit: Any,
@@ -212,6 +344,37 @@ class CafeFFinancialClient:
         if normalized == "sauthang":
             return "SAUTHANG"
         return "QUY"
+
+    @staticmethod
+    def _normalize_html_text(value: Any) -> str:
+        text = unescape(str(value or ""))
+        text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    @staticmethod
+    def _resolve_cafef_header_period(header: str, *, period: str) -> tuple[int | None, int | None, str]:
+        normalized = header.strip()
+        quarter_match = re.search(r"qu[\w]*\s*(\d+)\s*-\s*(\d{4})", normalized, re.IGNORECASE)
+        if quarter_match:
+            quarter = int(quarter_match.group(1))
+            year = int(quarter_match.group(2))
+            return year, quarter, f"Q{quarter}-{year}"
+
+        year_match = re.search(r"\b(\d{4})\b", normalized)
+        if year_match:
+            year = int(year_match.group(1))
+            return year, None, str(year)
+
+        fallback_period = period.strip().lower()
+        return None, None, f"{fallback_period}_latest"
+
+    @staticmethod
+    def _slugify(value: str) -> str:
+        lowered = value.lower().strip()
+        lowered = re.sub(r"[^a-z0-9]+", "_", lowered)
+        return lowered.strip("_") or "cash_flow_item"
 
     @staticmethod
     def _to_int(value: Any) -> int | None:

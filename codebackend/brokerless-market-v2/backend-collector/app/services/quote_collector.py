@@ -6,11 +6,12 @@ from datetime import datetime
 from math import ceil
 
 from app.clients.vnstock_client import VnstockClient
-from app.core.config import settings
+from app.core.config import get_runtime_sync_int, get_runtime_sync_str, settings
 from app.core.db import SessionLocal
 from app.core.logging import get_logger
 from app.repositories.market_repo import MarketRepository
 from app.services.normalization_service import NormalizationService
+from app.services.sync_log_service import write_sync_log_safely
 
 logger = get_logger(__name__)
 
@@ -55,12 +56,12 @@ class QuoteCollector:
         if not all_batches:
             return [], 0, 0
 
-        requests_per_run = max(1, int(settings.quote_requests_per_run or 1))
+        requests_per_run = get_runtime_sync_int("quoteRequestsPerRun", settings.quote_requests_per_run or 1)
         if not settings.quote_rotate_batches:
             return all_batches[:requests_per_run], 0, len(all_batches)
 
         total_batches = len(all_batches)
-        cycle = max(1, int(settings.quote_poll_seconds or 1))
+        cycle = get_runtime_sync_int("quotePollSeconds", settings.quote_poll_seconds or 1)
         start_batch = (int(started_at.timestamp() // cycle) * requests_per_run) % total_batches
 
         selected: list[tuple[str, list[str]]] = []
@@ -100,7 +101,7 @@ class QuoteCollector:
 
     async def run(self) -> None:
         started_at = datetime.now()
-        source = settings.vnstock_source
+        source = get_runtime_sync_str("quoteSource", str(settings.quote_source or settings.vnstock_source or "VCI").strip().upper() or "VCI")
         total_saved = 0
 
         async with SessionLocal() as session:
@@ -139,7 +140,7 @@ class QuoteCollector:
 
                 for exchange, batch in selected_batches:
                     try:
-                        result = self.client.get_price_board(batch)
+                        result = self.client.get_price_board(batch, source=source)
                     except Exception as exc:
                         errors.append(f"{exchange}:{len(batch)} {exc}")
                         logger.warning("price_board failed | exchange=%s | symbols=%s | err=%s", exchange, len(batch), exc)
@@ -210,7 +211,7 @@ class QuoteCollector:
                 raise
             except Exception as exc:
                 await session.rollback()
-                await repo.create_sync_log(
+                await write_sync_log_safely(
                     job_name="collect_quotes",
                     status="error",
                     started_at=started_at,
@@ -218,5 +219,4 @@ class QuoteCollector:
                     message=str(exc),
                     extra_json={"source": source},
                 )
-                await session.commit()
                 logger.exception("collect_quotes failed")

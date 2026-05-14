@@ -29,6 +29,9 @@ export class BackgroundRefreshService implements OnDestroy {
     if (this.started) return;
     this.started = true;
     this.pollSub = interval(30000).subscribe(() => this.checkForChanges());
+    if (this.auth.isAuthenticated()) {
+      this.api.prewarmCoreCaches('HSX');
+    }
     this.checkForChanges();
   }
 
@@ -73,6 +76,9 @@ export class BackgroundRefreshService implements OnDestroy {
       this.lastFingerprint = currentFingerprint;
       if (changedDomains.length) {
         this.api.invalidateDomainCaches(changedDomains);
+        if (this.auth.isAuthenticated()) {
+          this.api.prewarmCoreCaches('HSX');
+        }
         this.changesSubject.next(changedDomains);
       }
     }, () => {

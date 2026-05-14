@@ -17,7 +17,10 @@ symbol_seed_service = SymbolSeedService()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logger.info("collector service starting")
-    await init_db()
+    if settings.auto_init_db_on_startup:
+        await init_db()
+    else:
+        logger.info("skip init_db on startup because AUTO_INIT_DB_ON_STARTUP=false")
     if settings.seed_symbols_on_startup:
         await symbol_seed_service.run()
     await scheduler.start()

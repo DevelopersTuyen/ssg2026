@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from math import isfinite
 
 from app.clients.vnstock_client import VnstockClient
-from app.core.config import settings
+from app.core.config import get_runtime_sync_str, settings
 from app.core.db import SessionLocal
 from app.core.logging import get_logger
 from app.repositories.market_repo import MarketRepository
 from app.services.normalization_service import resolve_index_exchange
+from app.services.sync_log_service import write_sync_log_safely
 
 logger = get_logger(__name__)
 
@@ -76,7 +78,10 @@ class SymbolSeedService:
                     finished_at=datetime.now(),
                     message=f"seeded/upserted symbol master: {len(symbols)}",
                     extra_json={
-                        "symbol_master_source": settings.symbol_master_source or settings.vnstock_source,
+                        "symbol_master_source": get_runtime_sync_str(
+                            "symbolMasterSource",
+                            str(settings.symbol_master_source or settings.vnstock_source or "VCI").strip().upper() or "VCI",
+                        ),
                         "total": len(symbols),
                     },
                 )
@@ -84,19 +89,21 @@ class SymbolSeedService:
                 logger.info("seeded symbol master: %s", len(symbols))
             except Exception as exc:
                 await session.rollback()
-                await repo.create_sync_log(
+                await write_sync_log_safely(
                     job_name="seed_symbols",
                     status="error",
                     started_at=started_at,
                     finished_at=datetime.now(),
                     message=str(exc),
                 )
-                await session.commit()
                 logger.exception("seed_symbols failed")
 
     def _build_symbol_master(self) -> dict[str, dict]:
         merged: dict[str, dict] = {}
-        preferred_source = str(settings.symbol_master_source or settings.vnstock_source or "kbs").strip().lower()
+        preferred_source = get_runtime_sync_str(
+            "symbolMasterSource",
+            str(settings.symbol_master_source or settings.vnstock_source or "VCI").strip().upper() or "VCI",
+        ).strip().lower()
         fallback_sources = [source for source in ("kbs", "vci") if source != preferred_source]
 
         for source in [preferred_source, *fallback_sources]:
@@ -259,7 +266,8 @@ class SymbolSeedService:
             if value in (None, ""):
                 continue
             try:
-                return float(str(value).replace(",", ""))
+                number = float(str(value).replace(",", ""))
+                return number if isfinite(number) else None
             except (TypeError, ValueError):
                 continue
         return None

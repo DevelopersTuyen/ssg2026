@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription, forkJoin } from 'rxjs';
+import { Subscription, firstValueFrom, forkJoin } from 'rxjs';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
 import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import { AuthService } from 'src/app/core/services/auth.service';
@@ -13,10 +13,15 @@ import {
   MarketDataQualityScanResult,
   MarketExchangeRule,
   MarketSettingsData,
+  MarketCoverageBucket,
   SymbolSearchItem,
   MarketSyncJobStatus,
   MarketSyncStatusData,
+  StrategyOrderStatementEntry,
   StrategyAlertRule,
+  StrategyActionHistoryItem,
+  StrategyActionHistoryResponse,
+  StrategyReviewReportResponse,
   StrategyChecklistItem,
   StrategyFormula,
   StrategyJournalEntry,
@@ -27,7 +32,8 @@ import {
   StrategyScreenRule,
 } from 'src/app/core/services/market-api.service';
 
-type SettingsTab = 'general' | 'display' | 'alerts' | 'data' | 'ai' | 'strategy' | 'journal' | 'security';
+type SettingsTab = 'general' | 'display' | 'alerts' | 'data' | 'ai' | 'strategy' | 'journal' | 'history' | 'security';
+type SettingsLoadSection = 'settings' | 'sync' | 'foundation' | 'strategyProfiles' | 'strategyConfig' | 'strategyJournal' | 'strategyHistory';
 type StrategyConfigEntity = StrategyFormula | StrategyScreenRule | StrategyAlertRule | StrategyChecklistItem;
 type StrategySettingsSection = 'profiles' | 'formulas' | 'screenRules' | 'alertRules' | 'checklists' | 'journal' | 'versions';
 
@@ -61,6 +67,7 @@ interface StrategyJournalSuggestion {
 
 interface StrategyJournalRow {
   id?: number;
+  clientKey?: string;
   profileId?: number | null;
   symbol: string;
   trade_date: string;
@@ -82,6 +89,44 @@ interface StrategyJournalRow {
   isSaving?: boolean;
   isNew?: boolean;
 }
+
+interface StrategyOrderStatementRow {
+  id?: number;
+  clientKey?: string;
+  profileId?: number | null;
+  journal_entry_id?: number | null;
+  symbol: string;
+  trade_date: string;
+  settlement_date: string;
+  trade_side: string;
+  order_type: string;
+  channel: string;
+  quantity: number | null;
+  price: number | null;
+  gross_value: number | null;
+  fee: number | null;
+  tax: number | null;
+  transfer_fee: number | null;
+  net_amount: number | null;
+  broker_reference: string;
+  notes: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  isSaving?: boolean;
+  isNew?: boolean;
+}
+
+type OrderStatementGroupMode = 'symbol' | 'tradeDate';
+
+interface OrderStatementGroupVm {
+  key: string;
+  label: string;
+  rows: StrategyOrderStatementRow[];
+  totalGrossValue: number;
+  totalNetAmount: number;
+}
+
+type StrategyHistoryStatusFilter = 'all' | 'open' | 'completed' | 'dismissed';
 
 const VARIABLE_HINTS: Record<string, StrategyVariableHint> = {
   Q: { key: 'Q', label: 'Q Score', description: 'Diem chat luong doanh nghiep.', kind: 'formula' },
@@ -275,6 +320,21 @@ EXPRESSION_VARIABLE_ORDER.splice(
 })
 export class MarketSettingsPage implements OnInit, OnDestroy {
   private readonly pageLoadKey = 'market-settings';
+  private clientRowSequence = 0;
+  private readonly numericIntegerFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
+  private readonly numericDecimalFormatter = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  private readonly numericEditDrafts = new WeakMap<object, Record<string, string>>();
+  private readonly numericEditingFields = new WeakMap<object, Set<string>>();
+  private readonly sectionLoadedAt: Partial<Record<SettingsLoadSection, number>> = {};
+  private readonly sectionMaxAgeMs: Record<SettingsLoadSection, number> = {
+    settings: 300000,
+    sync: 15000,
+    foundation: 30000,
+    strategyProfiles: 300000,
+    strategyConfig: 300000,
+    strategyJournal: 30000,
+    strategyHistory: 30000,
+  };
   readonly expressionOperatorGroups = EXPRESSION_OPERATOR_GROUPS;
 
   selectedTab: SettingsTab = 'general';
@@ -298,6 +358,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   strategyLoading = false;
   strategySaving = false;
   strategyPublishing = false;
+  strategyLedgerSaving = false;
   strategyMessage = '';
   strategyError = '';
   strategyProfiles: StrategyProfile[] = [];
@@ -305,6 +366,17 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   strategyConfig: StrategyProfileConfigResponse | null = null;
   strategyJournal: StrategyJournalEntry[] = [];
   strategyJournalRows: StrategyJournalRow[] = [];
+  strategyOrderStatements: StrategyOrderStatementEntry[] = [];
+  strategyOrderStatementRows: StrategyOrderStatementRow[] = [];
+  orderStatementGroupMode: OrderStatementGroupMode = 'symbol';
+  showStrategyEntries = true;
+  expandedLinkedOrderStatementIds = new Set<number>();
+  strategyHistoryOverview: StrategyActionHistoryResponse | null = null;
+  strategyHistoryItems: StrategyActionHistoryItem[] = [];
+  strategyReviewReport: StrategyReviewReportResponse | null = null;
+  strategyHistoryLoading = false;
+  strategyHistoryStatusFilter: StrategyHistoryStatusFilter = 'all';
+  strategyHistoryDays = 7;
   strategyJournalSourceItem: StrategyScoredItem | null = null;
   strategyJournalSuggestion: StrategyJournalSuggestion | null = null;
   strategyJournalPrefillPending = false;
@@ -322,6 +394,8 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   strategyJournalForm = this.buildEmptyStrategyJournalForm();
   private backgroundSub?: Subscription;
   private activeView = false;
+  private loadedStrategyConfigProfileId: number | null = null;
+  private loadingStrategyConfigProfileId: number | null = null;
 
   readonly tabs: SettingsTabItem[] = [
     { key: 'general', labelKey: 'settings.tabs.general', helperKey: 'settings.tabs.generalHelp' },
@@ -329,8 +403,9 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     { key: 'alerts', labelKey: 'settings.tabs.alerts', helperKey: 'settings.tabs.alertsHelp' },
     { key: 'data', labelKey: 'settings.tabs.data', helperKey: 'settings.tabs.dataHelp' },
     { key: 'ai', labelKey: 'settings.tabs.ai', helperKey: 'settings.tabs.aiHelp' },
-    { key: 'strategy', labelKey: 'Strategy', helperKey: 'Cong thuc, rule, checklist va version' },
+    { key: 'strategy', labelKey: 'settings.tabs.strategy', helperKey: 'settings.tabs.strategyHelp' },
     { key: 'journal', labelKey: 'settings.tabs.journal', helperKey: 'settings.tabs.journalHelp' },
+    { key: 'history', labelKey: 'settings.tabs.history', helperKey: 'settings.tabs.historyHelp' },
     { key: 'security', labelKey: 'settings.tabs.security', helperKey: 'settings.tabs.securityHelp' },
   ];
 
@@ -347,6 +422,17 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.settings = this.buildEmptySettings();
   }
 
+  private t(key: string): string {
+    return this.i18n.translate(key);
+  }
+
+  private formatMessage(key: string, vars: Record<string, string | number>): string {
+    return Object.entries(vars).reduce((message, [name, value]) => {
+      const token = `{${name}}`;
+      return message.split(token).join(String(value));
+    }, this.t(key));
+  }
+
   ngOnInit(): void {
     this.applyRouteState();
     this.consumeStrategyJournalPrefill();
@@ -354,12 +440,12 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
       if (!this.activeView) return;
       if (domains.length && this.selectedTab === 'data') {
-        this.loadSyncStatus();
-        this.loadDataFoundation(true);
+        this.loadSyncStatus(true);
+        this.loadDataFoundation(true, true);
       }
     });
     this.loadSettings();
-    if (this.selectedTab === 'strategy' || this.selectedTab === 'journal') {
+    if (this.selectedTab === 'strategy' || this.selectedTab === 'journal' || this.selectedTab === 'history') {
       this.loadStrategyOverview();
     }
   }
@@ -369,24 +455,26 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.applyRouteState();
     this.consumeStrategyJournalPrefill();
     this.pageLoadState.setActivePage(this.pageLoadKey);
-    if (this.selectedTab === 'data' && !this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 12000)) {
+    if (this.selectedTab === 'data' && !this.pageLoadState.isLoading(this.pageLoadKey) && !this.isSectionFresh('sync')) {
       this.loadSyncStatus();
       this.loadDataFoundation(true);
     }
     if (
-      (this.selectedTab === 'strategy' || this.selectedTab === 'journal') &&
-      !this.strategyConfig &&
+      (this.selectedTab === 'strategy' || this.selectedTab === 'journal' || this.selectedTab === 'history') &&
+      !this.strategyProfiles.length &&
       !this.strategyLoading &&
       !this.pageLoadState.isLoading(this.pageLoadKey)
     ) {
       this.loadStrategyOverview();
     } else if (
-      (this.selectedTab === 'strategy' || this.selectedTab === 'journal') &&
+      (this.selectedTab === 'strategy' || this.selectedTab === 'journal' || this.selectedTab === 'history') &&
       this.selectedStrategySection === 'journal' &&
-      !this.strategyJournal.length &&
+      !this.isSectionFresh('strategyJournal') &&
       !this.strategyLoading
     ) {
       this.reloadStrategyJournal(true);
+    } else if (this.selectedTab === 'history' && !this.isSectionFresh('strategyHistory') && !this.strategyHistoryLoading) {
+      this.loadStrategyHistory(true);
     }
   }
 
@@ -407,12 +495,20 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     if (tab === 'journal') {
       this.selectedStrategySection = 'journal';
     }
-    if ((tab === 'strategy' || tab === 'journal') && !this.strategyConfig && !this.strategyLoading) {
+    if ((tab === 'strategy' || tab === 'journal' || tab === 'history') && !this.strategyProfiles.length && !this.strategyLoading) {
       this.loadStrategyOverview();
       return;
     }
-    if ((tab === 'strategy' || tab === 'journal') && this.selectedStrategySection === 'journal' && !this.strategyJournal.length && !this.strategyLoading) {
+    if (
+      (tab === 'strategy' || tab === 'journal') &&
+      this.selectedStrategySection === 'journal' &&
+      !this.isSectionFresh('strategyJournal') &&
+      !this.strategyLoading
+    ) {
       this.reloadStrategyJournal();
+    }
+    if (tab === 'history' && !this.strategyHistoryLoading) {
+      this.loadStrategyHistory(false, true);
     }
   }
 
@@ -420,10 +516,14 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.selectTab('journal');
   }
 
-  loadSettings(): void {
+  loadSettings(force = false): void {
     const cachedSettings = this.auth.preferences;
+    if (!force && this.settings && this.isSectionFresh('settings')) {
+      this.loading = false;
+      return;
+    }
     if (cachedSettings) {
-      this.settings = cachedSettings;
+      this.settings = this.normalizeSettings(cachedSettings);
       this.loading = false;
       this.pageLoadState.startBackground(this.pageLoadKey);
     } else {
@@ -438,8 +538,9 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
         if (!response.data) {
           this.error = this.i18n.translate('settings.loadFailed');
         } else {
-          this.settings = response.data;
-          this.auth.cacheSettings(response.data);
+          this.settings = this.normalizeSettings(response.data);
+          this.auth.cacheSettings(this.settings);
+          this.markSectionLoaded('settings');
         }
         this.loading = false;
         this.pageLoadState.finish(this.pageLoadKey);
@@ -464,8 +565,9 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
           this.error = 'Backend khong luu du lieu.';
           return;
         }
-        this.settings = response.data;
-        this.auth.cacheSettings(response.data);
+        this.settings = this.normalizeSettings(response.data);
+        this.auth.cacheSettings(this.settings);
+        this.markSectionLoaded('settings');
         this.message = this.i18n.translate('settings.saved');
       },
       error: () => {
@@ -475,12 +577,16 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     });
   }
 
-  loadSyncStatus(): void {
+  loadSyncStatus(force = false): void {
+    if (!force && this.syncStatus && this.isSectionFresh('sync')) {
+      return;
+    }
     this.pageLoadState.startBackground(this.pageLoadKey);
     this.api.getSyncStatus().subscribe({
       next: (response) => {
         if (response.data) {
           this.syncStatus = response.data;
+          this.markSectionLoaded('sync');
         }
         this.pageLoadState.finish(this.pageLoadKey);
       },
@@ -505,8 +611,9 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
           this.error = 'Backend khong reset duoc cau hinh.';
           return;
         }
-        this.settings = response.data;
-        this.auth.cacheSettings(response.data);
+        this.settings = this.normalizeSettings(response.data);
+        this.auth.cacheSettings(this.settings);
+        this.markSectionLoaded('settings');
         this.message = this.i18n.translate('settings.resetDone');
       },
       error: () => {
@@ -516,7 +623,19 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     });
   }
 
-  loadStrategyOverview(silent = false): void {
+  loadStrategyOverview(silent = false, force = false): void {
+    if (!force && this.strategyProfiles.length && this.isSectionFresh('strategyProfiles')) {
+      if (
+        this.activeStrategyProfileId &&
+        (!this.strategyConfig || this.loadedStrategyConfigProfileId !== this.activeStrategyProfileId)
+      ) {
+        this.loadStrategyConfig(this.activeStrategyProfileId, true);
+      }
+      if (this.selectedStrategySection === 'journal' && !this.strategyJournal.length) {
+        this.reloadStrategyJournal(true, true);
+      }
+      return;
+    }
     if (!silent) {
       this.strategyLoading = true;
       this.strategyError = '';
@@ -532,12 +651,13 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
         const profiles = response.data || [];
         if (!profiles.length) {
           if (!silent) {
-            this.strategyError = 'Khong tai duoc cau hinh strategy.';
+            this.strategyError = this.t('marketSettings.messages.loadStrategyConfigFailed');
           }
           return;
         }
 
         this.strategyProfiles = profiles;
+        this.markSectionLoaded('strategyProfiles');
         this.activeStrategyProfileId =
           this.strategyProfiles.find((item) => item.id === this.activeStrategyProfileId)?.id ||
           this.strategyProfiles.find((item) => item.isDefault)?.id ||
@@ -546,9 +666,12 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
 
         if (this.activeStrategyProfileId) {
           this.pageLoadState.setProgress(this.pageLoadKey, 55);
-          this.loadStrategyConfig(this.activeStrategyProfileId);
+          this.loadStrategyConfig(this.activeStrategyProfileId, force);
           if (this.selectedStrategySection === 'journal') {
-            this.reloadStrategyJournal(true);
+            this.reloadStrategyJournal(true, force);
+          }
+          if (this.selectedTab === 'history') {
+            this.loadStrategyHistory(true, force);
           }
         } else {
           this.strategyConfig = null;
@@ -558,7 +681,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       error: () => {
         this.strategyLoading = false;
         if (!silent) {
-          this.strategyError = 'Khong tai duoc Strategy settings.';
+          this.strategyError = this.t('marketSettings.messages.loadStrategySettingsFailed');
         }
         this.pageLoadState.fail(this.pageLoadKey, this.strategyError || 'Không tải được Strategy settings.');
       },
@@ -569,13 +692,27 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     if (!this.activeStrategyProfileId) {
       return;
     }
-    this.loadStrategyConfig(this.activeStrategyProfileId);
+    this.loadedStrategyConfigProfileId = null;
+    this.loadingStrategyConfigProfileId = null;
+    this.loadStrategyConfig(this.activeStrategyProfileId, true);
     if (this.selectedStrategySection === 'journal') {
-      this.reloadStrategyJournal(true);
+      this.reloadStrategyJournal(true, true);
+    }
+    if (this.selectedTab === 'history') {
+      this.loadStrategyHistory(true, true);
     }
   }
 
-  loadDataFoundation(silent = false): void {
+  loadDataFoundation(silent = false, force = false): void {
+    if (
+      !force &&
+      this.exchangeRules.length &&
+      (this.dataQualityIssues.length || this.alertEvents.length) &&
+      this.isSectionFresh('foundation')
+    ) {
+      this.foundationLoading = false;
+      return;
+    }
     if (!silent) {
       this.foundationLoading = true;
     }
@@ -592,10 +729,11 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
         this.dataQualityIssues = issues.data || [];
         this.alertEvents = events.data || [];
         this.foundationLoading = false;
+        this.markSectionLoaded('foundation');
       },
       error: () => {
         this.foundationLoading = false;
-        this.foundationError = 'Khong tai duoc Data Foundation.';
+        this.foundationError = this.t('marketSettings.messages.loadFoundationFailed');
       },
     });
   }
@@ -608,14 +746,15 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       next: (response) => {
         this.dataQualityScan = response.data;
         this.foundationLoading = false;
+        this.sectionLoadedAt.foundation = undefined;
         this.foundationMessage = response.data
           ? `Da scan ${response.data.quotes_checked + response.data.intraday_checked} dong, ghi nhan ${response.data.issues_upserted} canh bao.`
           : 'Scan data-quality khong co ket qua.';
-        this.loadDataFoundation(true);
+        this.loadDataFoundation(true, true);
       },
       error: () => {
         this.foundationLoading = false;
-        this.foundationError = 'Scan data-quality that bai.';
+        this.foundationError = this.t('marketSettings.messages.loadFoundationFailed');
       },
     });
   }
@@ -631,12 +770,13 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       next: (responses) => {
         const created = responses.reduce((sum, item) => sum + Number(item.data?.events_created || 0), 0);
         this.foundationLoading = false;
-        this.foundationMessage = `Da tao ${created} alert event moi.`;
-        this.loadDataFoundation(true);
+        this.sectionLoadedAt.foundation = undefined;
+        this.foundationMessage = this.formatMessage('marketSettings.messages.createdAlertEvents', { count: created });
+        this.loadDataFoundation(true, true);
       },
       error: () => {
         this.foundationLoading = false;
-        this.foundationError = 'Refresh alert events that bai.';
+        this.foundationError = this.t('marketSettings.messages.loadFoundationFailed');
       },
     });
   }
@@ -651,12 +791,12 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
         this.foundationLoading = false;
         this.foundationMessage = response.data
           ? `Da xu ly ${response.data.checked} event: sent ${response.data.sent}, failed ${response.data.failed}.`
-          : 'Khong gui duoc alert events.';
+          : this.t('marketSettings.messages.deliverAlertsFailed');
         this.loadDataFoundation(true);
       },
       error: () => {
         this.foundationLoading = false;
-        this.foundationError = 'Gui alert events that bai.';
+        this.foundationError = this.t('marketSettings.messages.deliverAlertsFailed');
       },
     });
   }
@@ -682,6 +822,22 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     return issue.severity === 'critical' ? 'danger' : issue.severity === 'warning' ? 'warning' : 'default';
   }
 
+  workflowToneClass(tone?: string | null): string {
+    return tone === 'positive' ? 'positive' : tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'default';
+  }
+
+  workflowStatusClass(status?: string | null): string {
+    return status === 'completed' ? 'positive' : status === 'dismissed' ? 'default' : 'warning';
+  }
+
+  formatHistoryActionLabel(item: StrategyActionHistoryItem): string {
+    return item.resolutionType || item.actionLabel || item.actionCode;
+  }
+
+  trackByStrategyHistory(_: number, item: StrategyActionHistoryItem): number {
+    return item.id;
+  }
+
   formatLargeNumber(value?: number | null): string {
     if (value === null || value === undefined || Number.isNaN(Number(value))) {
       return '--';
@@ -703,22 +859,38 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     return this.strategySavedSnapshot !== this.serializeStrategyConfig(this.strategyConfig);
   }
 
-  loadStrategyConfig(profileId: number): void {
+  loadStrategyConfig(profileId: number, force = false): void {
+    if (
+      !force &&
+      this.loadedStrategyConfigProfileId === profileId &&
+      this.strategyConfig &&
+      this.isSectionFresh('strategyConfig')
+    ) {
+      return;
+    }
+    if (this.loadingStrategyConfigProfileId === profileId) {
+      return;
+    }
     this.strategyLoading = true;
     this.strategyError = '';
+    this.loadingStrategyConfigProfileId = profileId;
     this.pageLoadState.startBackground(this.pageLoadKey);
 
     this.api.getStrategyProfileConfig(profileId).subscribe({
       next: (response) => {
         this.strategyLoading = false;
         this.strategyConfig = response.data || null;
+        this.loadedStrategyConfigProfileId = response.data ? profileId : null;
+        this.loadingStrategyConfigProfileId = null;
         this.strategySavedSnapshot = this.strategyConfig ? this.serializeStrategyConfig(this.strategyConfig) : '';
         this.ensureStrategyExpansion();
+        this.markSectionLoaded('strategyConfig');
         this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
         this.strategyLoading = false;
-        this.strategyError = 'Khong tai duoc strategy config.';
+        this.loadingStrategyConfigProfileId = null;
+        this.strategyError = this.t('marketSettings.messages.loadStrategyConfigFailed');
         this.pageLoadState.fail(this.pageLoadKey, this.strategyError);
       },
     });
@@ -754,8 +926,10 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
           return;
         }
         this.strategyConfig = response.data;
+        this.loadedStrategyConfigProfileId = this.activeStrategyProfileId;
         this.strategySavedSnapshot = this.serializeStrategyConfig(this.strategyConfig);
         this.ensureStrategyExpansion();
+        this.markSectionLoaded('strategyConfig');
         this.strategyMessage = navigateAfterSave
           ? 'Da luu va ap dung config. Dang mo Strategy Hub...'
           : 'Da luu strategy settings.';
@@ -765,7 +939,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       },
       error: () => {
         this.strategySaving = false;
-        this.strategyError = 'Luu strategy settings that bai.';
+        this.strategyError = this.t('settings.saveFailed');
       },
     });
   }
@@ -783,37 +957,39 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       next: (response) => {
         this.strategyPublishing = false;
         if (!response.data) {
-          this.strategyError = 'Khong publish duoc version.';
+          this.strategyError = this.t('marketSettings.messages.publishVersionFailed');
           return;
         }
         this.strategyMessage = `Da publish version #${response.data.versionNo}.`;
-        this.loadStrategyConfig(this.activeStrategyProfileId!);
+        this.sectionLoadedAt.strategyConfig = undefined;
+        this.loadStrategyConfig(this.activeStrategyProfileId!, true);
       },
       error: () => {
         this.strategyPublishing = false;
-        this.strategyError = 'Publish strategy that bai.';
+        this.strategyError = this.t('marketSettings.messages.publishVersionFailed');
       },
     });
   }
 
   createStrategyProfile(): void {
     if (!this.newStrategyProfile.code.trim() || !this.newStrategyProfile.name.trim()) {
-      this.strategyError = 'Can nhap code va ten profile.';
+      this.strategyError = this.t('marketSettings.messages.profileRequired');
       return;
     }
 
     this.api.createStrategyProfile(this.newStrategyProfile).subscribe({
       next: (response) => {
         if (!response.data) {
-          this.strategyError = 'Khong tao duoc profile.';
+          this.strategyError = this.t('marketSettings.messages.createProfileFailed');
           return;
         }
         this.newStrategyProfile = { code: '', name: '', description: '' };
-        this.strategyMessage = 'Da tao profile moi.';
-        this.loadStrategyOverview();
+        this.strategyMessage = this.t('marketSettings.messages.createdProfile');
+        this.sectionLoadedAt.strategyProfiles = undefined;
+        this.loadStrategyOverview(false, true);
       },
       error: () => {
-        this.strategyError = 'Tao profile that bai.';
+        this.strategyError = this.t('marketSettings.messages.createProfileFailed');
       },
     });
   }
@@ -822,15 +998,18 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.api.activateStrategyProfile(profile.id).subscribe({
       next: (response) => {
         if (!response.data) {
-          this.strategyError = 'Khong kich hoat duoc profile.';
+          this.strategyError = this.t('marketSettings.messages.activateProfileFailed');
           return;
         }
         this.activeStrategyProfileId = response.data.id;
         this.strategyMessage = `Da chuyen sang profile ${response.data.name}.`;
-        this.loadStrategyConfig(this.activeStrategyProfileId);
+        this.loadedStrategyConfigProfileId = null;
+        this.loadingStrategyConfigProfileId = null;
+        this.sectionLoadedAt.strategyConfig = undefined;
+        this.loadStrategyConfig(this.activeStrategyProfileId, true);
       },
       error: () => {
-        this.strategyError = 'Kich hoat profile that bai.';
+        this.strategyError = this.t('marketSettings.messages.activateProfileFailed');
       },
     });
   }
@@ -840,7 +1019,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.strategyConfigSearch = '';
     this.strategyVariableSearch = '';
     this.ensureStrategyExpansion();
-    if (section === 'journal' && !this.strategyJournal.length && !this.strategyLoading) {
+    if (section === 'journal' && !this.isSectionFresh('strategyJournal') && !this.strategyLoading) {
       this.reloadStrategyJournal();
     }
   }
@@ -870,34 +1049,34 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   getStrategySectionTitle(): string {
     switch (this.selectedStrategySection) {
       case 'profiles':
-        return 'Profiles';
+        return this.t('marketSettings.strategy.sections.profiles');
       case 'screenRules':
-        return 'Screener rules';
+        return this.t('marketSettings.strategy.sections.screenRules');
       case 'alertRules':
-        return 'Alert rules';
+        return this.t('marketSettings.strategy.sections.alertRules');
       case 'checklists':
-        return 'Checklists';
+        return this.t('marketSettings.strategy.sections.checklists');
       case 'versions':
-        return 'Versions';
+        return this.t('marketSettings.strategy.sections.versions');
       default:
-        return 'Formulas';
+        return this.t('marketSettings.strategy.sections.formulas');
     }
   }
 
   getStrategySectionHelp(): string {
     switch (this.selectedStrategySection) {
       case 'profiles':
-        return 'Quan ly bo cau hinh dau tu va profile mac dinh.';
+        return this.t('marketSettings.strategy.help.profiles');
       case 'screenRules':
-        return 'Rule loc co phieu theo tung tang logic.';
+        return this.t('marketSettings.strategy.help.screenRules');
       case 'alertRules':
-        return 'Rule tao canh bao va message hien thi cho nguoi dung.';
+        return this.t('marketSettings.strategy.help.alertRules');
       case 'checklists':
-        return 'Checklist ky luat giao dich va quy trinh xem xet.';
+        return this.t('marketSettings.strategy.help.checklists');
       case 'versions':
-        return 'Lich su publish cua cau hinh strategy.';
+        return this.t('marketSettings.strategy.help.versions');
       default:
-        return 'Cong thuc cham diem Q, L, M, P va cac bien tinh toan.';
+        return this.t('marketSettings.strategy.help.formulas');
     }
   }
 
@@ -935,8 +1114,11 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     }
   }
 
-  reloadStrategyJournal(silent = false): void {
+  reloadStrategyJournal(silent = false, force = false): void {
     if (!this.activeStrategyProfileId) {
+      return;
+    }
+    if (!force && this.strategyJournal.length && this.isSectionFresh('strategyJournal')) {
       return;
     }
 
@@ -947,23 +1129,118 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     }
     this.pageLoadState.startBackground(this.pageLoadKey);
 
-    this.api.listStrategyJournal(24).subscribe({
-      next: (response) => {
-        this.strategyJournal = response.data || [];
+    forkJoin({
+      journal: this.api.listStrategyJournal(24),
+      statements: this.api.listStrategyOrderStatements(120),
+    }).subscribe({
+      next: ({ journal, statements }) => {
+        this.strategyJournal = journal.data || [];
         this.strategyJournalRows = this.strategyJournal.map((item) => this.mapJournalEntryToRow(item));
+        this.strategyOrderStatements = statements.data || [];
+        this.strategyOrderStatementRows = this.strategyOrderStatements.map((item) => this.mapOrderStatementEntryToRow(item));
         if (this.strategyJournalPrefillPending && this.strategyJournalSuggestion) {
           this.strategyJournalRows.unshift(this.buildStrategyJournalRowFromSuggestion(this.strategyJournalSuggestion));
           this.strategyJournalPrefillPending = false;
         }
         this.strategyLoading = false;
+        this.markSectionLoaded('strategyJournal');
         this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => {
         this.strategyLoading = false;
-        this.strategyError = 'Khong tai duoc strategy journal.';
+        this.strategyError = this.t('marketSettings.messages.loadStrategyJournalFailed');
         this.pageLoadState.fail(this.pageLoadKey, this.strategyError);
       },
     });
+  }
+
+  loadStrategyHistory(silent = false, force = false): void {
+    if (!this.activeStrategyProfileId) {
+      return;
+    }
+    if (!force && this.strategyHistoryItems.length && this.isSectionFresh('strategyHistory')) {
+      return;
+    }
+
+    this.strategyHistoryLoading = true;
+    if (!silent) {
+      this.strategyLoading = true;
+      this.strategyError = '';
+      this.strategyMessage = '';
+    }
+    this.pageLoadState.startBackground(this.pageLoadKey);
+
+    forkJoin({
+      history: this.api.getStrategyActionHistory({
+        profileId: this.activeStrategyProfileId,
+        status: this.strategyHistoryStatusFilter,
+        days: this.strategyHistoryDays,
+        limit: 160,
+      }),
+      reviewReport: this.api.getStrategyReviewReport({
+        profileId: this.activeStrategyProfileId,
+        days: this.strategyHistoryDays,
+        limit: 300,
+      }),
+    }).subscribe({
+        next: (response) => {
+          this.strategyHistoryOverview = response.history.data || null;
+          this.strategyHistoryItems = response.history.data?.items || [];
+          this.strategyReviewReport = response.reviewReport.data || null;
+          this.strategyHistoryLoading = false;
+          this.strategyLoading = false;
+          this.markSectionLoaded('strategyHistory');
+          this.pageLoadState.finish(this.pageLoadKey);
+        },
+        error: () => {
+          this.strategyHistoryLoading = false;
+          this.strategyLoading = false;
+          this.strategyError = this.t('marketSettings.messages.loadWorkflowHistoryFailed');
+          this.pageLoadState.fail(this.pageLoadKey, this.strategyError);
+        },
+      });
+  }
+
+  onStrategyHistoryFilterChange(): void {
+    this.loadStrategyHistory(false, true);
+  }
+
+  get strategyReviewSummaryCards(): Array<{ label: string; value: string; tone?: string }> {
+    const report = this.strategyReviewReport;
+    if (!report) {
+      return [];
+    }
+    return [
+      {
+        label: 'Win rate',
+        value: `${(report.performance.winRate ?? 0).toFixed(1)}%`,
+        tone: report.performance.winRate >= 60 ? 'positive' : report.performance.winRate < 45 ? 'danger' : 'warning',
+      },
+      {
+        label: 'Realized PnL',
+        value: this.formatLargeNumber(report.performance.realizedPnlValue),
+        tone: report.performance.realizedPnlValue > 0 ? 'positive' : report.performance.realizedPnlValue < 0 ? 'danger' : 'default',
+      },
+      {
+        label: 'Workflow open',
+        value: `${report.workflow.pending}`,
+        tone: report.workflow.pending > 0 ? 'warning' : 'positive',
+      },
+      {
+        label: 'Critical alerts',
+        value: `${report.portfolio.criticalAlerts}`,
+        tone: report.portfolio.criticalAlerts > 0 ? 'danger' : report.portfolio.warningAlerts > 0 ? 'warning' : 'positive',
+      },
+    ];
+  }
+
+  private markSectionLoaded(section: SettingsLoadSection): void {
+    this.sectionLoadedAt[section] = Date.now();
+  }
+
+  private isSectionFresh(section: SettingsLoadSection, maxAgeMs = this.sectionMaxAgeMs[section]): boolean {
+    const loadedAt = this.sectionLoadedAt[section];
+    return typeof loadedAt === 'number' && Date.now() - loadedAt <= maxAgeMs;
   }
 
   addStrategyJournalRow(prefill?: Partial<StrategyJournalRow>): void {
@@ -971,10 +1248,66 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.strategyJournalRows = [...this.strategyJournalRows, { ...row, ...prefill, isNew: true }];
   }
 
-  saveStrategyJournalRow(row: StrategyJournalRow): void {
-    if (!this.activeStrategyProfileId || !row.symbol.trim()) {
-      this.strategyError = 'Can nhap ma giao dich.';
+  addStrategyOrderStatementRow(prefill?: Partial<StrategyOrderStatementRow>): void {
+    const row = this.buildEmptyOrderStatementRow();
+    this.strategyOrderStatementRows = [...this.strategyOrderStatementRows, { ...row, ...prefill, isNew: true }];
+  }
+
+  duplicateStrategyOrderStatementRow(row: StrategyOrderStatementRow): void {
+    const clone: StrategyOrderStatementRow = {
+      ...row,
+      id: undefined,
+      clientKey: this.nextClientRowKey('statement'),
+      createdAt: null,
+      updatedAt: null,
+      isSaving: false,
+      isNew: true,
+      broker_reference: '',
+    };
+    const index = this.strategyOrderStatementRows.indexOf(row);
+    if (index < 0) {
+      this.strategyOrderStatementRows = [...this.strategyOrderStatementRows, clone];
       return;
+    }
+    const rows = [...this.strategyOrderStatementRows];
+    rows.splice(index + 1, 0, clone);
+    this.strategyOrderStatementRows = rows;
+  }
+
+  private isStrategyJournalRowBlank(row: StrategyJournalRow): boolean {
+    return !row.id
+      && !row.symbol.trim()
+      && !row.notes.trim()
+      && !row.strategy_name.trim()
+      && !row.psychology.trim()
+      && !this.preferredNumber(row.entry_price)
+      && !this.preferredNumber(row.exit_price)
+      && !this.preferredNumber(row.stop_loss_price)
+      && !this.preferredNumber(row.take_profit_price)
+      && !this.preferredNumber(row.quantity)
+      && !this.preferredNumber(row.total_capital);
+  }
+
+  private isStrategyOrderStatementRowBlank(row: StrategyOrderStatementRow): boolean {
+    return !row.id
+      && !row.symbol.trim()
+      && !this.preferredNumber(row.quantity)
+      && !this.preferredNumber(row.price)
+      && !this.preferredNumber(row.transfer_fee);
+  }
+
+  private async persistStrategyJournalRow(
+    row: StrategyJournalRow,
+    options: { announce?: boolean; clearStatus?: boolean } = {}
+  ): Promise<void> {
+    if (this.isStrategyJournalRowBlank(row)) {
+      return;
+    }
+    if (!this.activeStrategyProfileId) {
+      throw new Error(this.t('marketSettings.messages.profileRequired'));
+    }
+    if (!row.symbol.trim()) {
+      throw new Error(this.t('marketSettings.messages.symbolRequired'));
     }
 
     const payload = this.buildJournalPayload(row);
@@ -983,32 +1316,166 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       : this.api.createStrategyJournal(payload);
 
     row.isSaving = true;
+    if (options.clearStatus !== false) {
+      this.strategyError = '';
+      this.strategyMessage = '';
+    }
+
+    try {
+      const response = await firstValueFrom(request$);
+      if (!response.data) {
+        throw new Error(
+          row.id
+            ? this.t('marketSettings.messages.updateJournalFailed')
+            : this.t('marketSettings.messages.saveJournalFailed')
+        );
+      }
+      const savedRow = this.mapJournalEntryToRow(response.data);
+      const index = this.strategyJournalRows.indexOf(row);
+      if (index >= 0) {
+        this.strategyJournalRows.splice(index, 1, savedRow);
+        this.strategyJournalRows = [...this.strategyJournalRows];
+      } else {
+        this.strategyJournalRows = [...this.strategyJournalRows, savedRow];
+      }
+      if (options.announce !== false) {
+        this.strategyMessage = row.id
+          ? this.t('marketSettings.messages.updatedJournal')
+          : this.t('marketSettings.messages.createdJournal');
+      }
+      this.markSectionLoaded('strategyJournal');
+    } catch (error) {
+      this.strategyError = row.id
+        ? this.extractApiErrorMessage(error, 'marketSettings.messages.updateJournalFailedVerbose')
+        : this.extractApiErrorMessage(error, 'marketSettings.messages.saveJournalFailedVerbose');
+      throw error;
+    } finally {
+      row.isSaving = false;
+    }
+  }
+
+  private async persistStrategyOrderStatementRow(
+    row: StrategyOrderStatementRow,
+    options: { announce?: boolean; clearStatus?: boolean } = {}
+  ): Promise<void> {
+    if (this.isStrategyOrderStatementRowBlank(row)) {
+      return;
+    }
+    if (!this.activeStrategyProfileId) {
+      throw new Error(this.t('marketSettings.messages.profileRequired'));
+    }
+    if (!row.symbol.trim()) {
+      throw new Error(this.t('marketSettings.messages.symbolRequired'));
+    }
+    const quantityValue = this.preferredNumber(row.quantity);
+    const priceValue = this.preferredNumber(row.price);
+    if (quantityValue === null || quantityValue === 0 || priceValue === null || priceValue === 0) {
+      throw new Error(this.t('marketSettings.messages.orderStatementQuantityPriceRequired'));
+    }
+
+    const payload = this.buildOrderStatementPayload(row);
+    const request$ = row.id
+      ? this.api.updateStrategyOrderStatement(row.id, payload)
+      : this.api.createStrategyOrderStatement(payload);
+
+    row.isSaving = true;
+    if (options.clearStatus !== false) {
+      this.strategyError = '';
+      this.strategyMessage = '';
+    }
+
+    try {
+      const response = await firstValueFrom(request$);
+      if (!response.data) {
+        throw new Error(
+          row.id
+            ? this.t('marketSettings.messages.updateOrderStatementFailed')
+            : this.t('marketSettings.messages.saveOrderStatementFailed')
+        );
+      }
+      const savedRow = this.mapOrderStatementEntryToRow(response.data);
+      const index = this.strategyOrderStatementRows.indexOf(row);
+      if (index >= 0) {
+        this.strategyOrderStatementRows.splice(index, 1, savedRow);
+        this.strategyOrderStatementRows = [...this.strategyOrderStatementRows];
+      } else {
+        this.strategyOrderStatementRows = [...this.strategyOrderStatementRows, savedRow];
+      }
+      if (options.announce !== false) {
+        this.strategyMessage = row.id
+          ? this.t('marketSettings.messages.updatedOrderStatement')
+          : this.t('marketSettings.messages.createdOrderStatement');
+      }
+      this.markSectionLoaded('strategyJournal');
+    } catch (error) {
+      this.strategyError = row.id
+        ? this.extractApiErrorMessage(error, 'marketSettings.messages.updateOrderStatementFailedVerbose')
+        : this.extractApiErrorMessage(error, 'marketSettings.messages.saveOrderStatementFailedVerbose');
+      throw error;
+    } finally {
+      row.isSaving = false;
+    }
+  }
+
+  async saveAllStrategyLedger(): Promise<void> {
+    if (this.strategyLedgerSaving) {
+      return;
+    }
+
+    this.strategyLedgerSaving = true;
     this.strategyError = '';
     this.strategyMessage = '';
+    let savedOrderStatementCount = 0;
+    let savedJournalCount = 0;
+    const errors: string[] = [];
 
-    request$.subscribe({
-      next: (response) => {
-        row.isSaving = false;
-        if (!response.data) {
-          this.strategyError = row.id ? 'Khong cap nhat duoc journal.' : 'Khong luu duoc journal.';
-          return;
+    try {
+      for (const row of [...this.strategyOrderStatementRows]) {
+        if (this.isStrategyOrderStatementRowBlank(row)) {
+          continue;
         }
+        try {
+          await this.persistStrategyOrderStatementRow(row, { announce: false, clearStatus: false });
+          savedOrderStatementCount += 1;
+        } catch (error) {
+          errors.push(this.describeStrategyLedgerSaveError('statement', row.symbol, error));
+        }
+      }
 
-        const savedRow = this.mapJournalEntryToRow(response.data);
-        const index = this.strategyJournalRows.indexOf(row);
-        if (index >= 0) {
-          this.strategyJournalRows.splice(index, 1, savedRow);
-          this.strategyJournalRows = [...this.strategyJournalRows];
-        } else {
-          this.strategyJournalRows = [...this.strategyJournalRows, savedRow];
+      for (const row of [...this.strategyJournalRows]) {
+        if (this.isStrategyJournalRowBlank(row)) {
+          continue;
         }
-        this.strategyMessage = row.id ? 'Da cap nhat strategy journal.' : 'Da them strategy journal.';
-      },
-      error: () => {
-        row.isSaving = false;
-        this.strategyError = row.id ? 'Cap nhat strategy journal that bai.' : 'Luu strategy journal that bai.';
-      },
-    });
+        try {
+          await this.persistStrategyJournalRow(row, { announce: false, clearStatus: false });
+          savedJournalCount += 1;
+        } catch (error) {
+          errors.push(this.describeStrategyLedgerSaveError('journal', row.symbol, error));
+        }
+      }
+
+      const totalSaved = savedOrderStatementCount + savedJournalCount;
+      if (totalSaved > 0) {
+        this.strategyMessage = `Da luu ${savedOrderStatementCount} dong Sao ke va ${savedJournalCount} dong Entries.`;
+        this.markSectionLoaded('strategyJournal');
+        this.reloadStrategyJournal(true, true);
+      }
+
+      if (errors.length) {
+        this.strategyError =
+          errors.length === 1
+            ? errors[0]
+            : `${errors[0]} (+${errors.length - 1} loi khac)`;
+      } else if (!totalSaved) {
+        this.strategyError = 'Chua co dong hop le de luu.';
+      }
+    } finally {
+      this.strategyLedgerSaving = false;
+    }
+  }
+
+  saveStrategyJournalRow(row: StrategyJournalRow): void {
+    this.persistStrategyJournalRow(row).catch(() => undefined);
   }
 
   deleteStrategyJournalRow(row: StrategyJournalRow): void {
@@ -1017,7 +1484,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       return;
     }
 
-    const confirmed = window.confirm(`Xoa nhat ky giao dich cho ma ${row.symbol}?`);
+    const confirmed = window.confirm(this.formatMessage('marketSettings.messages.confirmDeleteJournal', { symbol: row.symbol }));
     if (!confirmed) {
       return;
     }
@@ -1025,14 +1492,46 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.api.deleteStrategyJournal(row.id).subscribe({
       next: (response) => {
         if (!response.data) {
-          this.strategyError = 'Khong xoa duoc strategy journal.';
+          this.strategyError = this.t('marketSettings.messages.deleteJournalFailed');
           return;
         }
         this.strategyJournalRows = this.strategyJournalRows.filter((item) => item !== row);
-        this.strategyMessage = 'Da xoa strategy journal.';
+        this.strategyMessage = this.t('marketSettings.messages.deletedJournal');
+        this.markSectionLoaded('strategyJournal');
       },
       error: () => {
-        this.strategyError = 'Xoa strategy journal that bai.';
+        this.strategyError = this.t('marketSettings.messages.deleteJournalFailedVerbose');
+      },
+    });
+  }
+
+  saveStrategyOrderStatementRow(row: StrategyOrderStatementRow): void {
+    this.persistStrategyOrderStatementRow(row).catch(() => undefined);
+  }
+
+  deleteStrategyOrderStatementRow(row: StrategyOrderStatementRow): void {
+    if (!row.id) {
+      this.strategyOrderStatementRows = this.strategyOrderStatementRows.filter((item) => item !== row);
+      return;
+    }
+
+    const confirmed = window.confirm(this.formatMessage('marketSettings.messages.confirmDeleteOrderStatement', { symbol: row.symbol }));
+    if (!confirmed) {
+      return;
+    }
+
+    this.api.deleteStrategyOrderStatement(row.id).subscribe({
+      next: (response) => {
+        if (!response.data) {
+          this.strategyError = this.t('marketSettings.messages.deleteOrderStatementFailed');
+          return;
+        }
+        this.strategyOrderStatementRows = this.strategyOrderStatementRows.filter((item) => item !== row);
+        this.strategyMessage = this.t('marketSettings.messages.deletedOrderStatement');
+        this.markSectionLoaded('strategyJournal');
+      },
+      error: () => {
+        this.strategyError = this.t('marketSettings.messages.deleteOrderStatementFailedVerbose');
       },
     });
   }
@@ -1045,12 +1544,288 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   }
 
   trackByStrategyJournalRow(_: number, item: StrategyJournalRow): number | string {
-    return item.id || `${item.symbol}:${item.trade_date}:${item.createdAt || 'new'}`;
+    return item.id || item.clientKey || `${item.symbol}:${item.trade_date}:${item.createdAt || 'new'}`;
+  }
+
+  trackByStrategyOrderStatementRow(_: number, item: StrategyOrderStatementRow): number | string {
+    return item.id || item.clientKey || `${item.symbol}:${item.trade_date}:${item.broker_reference || 'new'}`;
+  }
+
+  orderStatementGroupItems(): Array<{ key: OrderStatementGroupMode; label: string }> {
+    return [
+      { key: 'symbol', label: this.t('marketSettings.orderStatement.groupBySymbol') },
+      { key: 'tradeDate', label: this.t('marketSettings.orderStatement.groupByTradeDate') },
+    ];
+  }
+
+  groupedOrderStatementRows(): OrderStatementGroupVm[] {
+    const groups = new Map<string, OrderStatementGroupVm>();
+    for (const row of this.strategyOrderStatementRows) {
+      const key = this.orderStatementGroupMode === 'tradeDate'
+        ? (row.trade_date || 'no-date')
+        : (row.symbol?.trim().toUpperCase() || 'NO_SYMBOL');
+      const label = this.orderStatementGroupMode === 'tradeDate'
+        ? (row.trade_date || this.t('marketSettings.orderStatement.noTradeDate'))
+        : (row.symbol?.trim().toUpperCase() || this.t('marketSettings.orderStatement.noSymbol'));
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label,
+          rows: [],
+          totalGrossValue: 0,
+          totalNetAmount: 0,
+        });
+      }
+
+      const group = groups.get(key)!;
+      group.rows.push(row);
+      group.totalGrossValue += this.computeOrderStatementGrossValue(row) || 0;
+      group.totalNetAmount += this.computeOrderStatementNetAmount(row) || 0;
+    }
+
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        rows: [...group.rows].sort((left, right) => {
+          const leftDate = left.trade_date || '';
+          const rightDate = right.trade_date || '';
+          if (leftDate !== rightDate) {
+            return rightDate.localeCompare(leftDate);
+          }
+          return (left.symbol || '').localeCompare(right.symbol || '');
+        }),
+      }))
+      .sort((left, right) => {
+        if (this.orderStatementGroupMode === 'tradeDate') {
+          return right.key.localeCompare(left.key);
+        }
+        return left.label.localeCompare(right.label);
+      });
+  }
+
+  computeOrderStatementGrossValue(row: StrategyOrderStatementRow): number | null {
+    const quantity = this.preferredNumber(row.quantity);
+    const price = this.preferredNumber(row.price);
+    if (quantity === null || price === null) {
+      return this.preferredNumber(row.gross_value);
+    }
+    return Math.round(quantity * price * 100) / 100;
+  }
+
+  computeOrderStatementNetAmount(row: StrategyOrderStatementRow): number | null {
+    const gross = this.computeOrderStatementGrossValue(row);
+    const fee = this.preferredNumber(row.fee, 0) || 0;
+    const tax = this.preferredNumber(row.tax, 0) || 0;
+    const transferFee = this.preferredNumber(row.transfer_fee, 0) || 0;
+    if (gross === null) {
+      return this.preferredNumber(row.net_amount);
+    }
+    const totalCharges = fee + tax + transferFee;
+    const net = row.trade_side === 'sell' ? gross - totalCharges : gross + totalCharges;
+    return Math.round(net * 100) / 100;
+  }
+
+  formatOrderStatementSide(tradeSide: string | null | undefined): string {
+    return String(tradeSide || '').trim().toLowerCase() === 'sell'
+      ? this.t('marketSettings.orderStatement.sideSell')
+      : this.t('marketSettings.orderStatement.sideBuy');
+  }
+
+  resolveOrderStatementOrderType(tradeSide: string | null | undefined): string {
+    return String(tradeSide || '').trim().toLowerCase() === 'sell' ? 'Sell' : 'Buy';
+  }
+
+  formatOrderStatementNumber(value: number | null | undefined): string {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return '--';
+    }
+    return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+
+  getLinkedOrderStatementRows(row: StrategyJournalRow): StrategyOrderStatementRow[] {
+    if (!row.id) {
+      return [];
+    }
+    return this.strategyOrderStatementRows.filter((item) => item.journal_entry_id === row.id);
+  }
+
+  isLinkedOrderStatementsExpanded(row: StrategyJournalRow): boolean {
+    return !!row.id && this.expandedLinkedOrderStatementIds.has(row.id);
+  }
+
+  toggleLinkedOrderStatements(row: StrategyJournalRow): void {
+    if (!row.id || !this.hasOrderStatementSync(row)) {
+      return;
+    }
+    const next = new Set(this.expandedLinkedOrderStatementIds);
+    if (next.has(row.id)) {
+      next.delete(row.id);
+    } else {
+      next.add(row.id);
+    }
+    this.expandedLinkedOrderStatementIds = next;
+  }
+
+  getLinkedOrderStatementCount(row: StrategyJournalRow): number {
+    return this.getLinkedOrderStatementRows(row).length;
+  }
+
+  getLinkedOrderStatementGrossTotal(row: StrategyJournalRow): number {
+    return this.getLinkedOrderStatementRows(row).reduce((sum, item) => sum + (this.computeOrderStatementGrossValue(item) || 0), 0);
+  }
+
+  getLinkedOrderStatementNetTotal(row: StrategyJournalRow): number {
+    return this.getLinkedOrderStatementRows(row).reduce((sum, item) => sum + (this.computeOrderStatementNetAmount(item) || 0), 0);
+  }
+
+  getLinkedOrderStatementLatestTradeDate(row: StrategyJournalRow): string | null {
+    const values = this.getLinkedOrderStatementRows(row)
+      .map((item) => item.trade_date || '')
+      .filter(Boolean)
+      .sort((left, right) => right.localeCompare(left));
+    return values[0] || null;
+  }
+
+  hasOrderStatementSync(row: StrategyJournalRow): boolean {
+    return this.getLinkedOrderStatementCount(row) > 0;
+  }
+
+  getOrderStatementSyncSummary(row: StrategyJournalRow): string {
+    const count = this.getLinkedOrderStatementCount(row);
+    if (!count) {
+      return 'Chưa có dòng khớp lệnh liên kết.';
+    }
+    const gross = this.formatOrderStatementNumber(this.getLinkedOrderStatementGrossTotal(row));
+    const latestTradeDate = this.getLinkedOrderStatementLatestTradeDate(row);
+    return latestTradeDate
+      ? `${count} dòng khớp lệnh, tổng giá trị ${gross}, khớp gần nhất ${latestTradeDate}.`
+      : `${count} dòng khớp lệnh, tổng giá trị ${gross}.`;
+  }
+
+  getFormattedNumberInputValue(
+    row: StrategyJournalRow | StrategyOrderStatementRow,
+    field: string,
+    mode: 'integer' | 'decimal' = 'integer'
+  ): string {
+    const draft = this.getNumericDraft(row, field);
+    if (this.isNumericFieldEditing(row, field) && draft !== undefined) {
+      return draft;
+    }
+    const rawValue = (row as Record<string, any>)[field];
+    if (rawValue === null || rawValue === undefined || rawValue === '') {
+      return '';
+    }
+    const num = Number(rawValue);
+    if (!Number.isFinite(num)) {
+      return '';
+    }
+    return mode === 'decimal' ? this.numericDecimalFormatter.format(num) : this.numericIntegerFormatter.format(num);
+  }
+
+  beginFormattedNumberEdit(row: StrategyJournalRow | StrategyOrderStatementRow, field: string): void {
+    const editingSet = this.getNumericEditingSet(row, true)!;
+    editingSet.add(field);
+    this.setNumericDraft(row, field, this.rawNumberString((row as Record<string, any>)[field]));
+  }
+
+  updateFormattedNumberField(row: StrategyJournalRow | StrategyOrderStatementRow, field: string, rawValue: string): void {
+    this.setNumericDraft(row, field, rawValue);
+    (row as Record<string, any>)[field] = this.parseLooseNumber(rawValue);
+  }
+
+  endFormattedNumberEdit(row: StrategyJournalRow | StrategyOrderStatementRow, field: string): void {
+    const editingSet = this.getNumericEditingSet(row);
+    editingSet?.delete(field);
+  }
+
+  addStrategyJournalExamples(): void {
+    const today = new Date().toISOString().slice(0, 10);
+    this.addStrategyJournalRow({
+      symbol: 'FPT',
+      trade_date: today,
+      classification: 'swing',
+      trade_side: 'buy',
+      entry_price: 75100,
+      stop_loss_price: 72800,
+      take_profit_price: 81200,
+      quantity: 500,
+      total_capital: 37550000,
+      strategy_name: 'Trend leader',
+      psychology: 'Kỷ luật',
+      notes: 'Mẫu: mã dẫn dắt công nghệ, giữ nền giá tốt.',
+    });
+    this.addStrategyJournalRow({
+      symbol: 'SSI',
+      trade_date: today,
+      classification: 'retest',
+      trade_side: 'buy',
+      entry_price: 28550,
+      stop_loss_price: 27600,
+      take_profit_price: 30900,
+      quantity: 1500,
+      total_capital: 42825000,
+      strategy_name: 'Retest breakout',
+      psychology: 'Bình tĩnh',
+      notes: 'Mẫu: dòng chứng khoán retest sau phiên kéo.',
+    });
+    this.addStrategyJournalRow({
+      symbol: 'MWG',
+      trade_date: today,
+      classification: 'position',
+      trade_side: 'buy',
+      entry_price: 61200,
+      stop_loss_price: 58800,
+      take_profit_price: 66200,
+      quantity: 400,
+      total_capital: 24480000,
+      strategy_name: 'Position build',
+      psychology: 'Chờ xác nhận',
+      notes: 'Mẫu: tích lũy vị thế theo nhịp phục hồi tiêu dùng.',
+    });
+  }
+
+  addStrategyOrderStatementExamples(): void {
+    const tradeDate = new Date().toISOString().slice(0, 10);
+    const settlementDate = this.addDaysToIsoDate(tradeDate, 2);
+    this.addStrategyOrderStatementRow({
+      symbol: 'FPT',
+      trade_date: tradeDate,
+      settlement_date: settlementDate,
+      trade_side: 'buy',
+      quantity: 500,
+      price: 75100,
+      transfer_fee: 0,
+    });
+    this.addStrategyOrderStatementRow({
+      symbol: 'SSI',
+      trade_date: tradeDate,
+      settlement_date: settlementDate,
+      trade_side: 'buy',
+      quantity: 1500,
+      price: 28550,
+      transfer_fee: 0,
+    });
+    this.addStrategyOrderStatementRow({
+      symbol: 'MWG',
+      trade_date: tradeDate,
+      settlement_date: settlementDate,
+      trade_side: 'buy',
+      quantity: 400,
+      price: 61200,
+      transfer_fee: 0,
+    });
+  }
+
+  addStrategyLedgerExamples(): void {
+    this.addStrategyOrderStatementExamples();
+    this.addStrategyJournalExamples();
   }
 
   saveStrategyJournal(): void {
     if (!this.activeStrategyProfileId || !this.strategyJournalForm.symbol.trim()) {
-      this.strategyError = 'Can nhap ma giao dich.';
+      this.strategyError = this.t('marketSettings.messages.symbolRequired');
       return;
     }
 
@@ -1106,21 +1881,21 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
         this.strategySaving = false;
         if (!response.data) {
           this.strategyError = this.editingStrategyJournalId
-            ? 'Khong cap nhat duoc journal.'
-            : 'Khong luu duoc journal.';
+            ? this.t('marketSettings.messages.updateJournalFailed')
+            : this.t('marketSettings.messages.saveJournalFailed');
           return;
         }
         this.strategyMessage = this.editingStrategyJournalId
-          ? 'Da cap nhat strategy journal.'
-          : 'Da them strategy journal.';
+          ? this.t('marketSettings.messages.updatedJournal')
+          : this.t('marketSettings.messages.createdJournal');
         this.resetStrategyJournalForm();
-        this.reloadStrategyJournal(true);
+        this.reloadStrategyJournal(true, true);
       },
       error: () => {
         this.strategySaving = false;
         this.strategyError = this.editingStrategyJournalId
-          ? 'Cap nhat strategy journal that bai.'
-          : 'Luu strategy journal that bai.';
+          ? this.t('marketSettings.messages.updateJournalFailedVerbose')
+          : this.t('marketSettings.messages.saveJournalFailedVerbose');
       },
     });
   }
@@ -1153,7 +1928,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   }
 
   deleteStrategyJournal(item: StrategyJournalEntry): void {
-    const confirmed = window.confirm(`Xoa nhat ky giao dich cho ma ${item.symbol}?`);
+    const confirmed = window.confirm(this.formatMessage('marketSettings.messages.confirmDeleteJournal', { symbol: item.symbol }));
     if (!confirmed) {
       return;
     }
@@ -1161,17 +1936,17 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     this.api.deleteStrategyJournal(item.id).subscribe({
       next: (response) => {
         if (!response.data) {
-          this.strategyError = 'Khong xoa duoc strategy journal.';
+          this.strategyError = this.t('marketSettings.messages.deleteJournalFailed');
           return;
         }
         if (this.editingStrategyJournalId === item.id) {
           this.resetStrategyJournalForm();
         }
-        this.strategyMessage = 'Da xoa strategy journal.';
+        this.strategyMessage = this.t('marketSettings.messages.deletedJournal');
         this.reloadStrategyJournal(true);
       },
       error: () => {
-        this.strategyError = 'Xoa strategy journal that bai.';
+        this.strategyError = this.t('marketSettings.messages.deleteJournalFailedVerbose');
       },
     });
   }
@@ -1235,7 +2010,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       return parameter.value ? 'Bat' : 'Tat';
     }
     if (parameter.value === null || parameter.value === undefined || parameter.value === '') {
-      return 'Chua dat';
+      return this.t('marketSettings.messages.notSet');
     }
     return String(parameter.value);
   }
@@ -1375,6 +2150,105 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     return `${job.remainingBatches}`;
   }
 
+  getSyncHealthLabel(job: MarketSyncJobStatus): string {
+    switch (job.health) {
+      case 'healthy':
+        return 'Ổn định';
+      case 'soft-failed':
+        return 'Fail mềm';
+      case 'hard-failed':
+        return 'Fail cứng';
+      case 'recovered':
+        return 'Đã hồi phục';
+      default:
+        return 'Chưa chạy';
+    }
+  }
+
+  getSyncHealthTone(job: MarketSyncJobStatus): string {
+    switch (job.health) {
+      case 'healthy':
+        return 'positive';
+      case 'soft-failed':
+        return 'warning';
+      case 'hard-failed':
+        return 'danger';
+      case 'recovered':
+        return 'recovered';
+      default:
+        return 'idle';
+    }
+  }
+
+  getSyncLagText(job: MarketSyncJobStatus): string {
+    if (job.ageSeconds === null || job.ageSeconds === undefined) {
+      return '--';
+    }
+    if (job.ageSeconds < 60) {
+      return `${job.ageSeconds}s`;
+    }
+    if (job.ageSeconds < 3600) {
+      return `${Math.floor(job.ageSeconds / 60)}m`;
+    }
+    return `${Math.floor(job.ageSeconds / 3600)}h`;
+  }
+
+  hasSyncIssue(job: MarketSyncJobStatus): boolean {
+    return ['soft-failed', 'hard-failed'].includes(job.health || '');
+  }
+
+  getSyncSourceText(job: MarketSyncJobStatus): string {
+    const value = String(job.source || '').trim();
+    return value || '--';
+  }
+
+  getIntradayCoverageLabel(job: MarketSyncJobStatus): string {
+    switch (job.coverageMode) {
+      case 'full':
+        return this.t('marketSettings.sync.coverageFull');
+      case 'rotated':
+        return this.t('marketSettings.sync.coverageRotated');
+      default:
+        return '--';
+    }
+  }
+
+  getIntradayCoverageTone(job: MarketSyncJobStatus): string {
+    switch (job.coverageMode) {
+      case 'full':
+        return 'positive';
+      case 'rotated':
+        return 'warning';
+      default:
+        return 'idle';
+    }
+  }
+
+  coverageBuckets(): MarketCoverageBucket[] {
+    const coverage = this.syncStatus?.coverage;
+    if (!coverage) {
+      return [];
+    }
+    return [coverage.all, ...Object.values(coverage.byExchange || {})];
+  }
+
+  formatCoveragePercent(value: number | null | undefined): string {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return '--';
+    }
+    return `${num.toFixed(2)}%`;
+  }
+
+  formatCoverageCount(value: number | null | undefined, total: number | null | undefined): string {
+    const left = Number(value);
+    const right = Number(total);
+    if (!Number.isFinite(left) || !Number.isFinite(right)) {
+      return '--';
+    }
+    return `${left}/${right}`;
+  }
+
   private extractExpressionTokens(expression: string): string[] {
     const matches = expression.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
     return matches.filter((item) => !EXPRESSION_RESERVED_WORDS.has(item));
@@ -1450,6 +2324,8 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     if (tab === 'journal' || (tab === 'strategy' && section === 'journal')) {
       this.selectedTab = 'journal';
       this.selectedStrategySection = 'journal';
+    } else if (tab === 'history') {
+      this.selectedTab = 'history';
     } else if (tab === 'strategy') {
       this.selectedTab = 'strategy';
     }
@@ -1613,7 +2489,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       symbol: item.symbol,
       classification,
       tradeSide,
-      entryPrice: tradeSide === 'buy' ? currentPrice : null,
+      entryPrice: currentPrice,
       exitPrice,
       stopLossPrice,
       takeProfitPrice,
@@ -1627,6 +2503,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
 
   private buildEmptyStrategyJournalRow(): StrategyJournalRow {
     return {
+      clientKey: this.nextClientRowKey('journal'),
       symbol: '',
       trade_date: new Date().toISOString().slice(0, 10),
       classification: 'swing',
@@ -1650,6 +2527,7 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
   private mapJournalEntryToRow(item: StrategyJournalEntry): StrategyJournalRow {
     return {
       id: item.id,
+      clientKey: item.id ? `journal-${item.id}` : this.nextClientRowKey('journal'),
       profileId: item.profileId ?? null,
       symbol: item.symbol || '',
       trade_date: item.tradeDate || new Date().toISOString().slice(0, 10),
@@ -1689,6 +2567,57 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       notes: suggestion.notes,
       mistake_tags_json: [],
       isNew: true,
+    };
+  }
+
+  private buildEmptyOrderStatementRow(): StrategyOrderStatementRow {
+    return {
+      clientKey: this.nextClientRowKey('statement'),
+      symbol: '',
+      trade_date: new Date().toISOString().slice(0, 10),
+      settlement_date: '',
+      trade_side: 'buy',
+      order_type: 'Buy',
+      channel: 'N',
+      quantity: null,
+      price: null,
+      gross_value: null,
+      fee: null,
+      tax: null,
+      transfer_fee: null,
+      net_amount: null,
+      broker_reference: '',
+      notes: '',
+      isNew: true,
+      isSaving: false,
+    };
+  }
+
+  private mapOrderStatementEntryToRow(item: StrategyOrderStatementEntry): StrategyOrderStatementRow {
+    return {
+      id: item.id,
+      clientKey: item.id ? `statement-${item.id}` : this.nextClientRowKey('statement'),
+      profileId: item.profileId ?? null,
+      journal_entry_id: item.journalEntryId ?? null,
+      symbol: item.symbol || '',
+      trade_date: item.tradeDate || new Date().toISOString().slice(0, 10),
+      settlement_date: item.settlementDate || '',
+      trade_side: item.tradeSide || 'buy',
+      order_type: item.orderType || (item.tradeSide === 'sell' ? 'Sell' : 'Buy'),
+      channel: item.channel || 'N',
+      quantity: item.quantity ?? null,
+      price: item.price ?? null,
+      gross_value: item.grossValue ?? null,
+      fee: item.fee ?? null,
+      tax: item.tax ?? null,
+      transfer_fee: item.transferFee ?? null,
+      net_amount: item.netAmount ?? null,
+      broker_reference: item.brokerReference || '',
+      notes: item.notes || '',
+      createdAt: item.createdAt ?? null,
+      updatedAt: item.updatedAt ?? null,
+      isSaving: false,
+      isNew: false,
     };
   }
 
@@ -1733,6 +2662,128 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     };
   }
 
+  private buildOrderStatementPayload(row: StrategyOrderStatementRow) {
+    return {
+      profile_id: this.activeStrategyProfileId,
+      journal_entry_id: row.journal_entry_id || null,
+      symbol: row.symbol.trim().toUpperCase(),
+      trade_date: row.trade_date || null,
+      settlement_date: row.settlement_date || null,
+      trade_side: row.trade_side,
+        order_type: this.resolveOrderStatementOrderType(row.trade_side),
+      channel: row.channel,
+      quantity: row.quantity,
+      price: row.price,
+      gross_value: this.computeOrderStatementGrossValue(row),
+      fee: row.fee,
+      tax: row.tax,
+      transfer_fee: row.transfer_fee,
+      net_amount: this.computeOrderStatementNetAmount(row),
+      broker_reference: row.broker_reference,
+      notes: row.notes,
+    };
+  }
+
+  private describeStrategyLedgerSaveError(
+    kind: 'journal' | 'statement',
+    symbol: string | null | undefined,
+    error: unknown
+  ): string {
+    const label = kind === 'statement' ? 'Sao ke khop lenh' : 'Entries';
+    const normalizedSymbol = String(symbol || '').trim().toUpperCase() || 'dong chua co ma';
+    const message = error instanceof Error && error.message?.trim()
+      ? error.message.trim()
+      : this.t(
+          kind === 'statement'
+            ? 'marketSettings.messages.saveOrderStatementFailedVerbose'
+            : 'marketSettings.messages.saveJournalFailedVerbose'
+        );
+    return `${label} (${normalizedSymbol}): ${message}`;
+  }
+
+  private extractApiErrorMessage(error: any, fallbackKey: string): string {
+    const detail = error?.error?.detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail.trim();
+    }
+    if (detail && typeof detail === 'object') {
+      const nested = detail.message || detail.error || detail.detail;
+      if (typeof nested === 'string' && nested.trim()) {
+        return nested.trim();
+      }
+    }
+    return this.t(fallbackKey);
+  }
+
+  private nextClientRowKey(prefix: 'journal' | 'statement'): string {
+    this.clientRowSequence += 1;
+    return `${prefix}-${Date.now()}-${this.clientRowSequence}`;
+  }
+
+  private rawNumberString(value: any): string {
+    if (value === null || value === undefined || value === '') {
+      return '';
+    }
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num}` : '';
+  }
+
+  private parseLooseNumber(rawValue: string): number | null {
+    const sanitized = String(rawValue || '')
+      .trim()
+      .replace(/\s+/g, '')
+      .replace(/[^\d,.-]/g, '');
+    if (!sanitized || sanitized === '-' || sanitized === ',' || sanitized === '.') {
+      return null;
+    }
+    const lastComma = sanitized.lastIndexOf(',');
+    const lastDot = sanitized.lastIndexOf('.');
+    const decimalIndex = Math.max(lastComma, lastDot);
+    let normalized = sanitized;
+    if (decimalIndex >= 0) {
+      const sign = normalized.startsWith('-') ? '-' : '';
+      const withoutSign = sign ? normalized.slice(1) : normalized;
+      const adjustedIndex = sign ? decimalIndex - 1 : decimalIndex;
+      const intPart = withoutSign.slice(0, adjustedIndex).replace(/[.,]/g, '');
+      const fracPart = withoutSign.slice(adjustedIndex + 1).replace(/[^\d]/g, '');
+      normalized = `${sign}${intPart}${fracPart ? `.${fracPart}` : ''}`;
+    } else {
+      normalized = normalized.replace(/[.,]/g, '');
+    }
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private getNumericDraft(row: object, field: string): string | undefined {
+    return this.numericEditDrafts.get(row)?.[field];
+  }
+
+  private setNumericDraft(row: object, field: string, value: string): void {
+    const current = this.numericEditDrafts.get(row) || {};
+    current[field] = value;
+    this.numericEditDrafts.set(row, current);
+  }
+
+  private getNumericEditingSet(row: object, create = false): Set<string> | undefined {
+    const existing = this.numericEditingFields.get(row);
+    if (existing || !create) {
+      return existing;
+    }
+    const created = new Set<string>();
+    this.numericEditingFields.set(row, created);
+    return created;
+  }
+
+  private isNumericFieldEditing(row: object, field: string): boolean {
+    return this.numericEditingFields.get(row)?.has(field) || false;
+  }
+
+  private addDaysToIsoDate(value: string, days: number): string {
+    const dt = new Date(value || new Date().toISOString().slice(0, 10));
+    dt.setDate(dt.getDate() + days);
+    return dt.toISOString().slice(0, 10);
+  }
+
   private preferredNumber(...values: Array<number | null | undefined>): number | null {
     for (const value of values) {
       if (typeof value === 'number' && isFinite(value)) {
@@ -1773,6 +2824,26 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       cacheDays: '30',
       syncMarketData: true,
       syncNewsData: true,
+      collectorQuotePollSeconds: '60',
+      collectorIntradayPollSeconds: '180',
+      collectorIndexDailyPollSeconds: '300',
+      collectorFinancialPollSeconds: '1800',
+      collectorNewsPollSeconds: '300',
+      collectorQuoteRequestsPerRun: '4',
+      collectorIntradayRequestsPerRun: '6',
+      collectorIntradayMaxConcurrency: '2',
+      collectorFinancialSymbolsPerRun: '20',
+      collectorIntradayBackfillIntervalSeconds: '300',
+      collectorIntradayBackfillRequestsPerRun: '12',
+      collectorFinancialBackfillIntervalSeconds: '600',
+      collectorFinancialBackfillSymbolsPerRun: '300',
+      collectorCashFlowBackfillIntervalSeconds: '900',
+      collectorCashFlowBackfillSymbolsPerRun: '60',
+      collectorQuoteSource: 'VCI',
+      collectorIntradaySource: 'VCI',
+      collectorIndexSource: 'VCI',
+      collectorFinancialSource: 'CAFEF',
+      collectorSymbolMasterSource: 'VCI',
       syncCloud: true,
       downloadOnWifiOnly: true,
       aiEnabled: true,
@@ -1785,6 +2856,15 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       aiTone: 'ngan gon',
       aiLocalAutoAnalysis: false,
       aiLocalFinancialAnalysis: false,
+      aiLocalModel: 'qwen3:8b',
+      workflowAutoEnabled: false,
+      workflowAutoExchangeScope: 'ALL',
+      workflowAutoTakeProfit: true,
+      workflowAutoCutLoss: true,
+      workflowAutoRebalance: true,
+      workflowAutoReviewPortfolio: false,
+      workflowAutoProbeBuy: false,
+      workflowAutoAddPosition: false,
       safeMode: true,
       biometricLogin: false,
       sessionTimeout: '30',
@@ -1792,9 +2872,32 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
     };
   }
 
+  private normalizeSettings(raw: MarketSettingsData | null | undefined): MarketSettingsData {
+    const defaults = this.buildEmptySettings();
+    const next = {
+      ...defaults,
+      ...(raw || {}),
+    } as MarketSettingsData;
+
+    next.collectorQuoteSource = this.normalizeSourceValue(next.collectorQuoteSource, defaults.collectorQuoteSource, ['VCI', 'KBS']);
+    next.collectorIntradaySource = this.normalizeSourceValue(next.collectorIntradaySource, defaults.collectorIntradaySource, ['VCI', 'KBS']);
+    next.collectorIndexSource = this.normalizeSourceValue(next.collectorIndexSource, defaults.collectorIndexSource, ['VCI', 'KBS']);
+    next.collectorFinancialSource = this.normalizeSourceValue(next.collectorFinancialSource, defaults.collectorFinancialSource, ['CAFEF', 'VCI', 'KBS']);
+    next.collectorSymbolMasterSource = this.normalizeSourceValue(next.collectorSymbolMasterSource, defaults.collectorSymbolMasterSource, ['VCI', 'KBS']);
+
+    return next;
+  }
+
+  private normalizeSourceValue(value: string | null | undefined, fallback: string, allowed: readonly string[]): string {
+    const normalized = String(value || '').trim().toUpperCase();
+    return allowed.includes(normalized) ? normalized : fallback;
+  }
+
   private buildEmptySyncStatus(): MarketSyncStatusData {
     const emptyJob = (): MarketSyncJobStatus => ({
       status: 'idle',
+      jobName: null,
+      health: 'idle',
       startedAt: null,
       finishedAt: null,
       message: null,
@@ -1803,15 +2906,44 @@ export class MarketSettingsPage implements OnInit, OnDestroy {
       remainingBatches: null,
       itemsInBatch: null,
       itemsResolved: null,
+      source: null,
+      coverageMode: null,
+      lastError: null,
+      lastErrorAt: null,
+      lastSuccessAt: null,
+      recoveredAt: null,
+      consecutiveFailures: 0,
+      ageSeconds: null,
     });
 
     return {
       quotes: emptyJob(),
       intraday: emptyJob(),
+      intradayBackfill: emptyJob(),
       indexDaily: emptyJob(),
       financial: emptyJob(),
+      financialBackfill: emptyJob(),
+      cashFlowBackfill: emptyJob(),
       seedSymbols: emptyJob(),
+      foundationCandles: emptyJob(),
+      foundationDataQuality: emptyJob(),
+      foundationAlerts: emptyJob(),
+      workflowAutomation: emptyJob(),
       news: emptyJob(),
+      coverage: {
+        latestIntradayDate: null,
+        all: {
+          exchange: 'ALL',
+          totalSymbols: 0,
+          intradaySymbols: 0,
+          intradayPct: 0,
+          financialSymbols: 0,
+          financialPct: 0,
+          cashFlowSymbols: 0,
+          cashFlowPct: 0,
+        },
+        byExchange: {},
+      },
       checkedAt: null,
     };
   }

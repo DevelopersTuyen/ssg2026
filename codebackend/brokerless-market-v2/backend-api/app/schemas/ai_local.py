@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.ai_agent import AiActivityItem, AiChatMessage, AiForecastCard, AiStatusItem
 
@@ -59,6 +59,8 @@ class AiLocalSymbolOutlook(BaseModel):
 
 
 class AiLocalOverviewResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     exchange: str
     provider: str
     model: str
@@ -82,6 +84,8 @@ class AiLocalOverviewResponse(BaseModel):
 
 
 class AiLocalChatResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     exchange: str
     provider: str
     model: str

@@ -813,11 +813,14 @@
   position: fixed;
   top: 50%;
   left: 50%;
+  right: auto;
   width: min(1120px, calc(100vw - 32px));
   max-height: calc(100vh - 40px);
   overflow: auto;
   transform: translate(-50%, -50%);
   z-index: 61;
+  box-sizing: border-box;
+  margin: 0;
   border-radius: 26px;
   border: 1px solid #dbe6f4;
   background:
@@ -825,6 +828,7 @@
     rgba(255, 255, 255, 0.98);
   box-shadow: 0 34px 80px rgba(15, 23, 42, 0.24);
   padding: 20px;
+  overscroll-behavior: contain;
 }
 
 .symbol-modal-head {
@@ -1027,6 +1031,7 @@
   .symbol-modal {
     width: calc(100vw - 16px);
     max-height: calc(100vh - 16px);
+    box-sizing: border-box;
   }
 }
 
@@ -1079,6 +1084,7 @@
     padding: 16px;
     width: calc(100vw - 12px);
     max-height: calc(100vh - 12px);
+    box-sizing: border-box;
   }
 
   .symbol-modal-head {

@@ -1,7 +1,9 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { AuthService } from '../core/services/auth.service';
+import { AppI18nService } from '../core/i18n/app-i18n.service';
 import { GlobalLoadState, PageLoadStateService } from '../core/services/page-load-state.service';
 
 const SIDEBAR_COLLAPSE_STORAGE_KEY = 'ssg2026:tabs-sidebar-collapsed';
@@ -49,7 +51,9 @@ export class TabsPage implements OnInit, OnDestroy {
 
   constructor(
     private auth: AuthService,
-    private pageLoadState: PageLoadStateService
+    private pageLoadState: PageLoadStateService,
+    private router: Router,
+    private i18n: AppI18nService
   ) {}
 
   ngOnInit(): void {
@@ -83,6 +87,16 @@ export class TabsPage implements OnInit, OnDestroy {
 
   get canViewPermissions(): boolean {
     return this.can('role-permissions.view');
+  }
+
+  logout(): void {
+    const confirmed = window.confirm(this.i18n.translate('settings.logoutConfirm'));
+    if (!confirmed) {
+      return;
+    }
+
+    this.auth.logout();
+    this.router.navigateByUrl('/login');
   }
 
   globalBadgeText(): string {

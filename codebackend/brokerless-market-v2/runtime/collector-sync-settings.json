@@ -1,0 +1,15 @@
+{
+  "quotePollSeconds": 60,
+  "intradayPollSeconds": 180,
+  "indexDailyPollSeconds": 300,
+  "financialPollSeconds": 1800,
+  "newsPollSeconds": 300,
+  "quoteRequestsPerRun": 4,
+  "intradayRequestsPerRun": 6,
+  "intradayMaxConcurrency": 2,
+  "financialSymbolsPerRun": 20,
+  "intradayBackfillIntervalSeconds": 300,
+  "intradayBackfillRequestsPerRun": 12,
+  "financialBackfillIntervalSeconds": 600,
+  "cashFlowBackfillIntervalSeconds": 900
+}

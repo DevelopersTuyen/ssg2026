@@ -1,105 +1,105 @@
 # Brokerless Market V2
 
-Dự án này tách làm 2 backend đúng theo mô hình anh đang muốn:
+Hệ thống gồm 2 backend chính:
 
-- **backend-collector**: lấy dữ liệu từ `vnstock`, chuẩn hoá rồi lưu PostgreSQL.
-- **backend-api**: đọc PostgreSQL và trả API cho frontend Ionic/Angular.
+- `backend-collector`: lấy dữ liệu thị trường, tin tức, tài chính và ghi vào PostgreSQL.
+- `backend-api`: đọc dữ liệu đã chuẩn hóa từ PostgreSQL rồi trả API cho frontend Ionic/Angular.
 
-> Lưu ý quan trọng
->
-> - Code này là bộ khung chạy được để anh bắt đầu nhanh.
-> - Thư viện `vnstock` thay đổi theo phiên bản và có thể yêu cầu API key. Một số hàm lấy dữ liệu có thể cần chỉnh nhẹ theo version thực tế anh cài.
-> - Project này ưu tiên **ổn định kiến trúc, DB, luồng collector và API nội bộ**. Những đoạn adapter `vnstock` đã viết theo hướng phòng thủ, có nhiều fallback.
+## Thành phần mặc định
 
-## 1. Cấu trúc thư mục
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
+- Backend API: `http://localhost:8000`
+- Collector: chạy nền, không mở cổng public
 
-```text
-brokerless-market-v2/
-├── docker-compose.yml
-├── .env.example
-├── README.md
-├── backend-collector/
-├── backend-api/
-└── docs/
-```
-
-## 2. Cài nhanh local
-
-### Chuẩn bị `.env`
-
-```bash
-cp .env.example .env
-```
-
-### Chạy bằng Docker
+## Chạy nhanh bằng Docker
 
 ```bash
 docker compose up --build
 ```
 
-Service mặc định:
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-- Backend API: `http://localhost:8000`
-- Collector: chạy nền, không mở port public
+## Chạy local không dùng Docker
 
-## 3. Chạy không dùng Docker
-
-### Backend collector
+### Collector
 
 ```bash
 cd backend-collector
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8001
+uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
 
-### Backend api
+### API
 
 ```bash
 cd backend-api
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-## 4. Luồng dữ liệu
+## Luồng dữ liệu
 
-### Collector
+Collector định kỳ:
 
-Collector định kỳ làm các việc sau:
+1. Seed danh sách mã.
+2. Đồng bộ quote snapshot.
+3. Đồng bộ intraday.
+4. Đồng bộ index daily.
+5. Đồng bộ tin tức và báo cáo tài chính.
+6. Ghi log vào `market_sync_logs`.
 
-1. Seed danh sách mã từ biến môi trường.
-2. Lấy bảng giá snapshot theo watchlist cho từng sàn.
-3. Lấy intraday cho các mã ưu tiên.
-4. Lấy lịch sử daily cho chỉ số `VNINDEX`, `HNXINDEX`, `UPCOMINDEX`.
-5. Ghi log đồng bộ vào `market_sync_logs`.
+API chỉ đọc DB và phục vụ cho frontend:
 
-### API
+- `/api/dashboard/*`
+- `/api/live/*`
+- `/api/market-alerts/*`
+- `/api/ai-agent/*`
+- `/api/ai-local/*`
+- `/api/strategy/*`
+- `/api/settings/*`
 
-API chỉ đọc DB:
+## Runtime config cho frontend
 
-- `/api/dashboard/index-cards`
-- `/api/dashboard/top-stocks?exchange=HSX&sort=actives`
-- `/api/market/symbols/FPT/quote`
-- `/api/market/symbols/FPT/intraday`
-- `/api/market/indices/VNINDEX/history?period=1M`
+Frontend ưu tiên đọc API base URL từ file runtime:
 
-## 5. Biến môi trường quan trọng
+`src/assets/app-config.json`
 
-- `DATABASE_URL`
-- `REDIS_URL`
-- `VNSTOCK_API_KEY`
-- `VNSTOCK_SOURCE`
-- `HSX_SYMBOLS`
-- `HNX_SYMBOLS`
-- `UPCOM_SYMBOLS`
-- `INTRADAY_SYMBOLS`
+Ví dụ:
 
-## 6. Lưu ý triển khai thật
+```json
+{
+  "apiBaseUrl": "http://14.224.134.120:8000"
+}
+```
 
-- Nếu anh muốn quét **toàn thị trường**, không chỉ watchlist, hãy thay phần seed symbols bằng danh sách đầy đủ từ source thật.
-- Nếu anh muốn chart index intraday realtime kiểu bảng điện, cần xác nhận source `vnstock` version anh dùng có hỗ trợ ổn định cho index intraday hay không.
-- Redis trong project này đang là lớp cache hỗ trợ; nếu chưa dùng Redis thì API vẫn chạy được.
+Thứ tự ưu tiên:
+
+1. `window.__APP_CONFIG__`
+2. `assets/app-config.json`
+3. `src/environments/environment*.ts`
+
+Nhờ vậy khi đổi server API, bạn có thể sửa runtime config mà không cần rebuild lại toàn bộ frontend.
+
+## CORS
+
+Backend API đọc danh sách origin từ biến môi trường:
+
+`CORS_ALLOW_ORIGINS`
+
+Ví dụ:
+
+```env
+CORS_ALLOW_ORIGINS=http://localhost:8100,http://127.0.0.1:8100,http://14.224.134.120:8100,http://14.224.134.120:8000,http://14.224.134.120,capacitor://localhost,ionic://localhost
+```
+
+## Ghi chú triển khai
+
+- Nếu cần public backend ra ngoài, phải chạy bằng `--host 0.0.0.0`.
+- Nếu frontend trỏ đúng URL nhưng không vào được, kiểm tra:
+  - process backend có đang chạy không
+  - firewall/security group có mở cổng `8000` không
+  - reverse proxy có chuyển tiếp đúng không
+- Redis là lớp cache hỗ trợ. Không có Redis thì hệ thống vẫn chạy, nhưng chậm hơn.

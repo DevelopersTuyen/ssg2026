@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subject, Subscription, forkJoin } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import { BackgroundRefreshService } from 'src/app/core/services/background-refresh.service';
 import { PageLoadStateService } from 'src/app/core/services/page-load-state.service';
 
@@ -24,7 +25,8 @@ import {
   MarketApiService,
 } from 'src/app/core/services/market-api.service';
 
-type StrategyTab = 'overview' | 'screener' | 'scoring' | 'risk';
+type StrategyTab = 'overview' | 'screener' | 'scoring' | 'risk' | 'settings';
+type StrategyLoadSection = 'profiles' | 'config' | 'scoring' | 'screener' | 'risk' | 'journal' | 'dataQuality';
 type StrategyConfigEntity = StrategyFormula | StrategyScreenRule | StrategyAlertRule | StrategyChecklistItem;
 type StrategySettingsSection = 'profiles' | 'formulas' | 'screenRules' | 'alertRules' | 'checklists' | 'versions';
 type StrategyRuleModalMode = 'passFail' | 'triggerOk' | 'mixed';
@@ -253,6 +255,16 @@ EXPRESSION_VARIABLE_ORDER.splice(
 })
 export class StrategyHubPage implements OnInit, OnDestroy {
   private readonly pageLoadKey = 'strategy-hub';
+  private readonly sectionLoadedAt: Partial<Record<StrategyLoadSection, number>> = {};
+  private readonly sectionMaxAgeMs: Record<StrategyLoadSection, number> = {
+    profiles: 300000,
+    config: 300000,
+    scoring: 20000,
+    screener: 20000,
+    risk: 20000,
+    journal: 30000,
+    dataQuality: 45000,
+  };
   readonly expressionOperatorGroups = EXPRESSION_OPERATOR_GROUPS;
   selectedTab: StrategyTab = 'scoring';
   selectedSettingsSection: StrategySettingsSection = 'formulas';
@@ -321,12 +333,19 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   private scoringSub?: Subscription;
   private scoringKeywordSub?: Subscription;
   private readonly scoringKeywordChanges = new Subject<string>();
+  private readonly decimal = new Intl.NumberFormat('vi-VN', {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  });
   private cachedAllScoringFirstPage: StrategyPagedResponse | null = null;
   private activeView = false;
+  private loadedConfigProfileId: number | null = null;
+  private loadingConfigProfileId: number | null = null;
 
   constructor(
     private api: MarketApiService,
     private router: Router,
+    private i18n: AppI18nService,
     private backgroundRefresh: BackgroundRefreshService,
     private pageLoadState: PageLoadStateService
   ) {}
@@ -340,8 +359,8 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     this.backgroundSub = this.backgroundRefresh.changes$.subscribe((domains) => {
       if (!this.activeView || !this.activeProfileId) return;
       if (domains.some((item) => ['quotes', 'intraday', 'news', 'financial', 'seedSymbols'].includes(item))) {
-        this.loadDataQualityIssues();
-        this.refreshActiveTabData(true);
+        this.loadDataQualityIssues(true);
+        this.refreshActiveTabData(true, true);
       }
     });
     this.loadOverview();
@@ -351,6 +370,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   ionViewDidEnter(): void {
     this.activeView = true;
     this.pageLoadState.setActivePage(this.pageLoadKey);
+    this.loadDataQualityIssues();
     if (this.activeProfileId && !this.pageLoadState.isLoading(this.pageLoadKey) && !this.pageLoadState.isFresh(this.pageLoadKey, 15000)) {
       this.refreshActiveTabData(true);
     }
@@ -364,6 +384,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     this.backgroundSub?.unsubscribe();
     this.scoringSub?.unsubscribe();
     this.scoringKeywordSub?.unsubscribe();
+  }
+
+  private t(key: string): string {
+    return this.i18n.translate(key);
   }
 
   private hasDetailedScoreItem(item: StrategyScoredItem | null | undefined): boolean {
@@ -384,10 +408,14 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     return this.enabledFormulas.map((item) => item.label);
   }
 
-  loadDataQualityIssues(): void {
+  loadDataQualityIssues(force = false): void {
+    if (!force && this.dataQualityIssues.length && this.isSectionFresh('dataQuality')) {
+      return;
+    }
     this.api.getDataQualityIssues(120).subscribe({
       next: (response) => {
         this.dataQualityIssues = response.data || [];
+        this.markSectionLoaded('dataQuality');
       },
       error: () => {
         this.dataQualityIssues = [];
@@ -425,6 +453,21 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       return 0;
     }
     return Math.min((this.rankings.page || this.scoringPage) * this.scoringPageSize, this.rankings.total);
+  }
+
+  getScreenerSummaryLabel(): string {
+    if (!this.screener?.summary) {
+      return '';
+    }
+    return `${this.t('strategyHub.screener.passed')} ${this.screener.summary.passed}/${this.screener.summary.total} ${this.t('strategyHub.screener.symbolUnit')} · ${this.decimal.format(this.screener.summary.passRate)}%`;
+  }
+
+  getScoringPaginationSummary(): string {
+    return `${this.t('strategyHub.scoring.showing')} ${this.scoringStartIndex}-${this.scoringEndIndex} / ${this.rankings?.total || 0} ${this.t('strategyHub.scoring.symbolUnit')}`;
+  }
+
+  getScoringPageLabel(): string {
+    return `${this.t('strategyHub.scoring.page')} ${this.scoringPage} / ${this.scoringTotalPages}`;
   }
 
   get selectableScoringFormulas(): StrategyFormula[] {
@@ -591,7 +634,14 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     }
   }
 
-  loadOverview(): void {
+  loadOverview(force = false): void {
+    if (!force && this.profiles.length && this.activeProfileId && this.isSectionFresh('profiles')) {
+      this.ensureProfileConfigLoaded(this.activeProfileId);
+      if (!this.rankings) {
+        this.reloadScoring(1, true, true);
+      }
+      return;
+    }
     this.loading = true;
     this.pageLoadState.start(this.pageLoadKey);
     this.error = '';
@@ -612,14 +662,15 @@ export class StrategyHubPage implements OnInit, OnDestroy {
           profiles.find((item) => item.isDefault)?.id ||
           profiles.find((item) => item.isActive)?.id ||
           profiles[0].id;
+        this.markSectionLoaded('profiles');
         this.pageLoadState.setProgress(this.pageLoadKey, 45);
         this.screener = null;
         this.risk = null;
         this.journal = [];
         this.overview = this.buildLightOverview(this.profiles, this.config, this.rankings);
         this.loading = false;
-        this.loadConfig(this.activeProfileId!);
-        this.reloadScoring();
+        this.loadConfig(this.activeProfileId!, true);
+        this.reloadScoring(1, false, true);
         return;
 
         forkJoin({
@@ -663,26 +714,43 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   onProfileChange(): void {
     if (!this.activeProfileId) return;
     this.config = null;
+    this.loadedConfigProfileId = null;
     this.selectedScoreItem = null;
     this.cachedAllScoringFirstPage = null;
-    this.loadOverview();
+    this.loadOverview(true);
   }
 
-  loadConfig(profileId: number): void {
+  loadConfig(profileId: number, force = false): void {
+    if (!force && this.loadedConfigProfileId === profileId && this.config && this.isSectionFresh('config')) {
+      return;
+    }
+    if (this.loadingConfigProfileId === profileId) {
+      return;
+    }
+    this.loadingConfigProfileId = profileId;
     this.pageLoadState.startBackground(this.pageLoadKey);
     this.api.getStrategyProfileConfig(profileId).subscribe({
       next: (response) => {
         this.config = response.data || null;
+        this.loadedConfigProfileId = response.data ? profileId : null;
+        this.loadingConfigProfileId = null;
         this.ensureScoringFormulaSelection();
         this.ensureSettingsExpansion();
+        this.markSectionLoaded('config');
         this.pageLoadState.finish(this.pageLoadKey);
       },
-      error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được cấu hình strategy.'),
+      error: () => {
+        this.loadingConfigProfileId = null;
+        this.pageLoadState.fail(this.pageLoadKey, 'Không tải được cấu hình strategy.');
+      },
     });
   }
 
-  reloadScoring(page = this.scoringPage, background = false): void {
+  reloadScoring(page = this.scoringPage, background = false, force = false): void {
     if (!this.activeProfileId) return;
+    if (!force && page === this.scoringPage && this.rankings && this.hasDetailedRankings(this.rankings) && this.isSectionFresh('scoring')) {
+      return;
+    }
     this.scoringPage = Math.max(1, page);
     if (background) {
       this.pageLoadState.startBackground(this.pageLoadKey);
@@ -706,6 +774,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
           this.overview = this.buildLightOverview(this.profiles, this.config, this.rankings);
           this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
           this.rememberAllScoringFirstPage();
+          this.markSectionLoaded('scoring');
           this.pageLoadState.finish(this.pageLoadKey);
         },
         error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được dữ liệu scoring.'),
@@ -777,8 +846,11 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     this.reloadScoring(this.scoringPage + 1);
   }
 
-  reloadScreener(): void {
+  reloadScreener(force = false): void {
     if (!this.activeProfileId) return;
+    if (!force && this.screener && this.isSectionFresh('screener')) {
+      return;
+    }
     this.pageLoadState.start(this.pageLoadKey);
     this.api
       .runStrategyScreener({
@@ -792,42 +864,51 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       .subscribe({
         next: (response) => {
           this.screener = response.data || null;
+          this.markSectionLoaded('screener');
           this.pageLoadState.finish(this.pageLoadKey);
         },
         error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được dữ liệu screener.'),
       });
   }
 
-  reloadRisk(): void {
+  reloadRisk(force = false): void {
     if (!this.activeProfileId) return;
+    if (!force && this.risk && this.isSectionFresh('risk')) {
+      return;
+    }
     this.pageLoadState.start(this.pageLoadKey);
     this.api.getStrategyRiskOverview(this.activeProfileId).subscribe({
       next: (response) => {
         this.risk = response.data || null;
+        this.markSectionLoaded('risk');
         this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được dữ liệu risk.'),
     });
   }
 
-  reloadJournal(): void {
+  reloadJournal(force = false): void {
+    if (!force && this.journal.length && this.isSectionFresh('journal')) {
+      return;
+    }
     this.pageLoadState.startBackground(this.pageLoadKey);
     this.api.listStrategyJournal(12).subscribe({
       next: (response) => {
         this.journal = response.data || [];
+        this.markSectionLoaded('journal');
         this.pageLoadState.finish(this.pageLoadKey);
       },
       error: () => this.pageLoadState.fail(this.pageLoadKey, 'Không tải được nhật ký giao dịch.'),
     });
   }
 
-  refreshData(silent = false): void {
+  refreshData(silent = false, force = false): void {
     if (!this.activeProfileId || this.selectedTab === 'overview') {
-      this.loadOverview();
+      this.loadOverview(force);
       return;
     }
 
-    this.refreshActiveTabData(silent);
+    this.refreshActiveTabData(silent, force);
     return;
 
     if (!silent) {
@@ -929,10 +1010,19 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   }
 
   private ensureProfileConfigLoaded(profileId: number, force = false): void {
-    if (!force && this.config?.profile?.id === profileId) {
+    if (!force && this.loadedConfigProfileId === profileId && this.config && this.isSectionFresh('config')) {
       return;
     }
-    this.loadConfig(profileId);
+    this.loadConfig(profileId, force);
+  }
+
+  private markSectionLoaded(section: StrategyLoadSection): void {
+    this.sectionLoadedAt[section] = Date.now();
+  }
+
+  private isSectionFresh(section: StrategyLoadSection, maxAgeMs = this.sectionMaxAgeMs[section]): boolean {
+    const loadedAt = this.sectionLoadedAt[section];
+    return typeof loadedAt === 'number' && Date.now() - loadedAt <= maxAgeMs;
   }
 
   openSymbolDetail(symbol: string, event?: Event): void {
@@ -1167,6 +1257,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
             fairValue: this.selectedScoreItem.fairValue,
             marginOfSafety: this.selectedScoreItem.marginOfSafety,
             executionPlan: this.selectedScoreItem.executionPlan,
+            formulaVerdict: this.selectedScoreItem.formulaVerdict,
           }
         : undefined,
     };
@@ -1256,9 +1347,9 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     };
   }
 
-  private refreshActiveTabData(silent = false): void {
+  private refreshActiveTabData(silent = false, force = false): void {
     if (!this.activeProfileId) {
-      this.loadOverview();
+      this.loadOverview(force);
       return;
     }
 
@@ -1275,6 +1366,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
     switch (this.selectedTab) {
       case 'overview':
+        if (!force && this.isSectionFresh('profiles', 20000)) {
+          complete();
+          return;
+        }
         this.api.getStrategyOverview(this.activeProfileId).subscribe({
           next: (response) => {
             if (response.data) {
@@ -1289,6 +1384,11 @@ export class StrategyHubPage implements OnInit, OnDestroy {
                 this.ensureProfileConfigLoaded(this.activeProfileId);
               }
               this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+              this.markSectionLoaded('profiles');
+              this.markSectionLoaded('scoring');
+              this.markSectionLoaded('screener');
+              this.markSectionLoaded('risk');
+              this.markSectionLoaded('journal');
             }
             complete();
           },
@@ -1299,6 +1399,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
         });
         return;
       case 'scoring':
+        if (!force && this.rankings && this.isSectionFresh('scoring')) {
+          complete();
+          return;
+        }
         this.api
           .getStrategyRankings({
             profileId: this.activeProfileId,
@@ -1314,6 +1418,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
               this.scoringPage = this.rankings?.page || this.scoringPage;
               this.overview = this.buildLightOverview(this.profiles, this.config, this.rankings);
               this.syncSelectedScoreItem(this.rankings, this.selectedScoreItem?.symbol, true);
+              this.markSectionLoaded('scoring');
               complete();
             },
             error: () => {
@@ -1323,6 +1428,10 @@ export class StrategyHubPage implements OnInit, OnDestroy {
           });
         return;
       case 'screener':
+        if (!force && this.screener && this.isSectionFresh('screener')) {
+          complete();
+          return;
+        }
         this.api
           .runStrategyScreener({
             profileId: this.activeProfileId,
@@ -1335,6 +1444,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
           .subscribe({
             next: (response) => {
               this.screener = response.data || this.screener;
+              this.markSectionLoaded('screener');
               complete();
             },
             error: () => {
@@ -1344,9 +1454,14 @@ export class StrategyHubPage implements OnInit, OnDestroy {
           });
         return;
       case 'risk':
+        if (!force && this.risk && this.isSectionFresh('risk')) {
+          complete();
+          return;
+        }
         this.api.getStrategyRiskOverview(this.activeProfileId).subscribe({
           next: (response) => {
             this.risk = response.data || this.risk;
+            this.markSectionLoaded('risk');
             complete();
           },
           error: () => {
@@ -1356,9 +1471,14 @@ export class StrategyHubPage implements OnInit, OnDestroy {
         });
         return;
       default:
+        if (!force && this.journal.length && this.isSectionFresh('journal')) {
+          complete();
+          return;
+        }
         this.api.listStrategyJournal(12).subscribe({
           next: (response) => {
             this.journal = response.data || this.journal;
+            this.markSectionLoaded('journal');
             complete();
           },
           error: () => {
@@ -2174,6 +2294,8 @@ export class StrategyHubPage implements OnInit, OnDestroy {
 
     const primaryCandle = this.getPrimaryCandlestickSignal(item);
     const reasons = [
+      item.formulaVerdict?.headline ? `Formula verdict: ${item.formulaVerdict.headline}.` : '',
+      item.formulaVerdict?.summary || '',
       `Winning Score ${item.winningScore.toFixed(2)} theo profile hiện tại.`,
       volume?.smartMoneyInflow ? 'Smart Money Inflow đang bật.' : 'Smart Money Inflow chưa xác nhận.',
       primaryCandle !== 'strategyHub.state.none' ? `Mẫu nến chính: ${primaryCandle}.` : 'Chưa có mẫu nến chính nổi bật.',
@@ -2207,7 +2329,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
       symbol: item.symbol,
       classification,
       tradeSide,
-      entryPrice: tradeSide === 'buy' ? currentPrice : null,
+      entryPrice: currentPrice,
       exitPrice,
       stopLossPrice,
       takeProfitPrice,

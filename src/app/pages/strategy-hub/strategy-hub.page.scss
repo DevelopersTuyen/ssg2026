@@ -4,6 +4,18 @@
   height: 100%;
 }
 
+.defer-placeholder {
+  display: grid;
+  gap: 0.35rem;
+  min-height: 10rem;
+  align-content: center;
+  justify-items: start;
+  padding: 1.25rem;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.03);
+}
+
 .strategy-shell {
   height: 100dvh;
   max-height: 100dvh;
@@ -131,18 +143,18 @@
 }
 
 .status-pill.loading {
-  background: #e0f2fe;
-  color: #0f4c81;
+  background: var(--app-tone-neutral-bg);
+  color: var(--app-tone-neutral-text);
 }
 
 .status-pill.success {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--app-tone-positive-bg);
+  color: var(--app-tone-positive-text);
 }
 
 .status-pill.error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--app-tone-danger-bg);
+  color: var(--app-tone-danger-text);
 }
 
 .overview-grid,
@@ -661,19 +673,19 @@
 .status-chip {
   border-radius: 999px;
   padding: 8px 12px;
-  background: #e5e7eb;
-  color: #374151;
+  background: var(--app-tone-neutral-bg-strong);
+  color: var(--app-tone-neutral-text);
   font-weight: 700;
 }
 
 .status-chip.pass {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--app-tone-positive-bg);
+  color: var(--app-tone-positive-text);
 }
 
 .status-chip.risk {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--app-tone-danger-bg);
+  color: var(--app-tone-danger-text);
 }
 
 .table-shell {
@@ -911,20 +923,20 @@
 }
 
 .symbol-status.symbol-good {
-  color: #166534;
+  color: var(--app-tone-positive-text);
 }
 
 .symbol-status.symbol-bad {
-  color: #991b1b;
+  color: var(--app-tone-danger-text);
 }
 
 .symbol-status.symbol-watch {
-  color: #92400e;
+  color: var(--app-tone-warning-text);
 }
 
 .data-quality-inline {
   margin-top: 2px;
-  color: #b45309;
+  color: var(--app-tone-warning-text);
   font-size: 10px;
   font-weight: 800;
   line-height: 1.15;
@@ -942,15 +954,15 @@
 }
 
 .metric-good {
-  color: #166534;
+  color: var(--app-tone-positive-text);
 }
 
 .metric-bad {
-  color: #991b1b;
+  color: var(--app-tone-danger-text);
 }
 
 .metric-watch {
-  color: #92400e;
+  color: var(--app-tone-warning-text);
 }
 
 .metric-info {
@@ -2040,4 +2052,230 @@
   .score-detail-panel .detail-metric-grid {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+:host-context(html[data-theme-mode='dark']) .strategy-content,
+:host-context(body[data-theme-mode='dark']) .strategy-content {
+  --background: linear-gradient(180deg, #07111b 0%, #0b1623 100%);
+}
+
+:host-context(html[data-theme-mode='dark']) .strategy-shell,
+:host-context(body[data-theme-mode='dark']) .strategy-shell {
+  color: #cad7e6;
+}
+
+:host-context(html[data-theme-mode='dark']) .hero-select,
+:host-context(body[data-theme-mode='dark']) .hero-select,
+:host-context(html[data-theme-mode='dark']) .toolbar-select,
+:host-context(body[data-theme-mode='dark']) .toolbar-select,
+:host-context(html[data-theme-mode='dark']) .toolbar-input,
+:host-context(body[data-theme-mode='dark']) .toolbar-input,
+:host-context(html[data-theme-mode='dark']) .form-control,
+:host-context(body[data-theme-mode='dark']) .form-control,
+:host-context(html[data-theme-mode='dark']) .form-select,
+:host-context(body[data-theme-mode='dark']) .form-select,
+:host-context(html[data-theme-mode='dark']) .toolbar-checkbox,
+:host-context(body[data-theme-mode='dark']) .toolbar-checkbox,
+:host-context(html[data-theme-mode='dark']) .pagination-btn,
+:host-context(body[data-theme-mode='dark']) .pagination-btn,
+:host-context(html[data-theme-mode='dark']) .builder-chip,
+:host-context(body[data-theme-mode='dark']) .builder-chip,
+:host-context(html[data-theme-mode='dark']) .builder-search,
+:host-context(body[data-theme-mode='dark']) .builder-search,
+:host-context(html[data-theme-mode='dark']) .rule-modal-close,
+:host-context(body[data-theme-mode='dark']) .rule-modal-close {
+  border-color: #2a3b52;
+  background: #0b1522;
+  color: #e5eefb;
+}
+
+:host-context(html[data-theme-mode='dark']) .btn-light,
+:host-context(body[data-theme-mode='dark']) .btn-light {
+  background: #142235;
+  color: #bfdbfe;
+}
+
+:host-context(html[data-theme-mode='dark']) .btn-primary,
+:host-context(body[data-theme-mode='dark']) .btn-primary {
+  background: #1f3b5b;
+}
+
+:host-context(html[data-theme-mode='dark']) .applied-state-card,
+:host-context(body[data-theme-mode='dark']) .applied-state-card,
+:host-context(html[data-theme-mode='dark']) .overview-card,
+:host-context(body[data-theme-mode='dark']) .overview-card,
+:host-context(html[data-theme-mode='dark']) .driver-card,
+:host-context(body[data-theme-mode='dark']) .driver-card,
+:host-context(html[data-theme-mode='dark']) .panel,
+:host-context(body[data-theme-mode='dark']) .panel,
+:host-context(html[data-theme-mode='dark']) .formula-metric,
+:host-context(body[data-theme-mode='dark']) .formula-metric,
+:host-context(html[data-theme-mode='dark']) .detail-card,
+:host-context(body[data-theme-mode='dark']) .detail-card,
+:host-context(html[data-theme-mode='dark']) .detail-metric,
+:host-context(body[data-theme-mode='dark']) .detail-metric,
+:host-context(html[data-theme-mode='dark']) .score-row,
+:host-context(body[data-theme-mode='dark']) .score-row,
+:host-context(html[data-theme-mode='dark']) .profile-pill,
+:host-context(body[data-theme-mode='dark']) .profile-pill,
+:host-context(html[data-theme-mode='dark']) .rule-item,
+:host-context(body[data-theme-mode='dark']) .rule-item,
+:host-context(html[data-theme-mode='dark']) .journal-item,
+:host-context(body[data-theme-mode='dark']) .journal-item,
+:host-context(html[data-theme-mode='dark']) .version-row,
+:host-context(body[data-theme-mode='dark']) .version-row,
+:host-context(html[data-theme-mode='dark']) .settings-nav-item,
+:host-context(body[data-theme-mode='dark']) .settings-nav-item,
+:host-context(html[data-theme-mode='dark']) .config-card,
+:host-context(body[data-theme-mode='dark']) .config-card,
+:host-context(html[data-theme-mode='dark']) .expression-builder,
+:host-context(body[data-theme-mode='dark']) .expression-builder,
+:host-context(html[data-theme-mode='dark']) .formula-readable,
+:host-context(body[data-theme-mode='dark']) .formula-readable,
+:host-context(html[data-theme-mode='dark']) .variable-help,
+:host-context(body[data-theme-mode='dark']) .variable-help,
+:host-context(html[data-theme-mode='dark']) .variable-item,
+:host-context(body[data-theme-mode='dark']) .variable-item,
+:host-context(html[data-theme-mode='dark']) .parameter-item,
+:host-context(body[data-theme-mode='dark']) .parameter-item,
+:host-context(html[data-theme-mode='dark']) .breakdown-card,
+:host-context(body[data-theme-mode='dark']) .breakdown-card,
+:host-context(html[data-theme-mode='dark']) .rule-group-clickable,
+:host-context(body[data-theme-mode='dark']) .rule-group-clickable,
+:host-context(html[data-theme-mode='dark']) .rule-modal,
+:host-context(body[data-theme-mode='dark']) .rule-modal,
+:host-context(html[data-theme-mode='dark']) .rule-modal-column,
+:host-context(body[data-theme-mode='dark']) .rule-modal-column,
+:host-context(html[data-theme-mode='dark']) .rule-modal-item {
+  border-color: #253549;
+  background: #111c2b;
+  color: #cad7e6;
+  box-shadow: 0 18px 40px rgba(2, 6, 15, 0.22);
+}
+
+:host-context(html[data-theme-mode='dark']) .panel-title,
+:host-context(body[data-theme-mode='dark']) .panel-title,
+:host-context(html[data-theme-mode='dark']) .symbol-score,
+:host-context(body[data-theme-mode='dark']) .symbol-score,
+:host-context(html[data-theme-mode='dark']) .overview-card strong,
+:host-context(body[data-theme-mode='dark']) .overview-card strong,
+:host-context(html[data-theme-mode='dark']) .driver-card strong,
+:host-context(body[data-theme-mode='dark']) .driver-card strong,
+:host-context(html[data-theme-mode='dark']) .formula-metric strong,
+:host-context(body[data-theme-mode='dark']) .formula-metric strong,
+:host-context(html[data-theme-mode='dark']) .detail-card-head h4,
+:host-context(body[data-theme-mode='dark']) .detail-card-head h4,
+:host-context(html[data-theme-mode='dark']) .detail-metric strong,
+:host-context(body[data-theme-mode='dark']) .detail-metric strong,
+:host-context(html[data-theme-mode='dark']) .score-row strong,
+:host-context(body[data-theme-mode='dark']) .score-row strong,
+:host-context(html[data-theme-mode='dark']) .settings-panel h3,
+:host-context(body[data-theme-mode='dark']) .settings-panel h3,
+:host-context(html[data-theme-mode='dark']) .config-toggle strong,
+:host-context(body[data-theme-mode='dark']) .config-toggle strong,
+:host-context(html[data-theme-mode='dark']) .builder-title,
+:host-context(body[data-theme-mode='dark']) .builder-title,
+:host-context(html[data-theme-mode='dark']) .variable-help-title,
+:host-context(body[data-theme-mode='dark']) .variable-help-title,
+:host-context(html[data-theme-mode='dark']) .breakdown-card strong,
+:host-context(body[data-theme-mode='dark']) .breakdown-card strong,
+:host-context(html[data-theme-mode='dark']) .rule-modal-head h3,
+:host-context(body[data-theme-mode='dark']) .rule-modal-head h3,
+:host-context(html[data-theme-mode='dark']) .rule-modal-column-title strong,
+:host-context(body[data-theme-mode='dark']) .rule-modal-column-title strong,
+:host-context(html[data-theme-mode='dark']) .rule-modal-item-title strong,
+:host-context(body[data-theme-mode='dark']) .rule-modal-item-title strong {
+  color: #f8fbff;
+}
+
+:host-context(html[data-theme-mode='dark']) .panel-subtitle,
+:host-context(body[data-theme-mode='dark']) .panel-subtitle,
+:host-context(html[data-theme-mode='dark']) .applied-state-card span,
+:host-context(body[data-theme-mode='dark']) .applied-state-card span,
+:host-context(html[data-theme-mode='dark']) .applied-state-card small,
+:host-context(body[data-theme-mode='dark']) .applied-state-card small,
+:host-context(html[data-theme-mode='dark']) .overview-card span,
+:host-context(body[data-theme-mode='dark']) .overview-card span,
+:host-context(html[data-theme-mode='dark']) .driver-card span,
+:host-context(body[data-theme-mode='dark']) .driver-card span,
+:host-context(html[data-theme-mode='dark']) .driver-card small,
+:host-context(body[data-theme-mode='dark']) .driver-card small,
+:host-context(html[data-theme-mode='dark']) .formula-metric span,
+:host-context(body[data-theme-mode='dark']) .formula-metric span,
+:host-context(html[data-theme-mode='dark']) .formula-metric small,
+:host-context(body[data-theme-mode='dark']) .formula-metric small,
+:host-context(html[data-theme-mode='dark']) .decision-item p,
+:host-context(body[data-theme-mode='dark']) .decision-item p,
+:host-context(html[data-theme-mode='dark']) .data-table th,
+:host-context(body[data-theme-mode='dark']) .data-table th,
+:host-context(html[data-theme-mode='dark']) .data-table td,
+:host-context(body[data-theme-mode='dark']) .data-table td,
+:host-context(html[data-theme-mode='dark']) .parameter-meta,
+:host-context(body[data-theme-mode='dark']) .parameter-meta,
+:host-context(html[data-theme-mode='dark']) .parameter-item label,
+:host-context(body[data-theme-mode='dark']) .parameter-item label,
+:host-context(html[data-theme-mode='dark']) .form-item label,
+:host-context(body[data-theme-mode='dark']) .form-item label,
+:host-context(html[data-theme-mode='dark']) .builder-help,
+:host-context(body[data-theme-mode='dark']) .builder-help,
+:host-context(html[data-theme-mode='dark']) .builder-chip.variable small,
+:host-context(body[data-theme-mode='dark']) .builder-chip.variable small,
+:host-context(html[data-theme-mode='dark']) .formula-readable span,
+:host-context(body[data-theme-mode='dark']) .formula-readable span,
+:host-context(html[data-theme-mode='dark']) .variable-item small,
+:host-context(body[data-theme-mode='dark']) .variable-item small,
+:host-context(html[data-theme-mode='dark']) .journal-meta-row,
+:host-context(body[data-theme-mode='dark']) .journal-meta-row,
+:host-context(html[data-theme-mode='dark']) .journal-psychology,
+:host-context(body[data-theme-mode='dark']) .journal-psychology,
+:host-context(html[data-theme-mode='dark']) .rule-modal-head span,
+:host-context(body[data-theme-mode='dark']) .rule-modal-head span,
+:host-context(html[data-theme-mode='dark']) .rule-modal-item p,
+:host-context(body[data-theme-mode='dark']) .rule-modal-item p,
+:host-context(html[data-theme-mode='dark']) .rule-modal-empty,
+:host-context(body[data-theme-mode='dark']) .rule-modal-empty {
+  color: #98abc3;
+}
+
+:host-context(html[data-theme-mode='dark']) .strategy-tab,
+:host-context(body[data-theme-mode='dark']) .strategy-tab {
+  background: #152335;
+  color: #cad7e6;
+}
+
+:host-context(html[data-theme-mode='dark']) .strategy-tab.active,
+:host-context(body[data-theme-mode='dark']) .strategy-tab.active,
+:host-context(html[data-theme-mode='dark']) .settings-nav-item.active,
+:host-context(body[data-theme-mode='dark']) .settings-nav-item.active,
+:host-context(html[data-theme-mode='dark']) .formula-column-chip.active,
+:host-context(body[data-theme-mode='dark']) .formula-column-chip.active {
+  background: #1f3b5b;
+  border-color: #1f3b5b;
+  color: #fff;
+}
+
+:host-context(html[data-theme-mode='dark']) .score-detail-panel .panel-header,
+:host-context(body[data-theme-mode='dark']) .score-detail-panel .panel-header,
+:host-context(html[data-theme-mode='dark']) .rule-modal-head,
+:host-context(body[data-theme-mode='dark']) .rule-modal-head {
+  background: rgba(10, 18, 30, 0.94);
+  border-color: #253549;
+}
+
+:host-context(html[data-theme-mode='dark']) .scoring-table-shell,
+:host-context(body[data-theme-mode='dark']) .scoring-table-shell {
+  border-color: #253549;
+}
+
+:host-context(html[data-theme-mode='dark']) .scoring-table-shell .data-table thead th,
+:host-context(body[data-theme-mode='dark']) .scoring-table-shell .data-table thead th {
+  background: #0f1724;
+  box-shadow: inset 0 -1px 0 #253549;
+}
+
+:host-context(html[data-theme-mode='dark']) .data-table tbody tr.selected,
+:host-context(body[data-theme-mode='dark']) .data-table tbody tr.selected,
+:host-context(html[data-theme-mode='dark']) .data-table tbody tr:hover,
+:host-context(body[data-theme-mode='dark']) .data-table tbody tr:hover {
+  background: #152335;
 }

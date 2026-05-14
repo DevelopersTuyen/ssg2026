@@ -4,11 +4,12 @@ from datetime import datetime
 from math import ceil
 
 from app.clients.vnstock_client import VnstockClient
-from app.core.config import settings
+from app.core.config import get_runtime_sync_str, settings
 from app.core.db import SessionLocal
 from app.core.logging import get_logger
 from app.repositories.market_repo import MarketRepository
 from app.services.normalization_service import NormalizationService
+from app.services.sync_log_service import write_sync_log_safely
 
 logger = get_logger(__name__)
 
@@ -18,7 +19,6 @@ class IndexCollector:
         self.client = VnstockClient()
         self.normalizer = NormalizationService()
         self.indices = settings.index_symbol_list
-        self.source = settings.index_source or settings.vnstock_source
 
     def _resolve_index_batch(self, started_at: datetime) -> tuple[list[str], int, int]:
         if not self.indices:
@@ -39,6 +39,7 @@ class IndexCollector:
         started_at = datetime.now()
         total_saved = 0
         failed_symbols: list[dict[str, str]] = []
+        source = get_runtime_sync_str("indexSource", str(settings.index_source or settings.vnstock_source or "VCI").strip().upper() or "VCI")
         async with SessionLocal() as session:
             repo = MarketRepository(session)
             try:
@@ -50,7 +51,7 @@ class IndexCollector:
                         started_at=started_at,
                         finished_at=datetime.now(),
                         message="skip index daily collection because no indices resolved",
-                        extra_json={"source": self.source},
+                        extra_json={"source": source},
                     )
                     await session.commit()
                     return
@@ -61,14 +62,14 @@ class IndexCollector:
                             index_symbol,
                             interval="1D",
                             months=12,
-                            source=self.source,
+                            source=source,
                         )
                         for row in result.rows:
                             payload = self.normalizer.normalize_index_daily_row(
                                 index_symbol=index_symbol,
                                 row=row,
                                 captured_at=started_at,
-                                source=self.source,
+                                source=source,
                             )
                             if not payload:
                                 continue
@@ -91,7 +92,7 @@ class IndexCollector:
                         ]
                     ),
                     extra_json={
-                        "source": self.source,
+                        "source": source,
                         "batch_index": batch_index,
                         "total_batches": total_batches,
                         "batch_symbols": len(batch_symbols),
@@ -110,12 +111,12 @@ class IndexCollector:
                     len(failed_symbols),
                 )
             except Exception as exc:
-                await repo.create_sync_log(
+                await session.rollback()
+                await write_sync_log_safely(
                     job_name="collect_index_daily",
                     status="error",
                     started_at=started_at,
                     finished_at=datetime.now(),
                     message=str(exc),
                 )
-                await session.commit()
                 logger.exception("collect_index_daily failed")

@@ -3,37 +3,38 @@
     <app-page-load-indicator class="strategy-mini-loader" pageId="strategy-hub"></app-page-load-indicator>
 
     <div class="status-row" *ngIf="detailLoading || message || error">
-      <div class="status-pill loading" *ngIf="detailLoading">Đang tải chi tiết công thức của mã đang chọn...</div>
+      <div class="status-pill loading" *ngIf="detailLoading">{{ 'strategyHub.status.loadingDetail' | translate }}</div>
       <div class="status-pill success" *ngIf="message">{{ message }}</div>
       <div class="status-pill error" *ngIf="error">{{ error }}</div>
     </div>
 
     <div class="strategy-main" [ngSwitch]="selectedTab">
       <section *ngSwitchCase="'overview'" class="workspace-grid">
+        @defer (when selectedTab === 'overview'; prefetch on idle) {
         <article class="panel">
           <div class="panel-header">
             <div>
-              <div class="panel-title">Xếp hạng cao nhất hiện tại</div>
-              <div class="panel-subtitle">Những mã được Winning Score cao nhất theo profile đang chọn.</div>
+              <div class="panel-title">{{ 'strategyHub.overview.topRanking.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'strategyHub.overview.topRanking.subtitle' | translate }}</div>
             </div>
           </div>
           <div class="score-list">
             <div class="score-row" *ngFor="let item of rankings?.items || []" (click)="chooseScoreItem(item)">
               <div class="score-row-main">
                 <strong>{{ item.symbol }}</strong>
-                <small>{{ item.tradeDate || (item.createdAt | date:'dd/MM/yyyy') }} · {{ item.classification || 'N/A' }}</small>
+                <small>{{ item.tradeDate || (item.createdAt | date:'dd/MM/yyyy') }} · {{ item.classification || ('strategyHub.common.unassigned' | translate) }}</small>
                 <div class="journal-meta-row">
-                  <span>Chiến lược: {{ item.strategyName || 'Chưa gán' }}</span>
+                  <span>{{ 'strategyHub.common.strategy' | translate }}: {{ item.strategyName || ('strategyHub.common.unassigned' | translate) }}</span>
                   <span>SL: {{ item.stopLossPrice || '-' }}</span>
                   <span>TP: {{ item.takeProfitPrice || '-' }}</span>
-                  <span>Qty: {{ item.quantity || '-' }}</span>
-                  <span>Vá»‘n: {{ item.totalCapital || '-' }}</span>
+                  <span>{{ 'strategyHub.common.qtyShort' | translate }}: {{ item.quantity || '-' }}</span>
+                  <span>{{ 'strategyHub.common.capitalShort' | translate }}: {{ item.totalCapital || '-' }}</span>
                 </div>
-                <p class="journal-psychology" *ngIf="item.psychology">Tâm lý: {{ item.psychology }}</p>
-                <small>{{ item.exchange }} · Điểm {{ item.winningScore | number:'1.0-0' }}</small>
+                <p class="journal-psychology" *ngIf="item.psychology">{{ 'strategyHub.common.psychology' | translate }}: {{ item.psychology }}</p>
+                <small>{{ item.exchange }} · {{ 'strategyHub.common.score' | translate }} {{ item.winningScore | number:'1.0-0' }}</small>
               </div>
               <div class="score-row-side">
-                <button type="button" class="icon-action-btn" title="Đưa mã này sang nhật ký" (click)="openJournalFromItem(item, $event)">
+                <button type="button" class="icon-action-btn" [attr.title]="'strategyHub.common.addToJournal' | translate" (click)="openJournalFromItem(item, $event)">
                   <ion-icon name="document-text-outline"></ion-icon>
                 </button>
                 <span [class.positive]="item.changePercent >= 0" [class.negative]="item.changePercent < 0">
@@ -47,15 +48,15 @@
         <article class="panel">
           <div class="panel-header">
             <div>
-              <div class="panel-title">Yếu tố dẫn điểm</div>
-              <div class="panel-subtitle">Vì sao mã đang chọn đạt điểm cao hoặc thấp.</div>
+              <div class="panel-title">{{ 'strategyHub.overview.drivers.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'strategyHub.overview.drivers.subtitle' | translate }}</div>
             </div>
           </div>
           <ng-container *ngIf="selectedScoreItem; else noScoreItem">
             <div class="symbol-card">
               <div>
                 <h3>{{ selectedScoreItem.symbol }}</h3>
-                <p>{{ selectedScoreItem.name || 'Chưa có tên doanh nghiệp' }}</p>
+                <p>{{ selectedScoreItem.name || ('strategyHub.common.companyNameMissing' | translate) }}</p>
               </div>
               <div class="symbol-score">{{ selectedScoreItem.winningScore | number:'1.0-0' }}</div>
             </div>
@@ -66,22 +67,22 @@
               </div>
             </div>
             <div class="status-chip-row">
-              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer1">Layer 1</span>
-              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer2">Layer 2</span>
-              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer3">Layer 3</span>
-              <span class="status-chip" [class.risk]="selectedScoreItem.riskScore >= 65">Rủi ro {{ selectedScoreItem.riskScore | number:'1.0-0' }}</span>
+              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer1">{{ 'strategyHub.common.layer1' | translate }}</span>
+              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer2">{{ 'strategyHub.common.layer2' | translate }}</span>
+              <span class="status-chip" [class.pass]="selectedScoreItem.passedLayer3">{{ 'strategyHub.common.layer3' | translate }}</span>
+              <span class="status-chip" [class.risk]="selectedScoreItem.riskScore >= 65">{{ 'strategyHub.common.risk' | translate }} {{ selectedScoreItem.riskScore | number:'1.0-0' }}</span>
             </div>
           </ng-container>
           <ng-template #noScoreItem>
-            <div class="empty-state">Chưa có mã nào để hiển thị chi tiết.</div>
+            <div class="empty-state">{{ 'strategyHub.overview.emptySelected' | translate }}</div>
           </ng-template>
         </article>
 
         <article class="panel">
           <div class="panel-header">
             <div>
-              <div class="panel-title">Tóm tắt rủi ro</div>
-              <div class="panel-subtitle">Các điểm cần xem đầu tiên trong lượt rà soát rủi ro.</div>
+              <div class="panel-title">{{ 'strategyHub.overview.riskSummary.title' | translate }}</div>
+              <div class="panel-subtitle">{{ 'strategyHub.overview.riskSummary.subtitle' | translate }}</div>
             </div>
           </div>
           <div class="risk-summary" *ngIf="risk">
@@ -92,43 +93,50 @@
             </div>
           </div>
         </article>
+        } @placeholder {
+        <div class="panel defer-placeholder">
+          <div class="panel-title">{{ 'strategyHub.overview.defer.title' | translate }}</div>
+          <div class="panel-subtitle">{{ 'strategyHub.overview.defer.subtitle' | translate }}</div>
+        </div>
+        }
       </section>
 
       <section *ngSwitchCase="'screener'" class="panel page-panel">
+        @defer (when selectedTab === 'screener'; prefetch on idle) {
         <div class="panel-header">
           <div>
-            <div class="panel-title">3-layer screener</div>
-            <div class="panel-subtitle">Lọc định tính, định lượng và kỹ thuật theo cấu hình động.</div>
+            <div class="panel-title">{{ 'strategyHub.screener.title' | translate }}</div>
+            <div class="panel-subtitle">{{ 'strategyHub.screener.subtitle' | translate }}</div>
           </div>
           <div class="toolbar">
             <select class="toolbar-select" [(ngModel)]="screenerExchange">
-              <option value="ALL">Tất cả sàn</option>
+              <option value="ALL">{{ 'strategyHub.common.allExchanges' | translate }}</option>
               <option value="HSX">HSX</option>
               <option value="HNX">HNX</option>
               <option value="UPCOM">UPCOM</option>
             </select>
-            <input class="toolbar-input" [(ngModel)]="screenerKeyword" placeholder="Tìm mã" />
+            <input class="toolbar-input" [(ngModel)]="screenerKeyword" [placeholder]="'strategyHub.common.searchSymbol' | translate" />
             <label class="toolbar-checkbox">
               <input type="checkbox" [(ngModel)]="screenerWatchlistOnly" />
-              Danh sách theo dõi
+              {{ 'strategyHub.common.watchlistOnly' | translate }}
             </label>
-            <button type="button" class="btn-primary" (click)="reloadScreener()">Cháº¡y lá»c</button>
+            <button type="button" class="btn-primary" (click)="reloadScreener()">{{ 'strategyHub.screener.run' | translate }}</button>
           </div>
         </div>
         <div class="result-summary" *ngIf="screener?.summary">
-          Đạt {{ screener?.summary?.passed }}/{{ screener?.summary?.total }} mã · {{ screener?.summary?.passRate | number:'1.0-2' }}%
+          {{ getScreenerSummaryLabel() }}
         </div>
         <div class="table-shell">
           <table class="data-table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>Mã</th>
-                <th>Winning</th>
-                <th>Q/L/M/P</th>
-                <th>Biên an toàn</th>
-                <th>Layers</th>
-                <th class="table-action-cell">Nhật ký</th>
+                <th>{{ 'strategyHub.table.symbol' | translate }}</th>
+                <th>{{ 'strategyHub.table.winning' | translate }}</th>
+                <th>{{ 'strategyHub.table.qlmp' | translate }}</th>
+                <th>{{ 'strategyHub.table.marginSafety' | translate }}</th>
+                <th>{{ 'strategyHub.table.layers' | translate }}</th>
+                <th class="table-action-cell">{{ 'strategyHub.table.journal' | translate }}</th>
               </tr>
             </thead>
             <tbody>
@@ -143,7 +151,7 @@
                 <td>{{ item.marginOfSafety | percent:'1.0-1' }}</td>
                 <td>{{ item.passedLayer1 ? '1' : '-' }} {{ item.passedLayer2 ? '2' : '-' }} {{ item.passedLayer3 ? '3' : '-' }}</td>
                 <td class="table-action-cell">
-                  <button type="button" class="icon-action-btn" title="Đưa mã này sang nhật ký" (click)="openJournalFromItem(item, $event)">
+                  <button type="button" class="icon-action-btn" [attr.title]="'strategyHub.common.addToJournal' | translate" (click)="openJournalFromItem(item, $event)">
                     <ion-icon name="document-text-outline"></ion-icon>
                   </button>
                 </td>
@@ -151,6 +159,12 @@
             </tbody>
           </table>
         </div>
+        } @placeholder {
+        <div class="defer-placeholder">
+          <div class="panel-title">{{ 'strategyHub.screener.defer.title' | translate }}</div>
+          <div class="panel-subtitle">{{ 'strategyHub.screener.defer.subtitle' | translate }}</div>
+        </div>
+        }
       </section>
 
       <section *ngSwitchCase="'scoring'" class="workspace-grid scoring-workspace" [class.no-detail]="!selectedScoreItem">
@@ -179,7 +193,7 @@
             </div>
             <div class="col-6 col-md-2 col-xl-1">
               <select class="toolbar-select w-100" [(ngModel)]="scoringExchange" (change)="reloadScoringFromFirstPage()">
-                <option value="ALL">Tất cả sàn</option>
+                <option value="ALL">{{ 'strategyHub.common.allExchanges' | translate }}</option>
                 <option value="HSX">HSX</option>
                 <option value="HNX">HNX</option>
                 <option value="UPCOM">UPCOM</option>
@@ -191,7 +205,7 @@
                 [ngModel]="scoringKeyword"
                 (ngModelChange)="onScoringKeywordChange($event)"
                 (keyup.enter)="reloadScoringFromFirstPage()"
-                placeholder="Tìm mã"
+                [placeholder]="'strategyHub.common.searchSymbol' | translate"
               />
             </div>
             <div class="col-12 col-xl-3">
@@ -199,15 +213,15 @@
                 <label class="toolbar-checkbox">
                   <ion-icon name="bookmark-outline"></ion-icon>
                   <input type="checkbox" [(ngModel)]="scoringWatchlistOnly" (change)="reloadScoringFromFirstPage()" />
-                  <span class="toolbar-checkbox-label">Danh sách theo dõi</span>
+                  <span class="toolbar-checkbox-label">{{ 'strategyHub.common.watchlistOnly' | translate }}</span>
                 </label>
-                <button type="button" class="btn-primary toolbar-refresh-btn" (click)="reloadScoringFromFirstPage()" title="Làm mới điểm">
+                <button type="button" class="btn-primary toolbar-refresh-btn" (click)="reloadScoringFromFirstPage()" [attr.title]="'strategyHub.scoring.refresh' | translate">
                   <ion-icon name="refresh-outline"></ion-icon>
-                  <span class="toolbar-button-label">Làm mới điểm</span>
+                  <span class="toolbar-button-label">{{ 'strategyHub.scoring.refresh' | translate }}</span>
                 </button>
-                <button type="button" class="btn-light toolbar-settings-btn" routerLink="/tabs/market-settings" title="Cài đặt thị trường">
+                <button type="button" class="btn-light toolbar-settings-btn" routerLink="/tabs/market-settings" [attr.title]="'strategyHub.scoring.openSettings' | translate">
                   <ion-icon name="settings-outline"></ion-icon>
-                  <span class="toolbar-button-label">Cài đặt</span>
+                  <span class="toolbar-button-label">{{ 'strategyHub.common.settings' | translate }}</span>
                 </button>
               </div>
             </div>
@@ -217,15 +231,15 @@
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Mã</th>
-                  <th>Giá</th>
-                  <th>Winning</th>
+                  <th>{{ 'strategyHub.table.symbol' | translate }}</th>
+                  <th>{{ 'strategyHub.table.price' | translate }}</th>
+                  <th>{{ 'strategyHub.table.winning' | translate }}</th>
                   <th *ngFor="let formula of selectableScoringFormulas" [hidden]="!isScoringFormulaSelected(formula.formulaCode)">
                     {{ formula.label }}
                   </th>
-                  <th>Rủi ro</th>
-                  <th>Tin tá»©c</th>
-                  <th class="table-action-cell">Nhật ký</th>
+                  <th>{{ 'strategyHub.table.risk' | translate }}</th>
+                  <th>{{ 'strategyHub.table.news' | translate }}</th>
+                  <th class="table-action-cell">{{ 'strategyHub.table.journal' | translate }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -270,7 +284,7 @@
                     </span>
                   </td>
                   <td class="table-action-cell">
-                    <button type="button" class="icon-action-btn" title="Đưa mã này sang nhật ký" (click)="openJournalFromItem(item, $event)">
+                    <button type="button" class="icon-action-btn" [attr.title]="'strategyHub.common.addToJournal' | translate" (click)="openJournalFromItem(item, $event)">
                       <ion-icon name="document-text-outline"></ion-icon>
                     </button>
                   </td>
@@ -280,13 +294,13 @@
           </div>
           <div class="table-pagination" *ngIf="rankings">
             <div class="pagination-copy">
-              Hiển thị {{ scoringStartIndex }}-{{ scoringEndIndex }} / {{ rankings.total || 0 }} mã
+              {{ getScoringPaginationSummary() }}
             </div>
             <div class="pagination-actions">
               <button type="button" class="pagination-btn" (click)="goToPreviousScoringPage()" [disabled]="scoringPage <= 1">
                 <ion-icon name="chevron-back-outline"></ion-icon>
               </button>
-              <span>Trang {{ scoringPage }} / {{ scoringTotalPages }}</span>
+              <span>{{ getScoringPageLabel() }}</span>
               <button type="button" class="pagination-btn" (click)="goToNextScoringPage()" [disabled]="scoringPage >= scoringTotalPages">
                 <ion-icon name="chevron-forward-outline"></ion-icon>
               </button>
@@ -301,13 +315,13 @@
                 <button type="button" class="symbol-link-btn detail-symbol-link" (click)="openSymbolDetail(selectedScoreItem.symbol, $event)">
                   {{ selectedScoreItem.symbol }}
                 </button>
-                breakdown
+                {{ 'strategyHub.scoring.breakdown' | translate }}
               </div>
-              <div class="panel-subtitle">Chi tiết công thức, tín hiệu và checklist.</div>
+              <div class="panel-subtitle">{{ 'strategyHub.scoring.breakdownSubtitle' | translate }}</div>
             </div>
             <button type="button" class="btn-light quick-journal-btn" (click)="openJournalFromItem(selectedScoreItem, $event)">
               <ion-icon name="document-text-outline"></ion-icon>
-              Đưa vào nhật ký
+              {{ 'strategyHub.common.addToJournal' | translate }}
             </button>
           </div>
           <div class="engine-badge-row detail-badges">
@@ -333,20 +347,20 @@
           </div>
           <div class="driver-grid">
             <button type="button" class="driver-card driver-card-action" (click)="openValuationMetricModal(selectedScoreItem, 'fairValue')">
-              <span>Giá trị hợp lý</span>
+              <span>{{ 'strategyHub.metric.fairValue' | translate }}</span>
               <strong>{{ selectedScoreItem.fairValue | number:'1.0-2' }}</strong>
             </button>
             <button type="button" class="driver-card driver-card-action" (click)="openValuationMetricModal(selectedScoreItem, 'marginOfSafety')">
-              <span>Biên an toàn</span>
+              <span>{{ 'strategyHub.metric.marginSafety' | translate }}</span>
               <strong>{{ selectedScoreItem.marginOfSafety | percent:'1.0-1' }}</strong>
             </button>
             <button type="button" class="driver-card driver-card-action" (click)="openValuationMetricModal(selectedScoreItem, 'changePercent')">
-              <span>Biến động</span>
+              <span>{{ 'strategyHub.metric.change' | translate }}</span>
               <strong>{{ selectedScoreItem.changePercent | number:'1.2-2' }}%</strong>
             </button>
             <button type="button" class="driver-card driver-card-action" (click)="openValuationMetricModal(selectedScoreItem, 'watchlist')">
-              <span>Danh sách theo dõi</span>
-              <strong>{{ selectedScoreItem.isWatchlist ? 'Có' : 'Không' }}</strong>
+              <span>{{ 'strategyHub.metric.watchlist' | translate }}</span>
+              <strong>{{ selectedScoreItem.isWatchlist ? ('strategyHub.common.yes' | translate) : ('strategyHub.common.no' | translate) }}</strong>
             </button>
           </div>
 
@@ -354,27 +368,27 @@
             <button type="button" class="formula-metric formula-metric-action" (click)="openScoreMetricModal(selectedScoreItem, 'Q')">
               <span>Q Score</span>
               <strong>{{ selectedScoreItem.qScore | number:'1.0-2' }}</strong>
-              <small>Công thức chất lượng đang được áp dụng</small>
+              <small>{{ 'strategyHub.metric.qHelper' | translate }}</small>
             </button>
             <button type="button" class="formula-metric formula-metric-action" (click)="openScoreMetricModal(selectedScoreItem, 'L')">
               <span>L Score</span>
               <strong>{{ selectedScoreItem.lScore | number:'1.0-2' }}</strong>
-              <small>Công thức leadership/xu hướng đang được áp dụng</small>
+              <small>{{ 'strategyHub.metric.lHelper' | translate }}</small>
             </button>
             <button type="button" class="formula-metric formula-metric-action" (click)="openScoreMetricModal(selectedScoreItem, 'M')">
               <span>M Score</span>
               <strong>{{ selectedScoreItem.mScore | number:'1.0-2' }}</strong>
-              <small>Công thức động lượng/xác nhận đang được áp dụng</small>
+              <small>{{ 'strategyHub.metric.mHelper' | translate }}</small>
             </button>
             <button type="button" class="formula-metric formula-metric-action" (click)="openScoreMetricModal(selectedScoreItem, 'P')">
               <span>P Score</span>
               <strong>{{ selectedScoreItem.pScore | number:'1.0-2' }}</strong>
-              <small>Công thức giá/rủi ro đang được áp dụng</small>
+              <small>{{ 'strategyHub.metric.pHelper' | translate }}</small>
             </button>
             <button type="button" class="formula-metric formula-metric-action highlight" (click)="openScoreMetricModal(selectedScoreItem, 'Winning')">
               <span>Winning Score</span>
               <strong>{{ selectedScoreItem.winningScore | number:'1.0-2' }}</strong>
-              <small>Điểm tổng hợp cuối cùng của profile đang chọn</small>
+              <small>{{ 'strategyHub.metric.winningHelper' | translate }}</small>
             </button>
           </div>
 
@@ -386,11 +400,11 @@
               (click)="openDecisionBreakdownModal(selectedScoreItem)"
               (keydown.enter)="openDecisionBreakdownModal(selectedScoreItem)"
             >
-              <span>Kết luận nhanh</span>
-              <strong>{{ selectedScoreItem.passedAllLayers ? 'Đạt bộ lọc' : 'Cần xem lại' }}</strong>
+              <span>K?t lu?n nhanh</span>
+              <strong>{{ selectedScoreItem.passedAllLayers ? 'Ð?t b? l?c' : 'C?n xem l?i' }}</strong>
               <p>
                 Winning {{ selectedScoreItem.winningScore | number:'1.0-0' }},
-                rủi ro {{ selectedScoreItem.riskScore | number:'1.0-0' }},
+                r?i ro {{ selectedScoreItem.riskScore | number:'1.0-0' }},
                 biên an toàn {{ selectedScoreItem.marginOfSafety | percent:'1.0-1' }}.
               </p>
               <small>Xem lý do</small>
@@ -403,8 +417,8 @@
               (click)="openFundamentalBreakdownModal(selectedScoreItem)"
               (keydown.enter)="openFundamentalBreakdownModal(selectedScoreItem)"
             >
-              <span>Cơ bản</span>
-              <strong>{{ selectedScoreItem.fundamentalMetrics?.qualityFlagCount || 0 }} cờ đạt</strong>
+              <span>Co b?n</span>
+              <strong>{{ selectedScoreItem.fundamentalMetrics?.qualityFlagCount || 0 }} c? d?t</strong>
               <p>
                 P/E {{ optionalNumberLabel(selectedScoreItem.fundamentalMetrics?.pe, 1) }},
                 ROE {{ percentWholeLabel(selectedScoreItem.fundamentalMetrics?.roe) }}.
@@ -419,13 +433,13 @@
               (click)="openFlowBreakdownModal(selectedScoreItem)"
               (keydown.enter)="openFlowBreakdownModal(selectedScoreItem)"
             >
-              <span>Dòng tiền</span>
-              <strong>{{ countDetectedSignals(selectedScoreItem.candlestickSignals) + countDetectedSignals(selectedScoreItem.footprintSignals) }} tín hiệu</strong>
+              <span>Dòng ti?n</span>
+              <strong>{{ countDetectedSignals(selectedScoreItem.candlestickSignals) + countDetectedSignals(selectedScoreItem.footprintSignals) }} tín hi?u</strong>
               <p>
-                Smart money {{ selectedScoreItem.volumeIntelligence?.smartMoneyInflow ? 'bật' : 'chưa bật' }},
+                Smart money {{ selectedScoreItem.volumeIntelligence?.smartMoneyInflow ? 'b?t' : 'chua b?t' }},
                 spike {{ optionalNumberLabel(selectedScoreItem.volumeIntelligence?.volumeSpikeRatio, 1) }}x.
               </p>
-              <small>Xem tín hiệu</small>
+              <small>Xem tín hi?u</small>
             </section>
 
             <section
@@ -435,11 +449,11 @@
               (click)="openRulesBreakdownModal(selectedScoreItem)"
               (keydown.enter)="openRulesBreakdownModal(selectedScoreItem)"
             >
-              <span>Luật & cảnh báo</span>
+              <span>Lu?t & c?nh báo</span>
               <strong>{{ countPassedRules(selectedScoreItem.layerResults) }}/{{ selectedScoreItem.layerResults.length || 0 }} pass</strong>
               <p>
-                {{ countTriggeredAlerts(selectedScoreItem.alertResults) }} cảnh báo kích hoạt,
-                {{ countFailedRules(selectedScoreItem.checklistResults) }} checklist chưa đạt.
+                {{ countTriggeredAlerts(selectedScoreItem.alertResults) }} c?nh báo kích ho?t,
+                {{ countFailedRules(selectedScoreItem.checklistResults) }} checklist chua d?t.
               </p>
               <small>Xem pass / fail</small>
             </section>
@@ -449,7 +463,7 @@
             <section class="detail-card" *ngIf="selectedScoreItem.fundamentalMetrics as fundamentals">
               <div class="detail-card-head">
                 <h4>Engine chá»‰ sá»‘ cÆ¡ báº£n</h4>
-                <small>P/E, P/B, tăng trưởng EPS, ROE, biên gộp và cờ chất lượng</small>
+                <small>P/E, P/B, tang tru?ng EPS, ROE, biên g?p và c? ch?t lu?ng</small>
               </div>
               <div class="detail-metric-grid">
                 <div class="detail-metric">
@@ -465,11 +479,11 @@
                   <strong>{{ fundamentals.eps !== null ? (fundamentals.eps | number:'1.0-2') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Tăng trưởng EPS năm</span>
+                  <span>Tang tru?ng EPS nam</span>
                   <strong>{{ fundamentals.epsGrowthYear !== null ? (fundamentals.epsGrowthYear / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Tăng trưởng EPS quý</span>
+                  <span>Tang tru?ng EPS quý</span>
                   <strong>{{ fundamentals.epsGrowthQuarter !== null ? (fundamentals.epsGrowthQuarter / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
@@ -481,11 +495,11 @@
                   <strong>{{ fundamentals.dar !== null ? (fundamentals.dar / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Biên gộp</span>
+                  <span>Biên g?p</span>
                   <strong>{{ fundamentals.grossMargin !== null ? (fundamentals.grossMargin / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Biến động biên gộp</span>
+                  <span>Bi?n d?ng biên g?p</span>
                   <strong>{{ fundamentals.grossMarginChange !== null ? (fundamentals.grossMarginChange / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
@@ -502,8 +516,8 @@
 
             <section class="detail-card" *ngIf="selectedScoreItem.volumeIntelligence as volumeIntelligence">
               <div class="detail-card-head">
-                <h4>Engine phân tích khối lượng</h4>
-                <small>MA10/MA20 volume, EMA gap, spike và tín hiệu dòng tiền</small>
+                <h4>Engine phân tích kh?i lu?ng</h4>
+                <small>MA10/MA20 volume, EMA gap, spike và tín hi?u dòng ti?n</small>
               </div>
               <div class="detail-metric-grid">
                 <div class="detail-metric">
@@ -532,17 +546,17 @@
                 </div>
               </div>
               <div class="signal-pill-row">
-                <span class="signal-pill" [class.bullish]="volumeIntelligence.smartMoneyInflow" [class.neutral]="!volumeIntelligence.smartMoneyInflow">Dòng tiền thông minh · {{ volumeIntelligence.smartMoneyInflow ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bearish]="volumeIntelligence.surgeTrap" [class.neutral]="!volumeIntelligence.surgeTrap">Bẫy tăng tốc · {{ volumeIntelligence.surgeTrap ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bullish]="volumeIntelligence.noSupply" [class.neutral]="!volumeIntelligence.noSupply">Cạn cung · {{ volumeIntelligence.noSupply ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bearish]="volumeIntelligence.volumeDivergence" [class.neutral]="!volumeIntelligence.volumeDivergence">Phân kỳ khối lượng · {{ volumeIntelligence.volumeDivergence ? 'BẬT' : 'TẮT' }}</span>
+                <span class="signal-pill" [class.bullish]="volumeIntelligence.smartMoneyInflow" [class.neutral]="!volumeIntelligence.smartMoneyInflow">Dòng ti?n thông minh · {{ volumeIntelligence.smartMoneyInflow ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="volumeIntelligence.surgeTrap" [class.neutral]="!volumeIntelligence.surgeTrap">B?y tang t?c · {{ volumeIntelligence.surgeTrap ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="volumeIntelligence.noSupply" [class.neutral]="!volumeIntelligence.noSupply">C?n cung · {{ volumeIntelligence.noSupply ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="volumeIntelligence.volumeDivergence" [class.neutral]="!volumeIntelligence.volumeDivergence">Phân k? kh?i lu?ng · {{ volumeIntelligence.volumeDivergence ? 'B?T' : 'T?T' }}</span>
               </div>
             </section>
 
             <section class="detail-card" *ngIf="selectedScoreItem.moneyFlowIntelligence as moneyFlowIntelligence">
               <div class="detail-card-head">
-                <h4>Engine cảnh báo sớm dòng tiền</h4>
-                <small>OBV, bối cảnh giá, áp lực tin tức và tín hiệu dòng tiền trước tin</small>
+                <h4>Engine c?nh báo s?m dòng ti?n</h4>
+                <small>OBV, b?i c?nh giá, áp l?c tin t?c và tín hi?u dòng ti?n tru?c tin</small>
               </div>
               <div class="detail-metric-grid">
                 <div class="detail-metric">
@@ -579,14 +593,14 @@
                 </div>
               </div>
               <div class="signal-pill-row">
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.obvAboveMa" [class.neutral]="!moneyFlowIntelligence.obvAboveMa">OBV trên MA · {{ moneyFlowIntelligence.obvAboveMa ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.nearBreakoutZone" [class.neutral]="!moneyFlowIntelligence.nearBreakoutZone">Sát vùng breakout · {{ moneyFlowIntelligence.nearBreakoutZone ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.baseIsTight" [class.neutral]="!moneyFlowIntelligence.baseIsTight">Nền giá chặt · {{ moneyFlowIntelligence.baseIsTight ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.preNewsAccumulation" [class.neutral]="!moneyFlowIntelligence.preNewsAccumulation">Tích lũy trước tin · {{ moneyFlowIntelligence.preNewsAccumulation ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.obvBreakoutConfirmation" [class.neutral]="!moneyFlowIntelligence.obvBreakoutConfirmation">OBV xác nhận breakout · {{ moneyFlowIntelligence.obvBreakoutConfirmation ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.smartMoneyBeforeNews" [class.neutral]="!moneyFlowIntelligence.smartMoneyBeforeNews">Dòng tiền trước tin · {{ moneyFlowIntelligence.smartMoneyBeforeNews ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bearish]="moneyFlowIntelligence.obvDistribution" [class.neutral]="!moneyFlowIntelligence.obvDistribution">Phân phối OBV · {{ moneyFlowIntelligence.obvDistribution ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bearish]="moneyFlowIntelligence.weakNewsChase" [class.neutral]="!moneyFlowIntelligence.weakNewsChase">Đuổi giá theo tin yếu · {{ moneyFlowIntelligence.weakNewsChase ? 'BẬT' : 'TẮT' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.obvAboveMa" [class.neutral]="!moneyFlowIntelligence.obvAboveMa">OBV trên MA · {{ moneyFlowIntelligence.obvAboveMa ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.nearBreakoutZone" [class.neutral]="!moneyFlowIntelligence.nearBreakoutZone">Sát vùng breakout · {{ moneyFlowIntelligence.nearBreakoutZone ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.baseIsTight" [class.neutral]="!moneyFlowIntelligence.baseIsTight">N?n giá ch?t · {{ moneyFlowIntelligence.baseIsTight ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.preNewsAccumulation" [class.neutral]="!moneyFlowIntelligence.preNewsAccumulation">Tích luy tru?c tin · {{ moneyFlowIntelligence.preNewsAccumulation ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.obvBreakoutConfirmation" [class.neutral]="!moneyFlowIntelligence.obvBreakoutConfirmation">OBV xác nh?n breakout · {{ moneyFlowIntelligence.obvBreakoutConfirmation ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bullish]="moneyFlowIntelligence.smartMoneyBeforeNews" [class.neutral]="!moneyFlowIntelligence.smartMoneyBeforeNews">Dòng ti?n tru?c tin · {{ moneyFlowIntelligence.smartMoneyBeforeNews ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="moneyFlowIntelligence.obvDistribution" [class.neutral]="!moneyFlowIntelligence.obvDistribution">Phân ph?i OBV · {{ moneyFlowIntelligence.obvDistribution ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="moneyFlowIntelligence.weakNewsChase" [class.neutral]="!moneyFlowIntelligence.weakNewsChase">Ðu?i giá theo tin y?u · {{ moneyFlowIntelligence.weakNewsChase ? 'B?T' : 'T?T' }}</span>
               </div>
               <div class="signal-list" *ngIf="moneyFlowIntelligence.items?.length">
                 <div class="signal-row" *ngFor="let signal of moneyFlowIntelligence.items">
@@ -595,7 +609,7 @@
                     <p>{{ signal.detail }}</p>
                   </div>
                   <span class="signal-pill" [class.bullish]="signal.bias === 'bullish'" [class.bearish]="signal.bias === 'bearish'" [class.neutral]="signal.bias === 'neutral'">
-                    {{ signal.detected ? 'ĐÃ PHÁT HIỆN' : 'THEO DÕI' }}
+                    {{ signal.detected ? 'ÐÃ PHÁT HI?N' : 'THEO DÕI' }}
                   </span>
                 </div>
               </div>
@@ -603,8 +617,8 @@
 
             <section class="detail-card" *ngIf="selectedScoreItem.candlestickSignals?.length">
               <div class="detail-card-head">
-                <h4>Engine mẫu nến</h4>
-                <small>Mẫu nến đang được hệ thống nhận diện trên mã này</small>
+                <h4>Engine m?u n?n</h4>
+                <small>M?u n?n dang du?c h? th?ng nh?n di?n trên mã này</small>
               </div>
               <div class="signal-list">
                 <div class="signal-row" *ngFor="let signal of selectedScoreItem.candlestickSignals">
@@ -613,7 +627,7 @@
                     <p>{{ signal.detail }}</p>
                   </div>
                   <span class="signal-pill" [class.bullish]="signal.detected && signal.bias === 'bullish'" [class.bearish]="signal.detected && signal.bias === 'bearish'" [class.neutral]="!signal.detected || signal.bias === 'neutral'">
-                    {{ signal.detected ? 'ĐÃ PHÁT HIỆN' : 'THEO DÕI' }}
+                    {{ signal.detected ? 'ÐÃ PHÁT HI?N' : 'THEO DÕI' }}
                   </span>
                 </div>
               </div>
@@ -621,8 +635,8 @@
 
             <section class="detail-card" *ngIf="selectedScoreItem.footprintSignals?.length">
               <div class="detail-card-head">
-                <h4>Engine dấu chân tổ chức</h4>
-                <small>Dấu chân dòng tiền tổ chức và xác nhận breakout/pullback</small>
+                <h4>Engine d?u chân t? ch?c</h4>
+                <small>D?u chân dòng ti?n t? ch?c và xác nh?n breakout/pullback</small>
               </div>
               <div class="signal-list">
                 <div class="signal-row" *ngFor="let signal of selectedScoreItem.footprintSignals">
@@ -631,7 +645,7 @@
                     <p>{{ signal.detail }}</p>
                   </div>
                   <span class="signal-pill" [class.bullish]="signal.detected && signal.bias === 'bullish'" [class.bearish]="signal.detected && signal.bias === 'bearish'" [class.neutral]="!signal.detected || signal.bias === 'neutral'">
-                    {{ signal.detected ? 'ĐÃ PHÁT HIỆN' : 'THEO DÕI' }}
+                    {{ signal.detected ? 'ÐÃ PHÁT HI?N' : 'THEO DÕI' }}
                   </span>
                 </div>
               </div>
@@ -639,22 +653,22 @@
 
             <section class="detail-card execution-card" *ngIf="selectedScoreItem.executionPlan as executionPlan">
               <div class="detail-card-head">
-                <h4>Engine thực thi lệnh</h4>
-                <small>Mua thăm dò, mua gia tăng, stop-loss và tín hiệu đứng ngoài</small>
+                <h4>Engine th?c thi l?nh</h4>
+                <small>Mua tham dò, mua gia tang, stop-loss và tín hi?u d?ng ngoài</small>
               </div>
               <div class="signal-pill-row">
-                <span class="signal-pill" [class.bullish]="executionPlan.probeBuy30" [class.neutral]="!executionPlan.probeBuy30">Mua 30% · {{ executionPlan.probeBuy30 ? 'SẴN SÀNG' : 'CHỜ' }}</span>
-                <span class="signal-pill" [class.bullish]="executionPlan.addBuy70" [class.neutral]="!executionPlan.addBuy70">Mua thêm 70% · {{ executionPlan.addBuy70 ? 'SẴN SÀNG' : 'CHỜ' }}</span>
-                <span class="signal-pill" [class.bearish]="executionPlan.takeProfitSignal" [class.neutral]="!executionPlan.takeProfitSignal">Chốt lời · {{ executionPlan.takeProfitSignal ? 'BẬT' : 'TẮT' }}</span>
-                <span class="signal-pill" [class.bearish]="executionPlan.standAside" [class.neutral]="!executionPlan.standAside">Đứng ngoài · {{ executionPlan.standAside ? 'BẬT' : 'TẮT' }}</span>
+                <span class="signal-pill" [class.bullish]="executionPlan.probeBuy30" [class.neutral]="!executionPlan.probeBuy30">Mua 30% · {{ executionPlan.probeBuy30 ? 'S?N SÀNG' : 'CH?' }}</span>
+                <span class="signal-pill" [class.bullish]="executionPlan.addBuy70" [class.neutral]="!executionPlan.addBuy70">Mua thêm 70% · {{ executionPlan.addBuy70 ? 'S?N SÀNG' : 'CH?' }}</span>
+                <span class="signal-pill" [class.bearish]="executionPlan.takeProfitSignal" [class.neutral]="!executionPlan.takeProfitSignal">Ch?t l?i · {{ executionPlan.takeProfitSignal ? 'B?T' : 'T?T' }}</span>
+                <span class="signal-pill" [class.bearish]="executionPlan.standAside" [class.neutral]="!executionPlan.standAside">Ð?ng ngoài · {{ executionPlan.standAside ? 'B?T' : 'T?T' }}</span>
               </div>
               <div class="detail-metric-grid compact">
                 <div class="detail-metric">
-                  <span>Stop-loss tối thiểu</span>
+                  <span>Stop-loss t?i thi?u</span>
                   <strong>{{ executionPlan.stopLossMin !== null ? (executionPlan.stopLossMin / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
                 <div class="detail-metric">
-                  <span>Stop-loss tối đa</span>
+                  <span>Stop-loss t?i da</span>
                   <strong>{{ executionPlan.stopLossMax !== null ? (executionPlan.stopLossMax / 100 | percent:'1.0-1') : '-' }}</strong>
                 </div>
               </div>
@@ -665,12 +679,12 @@
           </div>
 
           <div class="decision-summary" *ngIf="getDecisionNarratives(selectedScoreItem).length">
-            <h4>Vì sao mã này PASS hoặc FAIL</h4>
+            <h4>Vì sao mã này PASS ho?c FAIL</h4>
             <div class="decision-list">
               <div class="decision-item" *ngFor="let narrative of getDecisionNarratives(selectedScoreItem)" [class.pass]="narrative.status === 'pass'" [class.fail]="narrative.status === 'fail'" [class.warn]="narrative.status === 'warn'">
                 <div class="decision-label-row">
                   <strong>{{ narrative.label }}</strong>
-                  <span>{{ narrative.status === 'pass' ? 'PASS' : narrative.status === 'fail' ? 'FAIL' : 'CẦN XEM' }}</span>
+                  <span>{{ narrative.status === 'pass' ? 'PASS' : narrative.status === 'fail' ? 'FAIL' : 'C?N XEM' }}</span>
                 </div>
                 <p>{{ narrative.detail }}</p>
               </div>
@@ -680,12 +694,13 @@
       </section>
 
       <section *ngSwitchCase="'risk'" class="panel page-panel">
+        @defer (when selectedTab === 'risk'; prefetch on idle) {
         <div class="panel-header">
           <div>
-            <div class="panel-title">Rà soát rủi ro</div>
-            <div class="panel-subtitle">Dùng để stress test danh sách theo dõi và xác định mã cần xem xét stop-loss.</div>
+            <div class="panel-title">Rà soát r?i ro</div>
+            <div class="panel-subtitle">Dùng d? stress test danh sách theo dõi và xác d?nh mã c?n xem xét stop-loss.</div>
           </div>
-          <button type="button" class="btn-primary" (click)="reloadRisk()">Quét lại rủi ro</button>
+          <button type="button" class="btn-primary" (click)="reloadRisk()">Quét l?i r?i ro</button>
         </div>
         <div class="risk-summary" *ngIf="risk">
           <div class="driver-card" *ngFor="let item of risk.summaryCards">
@@ -700,10 +715,10 @@
               <tr>
                 <th>Mã</th>
                 <th>Winning</th>
-                <th>Rủi ro</th>
+                <th>R?i ro</th>
                 <th>Biên an toàn</th>
                 <th>Triggers</th>
-                <th class="table-action-cell">Nhật ký</th>
+                <th class="table-action-cell">Nh?t ký</th>
               </tr>
             </thead>
             <tbody>
@@ -714,7 +729,7 @@
                 <td>{{ item.marginOfSafety | percent:'1.0-1' }}</td>
                 <td>{{ item.alertResults.length }}</td>
                 <td class="table-action-cell">
-                  <button type="button" class="icon-action-btn" title="Đưa mã này sang nhật ký" (click)="openJournalFromItem(item, $event)">
+                  <button type="button" class="icon-action-btn" title="Ðua mã này sang nh?t ký" (click)="openJournalFromItem(item, $event)">
                     <ion-icon name="document-text-outline"></ion-icon>
                   </button>
                 </td>
@@ -722,16 +737,23 @@
             </tbody>
           </table>
         </div>
+        } @placeholder {
+        <div class="defer-placeholder">
+          <div class="panel-title">Ðang chu?n b? màn rà soát r?i ro...</div>
+          <div class="panel-subtitle">Tab này du?c hoãn d?ng d? gi? trang chính nh? hon.</div>
+        </div>
+        }
       </section>
       <section *ngSwitchCase="'settings'" class="panel page-panel">
+        @defer (when selectedTab === 'settings'; prefetch on idle) {
         <div class="panel-header">
           <div>
-            <div class="panel-title">Cài đặt chiến lược động</div>
-            <div class="panel-subtitle">Hiển thị trực tiếp công thức, tham số và luật để chỉnh từ UI thay vì sửa code.</div>
+            <div class="panel-title">Cài d?t chi?n lu?c d?ng</div>
+            <div class="panel-subtitle">Hi?n th? tr?c ti?p công th?c, tham s? và lu?t d? ch?nh t? UI thay vì s?a code.</div>
           </div>
           <div class="toolbar">
-            <button type="button" class="btn-light" (click)="saveConfig()" [disabled]="saving">{{ saving ? 'Đang lưu...' : 'Lưu cấu hình' }}</button>
-            <button type="button" class="btn-primary" (click)="publishConfig()" [disabled]="publishing">{{ publishing ? 'Đang phát hành...' : 'Phát hành phiên bản' }}</button>
+            <button type="button" class="btn-light" (click)="saveConfig()" [disabled]="saving">{{ saving ? 'Ðang luu...' : 'Luu c?u hình' }}</button>
+            <button type="button" class="btn-primary" (click)="publishConfig()" [disabled]="publishing">{{ publishing ? 'Ðang phát hành...' : 'Phát hành phiên b?n' }}</button>
           </div>
         </div>
 
@@ -742,15 +764,15 @@
               <strong>{{ getSettingsSectionCount('profiles') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'formulas'" (click)="selectSettingsSection('formulas')">
-              <span>Công thức</span>
+              <span>Công th?c</span>
               <strong>{{ getSettingsSectionCount('formulas') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'screenRules'" (click)="selectSettingsSection('screenRules')">
-              <span>Luật lọc</span>
+              <span>Lu?t l?c</span>
               <strong>{{ getSettingsSectionCount('screenRules') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'alertRules'" (click)="selectSettingsSection('alertRules')">
-              <span>Luật cảnh báo</span>
+              <span>Lu?t c?nh báo</span>
               <strong>{{ getSettingsSectionCount('alertRules') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'checklists'" (click)="selectSettingsSection('checklists')">
@@ -758,7 +780,7 @@
               <strong>{{ getSettingsSectionCount('checklists') }}</strong>
             </button>
             <button type="button" class="settings-nav-item" [class.active]="selectedSettingsSection === 'versions'" (click)="selectSettingsSection('versions')">
-              <span>Phiên bản</span>
+              <span>Phiên b?n</span>
               <strong>{{ getSettingsSectionCount('versions') }}</strong>
             </button>
           </aside>
@@ -768,7 +790,7 @@
             <div class="profile-list" *ngIf="selectedSettingsSection === 'profiles'">
               <button type="button" class="profile-pill" *ngFor="let profile of profiles" (click)="activateProfile(profile)">
                 {{ profile.name }}
-                <small *ngIf="profile.isDefault">Mặc định</small>
+                <small *ngIf="profile.isDefault">M?c d?nh</small>
               </button>
             </div>
             <div class="form-grid compact" *ngIf="selectedSettingsSection === 'profiles'">
@@ -781,17 +803,17 @@
                 <input class="form-control" [(ngModel)]="newProfile.name" />
               </div>
               <div class="form-item full">
-                 <label>Mô tả</label>
+                 <label>Mô t?</label>
                 <input class="form-control" [(ngModel)]="newProfile.description" />
               </div>
             </div>
             <button type="button" class="btn-light create-profile-btn" *ngIf="selectedSettingsSection === 'profiles'" (click)="createProfile()">Táº¡o profile</button>
 
-            <h3 *ngIf="selectedSettingsSection === 'versions'">Phiên bản</h3>
+            <h3 *ngIf="selectedSettingsSection === 'versions'">Phiên b?n</h3>
             <div class="version-list" *ngIf="selectedSettingsSection === 'versions'">
               <div class="version-row" *ngFor="let version of config.versions">
                 <strong>#{{ version.versionNo }}</strong>
-                <span>{{ version.changeSummary || 'Phát hành profile chiến lược' }}</span>
+                <span>{{ version.changeSummary || 'Phát hành profile chi?n lu?c' }}</span>
               </div>
             </div>
           </article>
@@ -799,33 +821,33 @@
           <article class="settings-panel settings-detail-panel" *ngIf="selectedSettingsSection === 'formulas'">
             <div class="settings-section-head">
               <div>
-                <h3>Công thức</h3>
-                <p>Chỉ mở công thức đang chỉnh để tránh rối. Bấm vào dòng nào thì bung dòng đó.</p>
+                <h3>Công th?c</h3>
+                <p>Ch? m? công th?c dang ch?nh d? tránh r?i. B?m vào dòng nào thì bung dòng dó.</p>
               </div>
             </div>
             <div class="config-card collapsible" *ngFor="let formula of config.formulas; trackBy: trackByCode" [class.open]="isSettingsCardOpen('formulas', formula)">
               <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('formulas', formula)">
                 <div>
                   <strong>{{ formula.label }}</strong>
-                  <small>{{ formula.formulaCode }} · công thức kỹ thuật</small>
+                  <small>{{ formula.formulaCode }} · công th?c k? thu?t</small>
                 </div>
                 <div class="config-header-actions">
-                  <span class="config-status" [class.off]="!formula.isEnabled">{{ formula.isEnabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                  <span class="config-status" [class.off]="!formula.isEnabled">{{ formula.isEnabled ? 'Ðang b?t' : 'Ðang t?t' }}</span>
                   <span class="config-arrow">{{ isSettingsCardOpen('formulas', formula) ? 'âˆ’' : '+' }}</span>
                 </div>
               </button>
               <div class="config-body" *ngIf="isSettingsCardOpen('formulas', formula)">
                 <label class="toggle-inline">
                   <input type="checkbox" [(ngModel)]="formula.isEnabled" />
-                  Bật dùng
+                  B?t dùng
                 </label>
               <div class="formula-readable">
-                <span>Tên hiển thị cho người dùng</span>
+                <span>Tên hi?n th? cho ngu?i dùng</span>
                 <strong>{{ getFriendlyExpression(formula) }}</strong>
               </div>
               <div class="expression-builder">
-                <div class="builder-title">Builder công thức</div>
-                <div class="builder-help">Bấm vào toán tử hoặc biến bên dưới để chèn thẳng vào công thức.</div>
+                <div class="builder-title">Builder công th?c</div>
+                <div class="builder-help">B?m vào toán t? ho?c bi?n bên du?i d? chèn th?ng vào công th?c.</div>
                 <div class="builder-operators">
                   <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                     <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(formula, formulaEditor, operator)">
@@ -848,7 +870,7 @@
               </div>
               <textarea #formulaEditor class="form-control formula-editor" rows="3" [(ngModel)]="formula.expression"></textarea>
               <div class="variable-help" *ngIf="getVariableHints(formula).length">
-                <div class="variable-help-title">Các biến đang dùng trong công thức</div>
+                <div class="variable-help-title">Các bi?n dang dùng trong công th?c</div>
                 <div class="variable-list">
                   <div class="variable-item" *ngFor="let variable of getVariableHints(formula)">
                     <div class="variable-label-row">
@@ -864,7 +886,7 @@
                   <label>{{ parameter.label }}</label>
                   <div class="parameter-meta">
                     <code>{{ parameter.paramKey }}</code>
-                    <span>Giá trị hiện tại: {{ getParameterValueLabel(parameter) }}</span>
+                    <span>Giá tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
                   </div>
                   <input
                     *ngIf="parameter.dataType !== 'boolean'"
@@ -882,25 +904,25 @@
           <article class="settings-panel settings-detail-panel" *ngIf="selectedSettingsSection === 'screenRules' || selectedSettingsSection === 'alertRules' || selectedSettingsSection === 'checklists'">
             <div class="settings-section-head" *ngIf="selectedSettingsSection === 'screenRules'">
               <div>
-                <h3>Luật lọc</h3>
-                <p>Tách riêng bộ luật lọc 3 tầng để team chỉ tập trung vào logic lọc cổ phiếu.</p>
+                <h3>Lu?t l?c</h3>
+                <p>Tách riêng b? lu?t l?c 3 t?ng d? team ch? t?p trung vào logic l?c c? phi?u.</p>
               </div>
             </div>
             <div class="config-card collapsible" *ngFor="let rule of config.screenRules; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'screenRules'" [class.open]="isSettingsCardOpen('screenRules', rule)">
               <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('screenRules', rule)">
                 <div>
                   <strong>{{ rule.label }}</strong>
-                  <small>{{ rule.layerCode }} · luật lọc</small>
+                  <small>{{ rule.layerCode }} · lu?t l?c</small>
                 </div>
                 <div class="config-header-actions">
-                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Ðang b?t' : 'Ðang t?t' }}</span>
                   <span class="config-arrow">{{ isSettingsCardOpen('screenRules', rule) ? 'âˆ’' : '+' }}</span>
                 </div>
               </button>
               <div class="config-body" *ngIf="isSettingsCardOpen('screenRules', rule)">
                 <label class="toggle-inline">
                   <input type="checkbox" [(ngModel)]="rule.isEnabled" />
-                  Bật dùng
+                  B?t dùng
                 </label>
               <div class="formula-readable">
                 <span>Diá»…n giáº£i business</span>
@@ -908,7 +930,7 @@
               </div>
               <div class="expression-builder">
                 <div class="builder-title">Builder rule lá»c</div>
-                <div class="builder-help">Chọn biến và toán tử để ghép luật thay vì gõ tay.</div>
+                <div class="builder-help">Ch?n bi?n và toán t? d? ghép lu?t thay vì gõ tay.</div>
                 <div class="builder-operators">
                   <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                     <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, screenRuleEditor, operator)">
@@ -931,7 +953,7 @@
               </div>
               <textarea #screenRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
               <div class="variable-help" *ngIf="getVariableHints(rule).length">
-                <div class="variable-help-title">Biến và ngưỡng của luật này</div>
+                <div class="variable-help-title">Bi?n và ngu?ng c?a lu?t này</div>
                 <div class="variable-list">
                   <div class="variable-item" *ngFor="let variable of getVariableHints(rule)">
                     <div class="variable-label-row">
@@ -947,7 +969,7 @@
                   <label>{{ parameter.label }}</label>
                   <div class="parameter-meta">
                     <code>{{ parameter.paramKey }}</code>
-                    <span>Giá trị hiện tại: {{ getParameterValueLabel(parameter) }}</span>
+                    <span>Giá tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
                   </div>
                   <input class="form-control" [value]="parameter.value == null ? '' : parameter.value" (input)="updateParameterNumber(parameter, $event)" />
                 </div>
@@ -957,33 +979,33 @@
 
             <div class="settings-section-head" *ngIf="selectedSettingsSection === 'alertRules'">
               <div>
-                <h3>Luật cảnh báo</h3>
-                <p>Nhóm riêng luật cảnh báo để xem, chỉnh và phát hành mà không bị lẫn với scoring.</p>
+                <h3>Lu?t c?nh báo</h3>
+                <p>Nhóm riêng lu?t c?nh báo d? xem, ch?nh và phát hành mà không b? l?n v?i scoring.</p>
               </div>
             </div>
             <div class="config-card collapsible" *ngFor="let rule of config.alertRules; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'alertRules'" [class.open]="isSettingsCardOpen('alertRules', rule)">
               <button type="button" class="config-header config-toggle" (click)="toggleSettingsCard('alertRules', rule)">
                 <div>
                   <strong>{{ rule.label }}</strong>
-                  <small>{{ rule.ruleCode }} · luật cảnh báo</small>
+                  <small>{{ rule.ruleCode }} · lu?t c?nh báo</small>
                 </div>
                 <div class="config-header-actions">
-                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                  <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Ðang b?t' : 'Ðang t?t' }}</span>
                   <span class="config-arrow">{{ isSettingsCardOpen('alertRules', rule) ? 'âˆ’' : '+' }}</span>
                 </div>
               </button>
               <div class="config-body" *ngIf="isSettingsCardOpen('alertRules', rule)">
                 <label class="toggle-inline">
                   <input type="checkbox" [(ngModel)]="rule.isEnabled" />
-                  Bật dùng
+                  B?t dùng
                 </label>
               <div class="formula-readable">
                 <span>Diá»…n giáº£i business</span>
                 <strong>{{ getFriendlyExpression(rule) }}</strong>
               </div>
               <div class="expression-builder">
-                <div class="builder-title">Builder luật cảnh báo</div>
-                <div class="builder-help">Dùng các chip bên dưới để lắp luật cảnh báo dễ hiểu hơn.</div>
+                <div class="builder-title">Builder lu?t c?nh báo</div>
+                <div class="builder-help">Dùng các chip bên du?i d? l?p lu?t c?nh báo d? hi?u hon.</div>
                 <div class="builder-operators">
                   <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                     <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, alertRuleEditor, operator)">
@@ -1005,9 +1027,9 @@
                 </div>
               </div>
               <textarea #alertRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
-              <input class="form-control mb-2" [(ngModel)]="rule.messageTemplate" placeholder="Mẫu nội dung cảnh báo" />
+              <input class="form-control mb-2" [(ngModel)]="rule.messageTemplate" placeholder="M?u n?i dung c?nh báo" />
               <div class="variable-help" *ngIf="getVariableHints(rule).length">
-                <div class="variable-help-title">Biến và ngưỡng của cảnh báo này</div>
+                <div class="variable-help-title">Bi?n và ngu?ng c?a c?nh báo này</div>
                 <div class="variable-list">
                   <div class="variable-item" *ngFor="let variable of getVariableHints(rule)">
                     <div class="variable-label-row">
@@ -1023,7 +1045,7 @@
                   <label>{{ parameter.label }}</label>
                   <div class="parameter-meta">
                     <code>{{ parameter.paramKey }}</code>
-                    <span>Giá trị hiện tại: {{ getParameterValueLabel(parameter) }}</span>
+                    <span>Giá tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
                   </div>
                   <input class="form-control" [value]="parameter.value == null ? '' : parameter.value" (input)="updateParameterNumber(parameter, $event)" />
                 </div>
@@ -1034,7 +1056,7 @@
             <div class="settings-section-head" *ngIf="selectedSettingsSection === 'checklists'">
               <div>
                 <h3>Checklist</h3>
-                <p>Giữ riêng checklist để người dùng tập trung vào quy trình thay vì đọc lẫn công thức chấm điểm.</p>
+                <p>Gi? riêng checklist d? ngu?i dùng t?p trung vào quy trình thay vì d?c l?n công th?c ch?m di?m.</p>
               </div>
             </div>
             <div class="config-card collapsible" *ngFor="let item of config.checklists; trackBy: trackByCode" [hidden]="selectedSettingsSection !== 'checklists'" [class.open]="isSettingsCardOpen('checklists', item)">
@@ -1044,14 +1066,14 @@
                   <small>{{ item.checklistType }} Â· checklist</small>
                 </div>
                 <div class="config-header-actions">
-                  <span class="config-status" [class.off]="!item.isEnabled">{{ item.isEnabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                  <span class="config-status" [class.off]="!item.isEnabled">{{ item.isEnabled ? 'Ðang b?t' : 'Ðang t?t' }}</span>
                   <span class="config-arrow">{{ isSettingsCardOpen('checklists', item) ? 'âˆ’' : '+' }}</span>
                 </div>
               </button>
               <div class="config-body" *ngIf="isSettingsCardOpen('checklists', item)">
                 <label class="toggle-inline">
                   <input type="checkbox" [(ngModel)]="item.isEnabled" />
-                  Bật dùng
+                  B?t dùng
                 </label>
               <div class="formula-readable">
                 <span>Diá»…n giáº£i business</span>
@@ -1059,7 +1081,7 @@
               </div>
               <div class="expression-builder">
                 <div class="builder-title">Builder checklist</div>
-                <div class="builder-help">Bấm vào biến/ngưỡng để tạo checklist nhanh cho từng giai đoạn giao dịch.</div>
+                <div class="builder-help">B?m vào bi?n/ngu?ng d? t?o checklist nhanh cho t?ng giai do?n giao d?ch.</div>
                 <div class="builder-operators">
                   <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                     <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(item, checklistEditor, operator)">
@@ -1082,7 +1104,7 @@
               </div>
               <textarea #checklistEditor class="form-control formula-editor" rows="2" [(ngModel)]="item.expression"></textarea>
               <div class="variable-help" *ngIf="getVariableHints(item).length">
-                <div class="variable-help-title">Biến và ngưỡng của checklist này</div>
+                <div class="variable-help-title">Bi?n và ngu?ng c?a checklist này</div>
                 <div class="variable-list">
                   <div class="variable-item" *ngFor="let variable of getVariableHints(item)">
                     <div class="variable-label-row">
@@ -1098,7 +1120,7 @@
                   <label>{{ parameter.label }}</label>
                   <div class="parameter-meta">
                     <code>{{ parameter.paramKey }}</code>
-                    <span>Giá trị hiện tại: {{ getParameterValueLabel(parameter) }}</span>
+                    <span>Giá tr? hi?n t?i: {{ getParameterValueLabel(parameter) }}</span>
                   </div>
                   <input class="form-control" [value]="parameter.value == null ? '' : parameter.value" (input)="updateParameterNumber(parameter, $event)" />
                 </div>
@@ -1107,6 +1129,12 @@
             </div>
           </article>
         </div>
+        } @placeholder {
+        <div class="defer-placeholder">
+          <div class="panel-title">Đang chuẩn bị cấu hình chiến lược...</div>
+          <div class="panel-subtitle">Trình chỉnh công thức và luật sẽ chỉ tải khi bạn vào tab cài đặt.</div>
+        </div>
+        }
       </section>
     </div>
   </div>

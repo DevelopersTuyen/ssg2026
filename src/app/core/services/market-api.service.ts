@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
-import { catchError, finalize, shareReplay, tap } from 'rxjs/operators';
-import { environment } from 'src/environments/environment';
+import { catchError, finalize, shareReplay, tap, timeout } from 'rxjs/operators';
+import { RuntimeConfigService } from './runtime-config.service';
 
 export type ExchangeTab = 'HSX' | 'HNX' | 'UPCOM';
 export type SortTab = 'all' | 'actives' | 'gainers' | 'losers';
@@ -211,6 +211,32 @@ export interface NewsItem {
   capturedAt: string | null;
   url?: string | null;
   source?: string | null;
+}
+
+export interface SymbolNewsItem {
+  id: string;
+  symbol: string;
+  exchange: string | null;
+  title: string;
+  summary: string | null;
+  publishedAt: string | null;
+  capturedAt: string | null;
+  url: string | null;
+  source: string | null;
+  relatedSymbols: string[];
+  sentimentScore: number;
+  sentimentLabel: string;
+  impactScore: number;
+  impactLabel: string;
+  impactReasons: string[];
+}
+
+export interface SymbolNewsResponse {
+  symbol: string;
+  exchange: string | null;
+  companyName: string | null;
+  items: SymbolNewsItem[];
+  total: number;
 }
 
 export interface SymbolSearchItem {
@@ -630,6 +656,26 @@ export interface MarketSettingsData {
   cacheDays: string;
   syncMarketData: boolean;
   syncNewsData: boolean;
+  collectorQuotePollSeconds: string;
+  collectorIntradayPollSeconds: string;
+  collectorIndexDailyPollSeconds: string;
+  collectorFinancialPollSeconds: string;
+  collectorNewsPollSeconds: string;
+  collectorQuoteRequestsPerRun: string;
+  collectorIntradayRequestsPerRun: string;
+  collectorIntradayMaxConcurrency: string;
+  collectorFinancialSymbolsPerRun: string;
+  collectorIntradayBackfillIntervalSeconds: string;
+  collectorIntradayBackfillRequestsPerRun: string;
+  collectorFinancialBackfillIntervalSeconds: string;
+  collectorFinancialBackfillSymbolsPerRun: string;
+  collectorCashFlowBackfillIntervalSeconds: string;
+  collectorCashFlowBackfillSymbolsPerRun: string;
+  collectorQuoteSource: string;
+  collectorIntradaySource: string;
+  collectorIndexSource: string;
+  collectorFinancialSource: string;
+  collectorSymbolMasterSource: string;
   syncCloud: boolean;
   downloadOnWifiOnly: boolean;
   aiEnabled: boolean;
@@ -642,6 +688,15 @@ export interface MarketSettingsData {
   aiTone: string;
   aiLocalAutoAnalysis: boolean;
   aiLocalFinancialAnalysis: boolean;
+  aiLocalModel: string;
+  workflowAutoEnabled: boolean;
+  workflowAutoExchangeScope: ExchangeTab | string;
+  workflowAutoTakeProfit: boolean;
+  workflowAutoCutLoss: boolean;
+  workflowAutoRebalance: boolean;
+  workflowAutoReviewPortfolio: boolean;
+  workflowAutoProbeBuy: boolean;
+  workflowAutoAddPosition: boolean;
   safeMode: boolean;
   biometricLogin: boolean;
   sessionTimeout: string;
@@ -650,6 +705,8 @@ export interface MarketSettingsData {
 
 export interface MarketSyncJobStatus {
   status: string;
+  jobName?: string | null;
+  health?: 'idle' | 'healthy' | 'soft-failed' | 'hard-failed' | 'recovered' | string;
   startedAt: string | null;
   finishedAt: string | null;
   message: string | null;
@@ -658,15 +715,48 @@ export interface MarketSyncJobStatus {
   remainingBatches: number | null;
   itemsInBatch: number | null;
   itemsResolved: number | null;
+  source?: string | null;
+  coverageMode?: 'full' | 'rotated' | string | null;
+  lastError?: string | null;
+  lastErrorAt?: string | null;
+  lastSuccessAt?: string | null;
+  recoveredAt?: string | null;
+  consecutiveFailures?: number | null;
+  ageSeconds?: number | null;
+}
+
+export interface MarketCoverageBucket {
+  exchange: string;
+  totalSymbols: number;
+  intradaySymbols: number;
+  intradayPct: number;
+  financialSymbols: number;
+  financialPct: number;
+  cashFlowSymbols: number;
+  cashFlowPct: number;
+}
+
+export interface MarketCoverageSnapshot {
+  latestIntradayDate?: string | null;
+  all: MarketCoverageBucket;
+  byExchange: Record<string, MarketCoverageBucket>;
 }
 
 export interface MarketSyncStatusData {
   quotes: MarketSyncJobStatus;
   intraday: MarketSyncJobStatus;
+  intradayBackfill: MarketSyncJobStatus;
   indexDaily: MarketSyncJobStatus;
   financial: MarketSyncJobStatus;
+  financialBackfill: MarketSyncJobStatus;
+  cashFlowBackfill: MarketSyncJobStatus;
   seedSymbols: MarketSyncJobStatus;
+  foundationCandles: MarketSyncJobStatus;
+  foundationDataQuality: MarketSyncJobStatus;
+  foundationAlerts: MarketSyncJobStatus;
+  workflowAutomation: MarketSyncJobStatus;
   news: MarketSyncJobStatus;
+  coverage?: MarketCoverageSnapshot | null;
   checkedAt: string | null;
 }
 
@@ -904,6 +994,22 @@ export interface StrategyExecutionPlan {
   rationale: string[];
 }
 
+export interface StrategyFormulaVerdict {
+  bias: 'bullish' | 'constructive' | 'neutral' | 'cautious' | 'bearish' | string;
+  action: 'candidate' | 'probe_buy' | 'add_position' | 'take_profit' | 'stand_aside' | 'review' | string;
+  riskLevel: 'low' | 'medium' | 'high' | string;
+  confidence: number;
+  headline: string;
+  summary: string;
+  passCount: number;
+  failCount: number;
+  alertCount: number;
+  passedLayers: number;
+  keyPasses: string[];
+  keyFails: string[];
+  keyAlerts: string[];
+}
+
 export interface StrategyScoredItem {
   rank: number;
   symbol: string;
@@ -947,11 +1053,13 @@ export interface StrategyScoredItem {
   layerResults: StrategyRuleResult[];
   alertResults: StrategyRuleResult[];
   checklistResults: StrategyRuleResult[];
+  formulaVerdict?: StrategyFormulaVerdict | null;
   explanation: {
     topDrivers: StrategyDriver[];
     ruleResults: StrategyRuleResult[];
     alerts: StrategyRuleResult[];
     checklists: StrategyRuleResult[];
+    formulaVerdict?: StrategyFormulaVerdict | null;
   };
 }
 
@@ -1003,6 +1111,286 @@ export interface StrategyJournalEntry {
   mistakeTags: string[];
   createdAt?: string | null;
   updatedAt?: string | null;
+  isOpen?: boolean;
+  positionStatus?: string;
+  resultLabel?: string;
+  currentPrice?: number | null;
+  pnlValue?: number | null;
+  pnlPercent?: number | null;
+  stopLossHit?: boolean;
+  takeProfitHit?: boolean;
+  distanceToStopLossPct?: number | null;
+  distanceToTakeProfitPct?: number | null;
+  actionCode?: string | null;
+  actionLabel?: string | null;
+  actionTone?: 'default' | 'positive' | 'warning' | 'danger' | string;
+  reviewReasons?: string[];
+  requiresReview?: boolean;
+}
+
+export interface StrategyOrderStatementEntry {
+  id: number;
+  profileId?: number | null;
+  journalEntryId?: number | null;
+  symbol: string;
+  exchange?: string | null;
+  tradeDate?: string | null;
+  settlementDate?: string | null;
+  tradeSide: string;
+  orderType?: string | null;
+  channel?: string | null;
+  quantity?: number | null;
+  price?: number | null;
+  grossValue?: number | null;
+  fee?: number | null;
+  tax?: number | null;
+  transferFee?: number | null;
+  netAmount?: number | null;
+  brokerReference?: string | null;
+  notes?: string | null;
+  metadata?: Record<string, any>;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface StrategyOperationsActionItem {
+  key: string;
+  symbol?: string | null;
+  title: string;
+  body: string;
+  tone: 'default' | 'positive' | 'warning' | 'danger' | string;
+  actionCode?: string | null;
+}
+
+export interface StrategyOperationsOverviewResponse {
+  profile?: StrategyProfile | null;
+  generatedAt: string;
+  exchange: string;
+  summaryCards: Array<StrategySummaryCard & { tone?: 'default' | 'positive' | 'warning' | 'danger' | string }>;
+  totals: {
+    entryCount: number;
+    openCount: number;
+    closedCount: number;
+    reviewCount: number;
+    totalCapital: number;
+    openCapital: number;
+    livePnlValue: number;
+    realizedPnlValue: number;
+    stopRiskCount: number;
+    takeProfitCount: number;
+  };
+  openPositions: StrategyJournalEntry[];
+  reviewQueue: StrategyJournalEntry[];
+  actionItems: StrategyOperationsActionItem[];
+}
+
+export interface StrategyPortfolioHolding {
+  symbol: string;
+  name?: string | null;
+  exchange?: string | null;
+  industry?: string | null;
+  sector?: string | null;
+  marketCap?: number | null;
+  quantity: number;
+  costBasisValue: number;
+  averageCost?: number | null;
+  currentPrice?: number | null;
+  marketValue: number;
+  unrealizedPnlValue: number;
+  unrealizedPnlPct: number;
+  exposurePct: number;
+  positionCount: number;
+  strategies: string[];
+  classifications: string[];
+}
+
+export interface StrategyPortfolioExposureItem {
+  label: string;
+  value: number;
+  weightPct: number;
+}
+
+export interface StrategyPortfolioAlertItem {
+  code: string;
+  severity: 'critical' | 'warning' | 'info' | string;
+  category: string;
+  title: string;
+  message: string;
+  target: string;
+  metricLabel: string;
+  metricValue: number;
+  threshold: number;
+}
+
+export interface StrategyActionWorkflowEntry {
+  id: number;
+  profileId?: number | null;
+  journalEntryId?: number | null;
+  symbol?: string | null;
+  exchange?: string | null;
+  sourceType: string;
+  sourceKey: string;
+  actionCode: string;
+  actionLabel: string;
+  executionMode?: 'manual' | 'automatic' | string;
+  status: string;
+  severity?: string | null;
+  title?: string | null;
+  message?: string | null;
+  resolutionType?: string | null;
+  resolutionNote?: string | null;
+  handledPrice?: number | null;
+  handledQuantity?: number | null;
+  metadata?: Record<string, any>;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  completedAt?: string | null;
+}
+
+export interface StrategyActionWorkflowSuggestion {
+  sourceType: string;
+  sourceKey: string;
+  journalEntryId?: number | null;
+  symbol?: string | null;
+  exchange?: string | null;
+  actionCode: string;
+  actionLabel: string;
+  executionMode?: 'manual' | 'automatic' | string;
+  severity?: string | null;
+  title: string;
+  message: string;
+  existingActionId?: number | null;
+  existingStatus?: string | null;
+}
+
+export interface StrategyActionWorkflowOverviewResponse {
+  generatedAt: string;
+  exchange: string;
+  pendingActions: StrategyActionWorkflowEntry[];
+  completedActions: StrategyActionWorkflowEntry[];
+  suggestedActions: StrategyActionWorkflowSuggestion[];
+  counts: {
+    pending: number;
+    completed: number;
+    dismissed: number;
+    suggested: number;
+  };
+}
+
+export interface StrategyActionAuditTrailItem {
+  id: number;
+  entityType: string;
+  entityId: string;
+  action: string;
+  before: Record<string, any>;
+  after: Record<string, any>;
+  changedBy?: string | null;
+  changedAt?: string | null;
+}
+
+export interface StrategyActionHistoryItem extends StrategyActionWorkflowEntry {
+  sourceLabel: string;
+  handledBy?: string | null;
+  handledAt?: string | null;
+  currentPrice?: number | null;
+  effectLabel: string;
+  effectTone: 'default' | 'positive' | 'warning' | 'danger' | string;
+  effectPct?: number | null;
+  effectValue?: number | null;
+  effectBasis: string;
+  auditTrail: StrategyActionAuditTrailItem[];
+}
+
+export interface StrategyActionHistoryResponse {
+  generatedAt: string;
+  exchange: string;
+  days: number;
+  items: StrategyActionHistoryItem[];
+  counts: {
+    total: number;
+    open: number;
+    completed: number;
+    dismissed: number;
+    portfolioDecisions: number;
+    journalDecisions: number;
+    takeProfit: number;
+    cutLoss: number;
+    rebalance: number;
+    standAside: number;
+  };
+}
+
+export interface StrategyReviewCountItem {
+  label: string;
+  count: number;
+  tone?: 'default' | 'positive' | 'warning' | 'danger' | string;
+}
+
+export interface StrategyReviewInsightItem {
+  tone: 'default' | 'positive' | 'warning' | 'danger' | string;
+  title: string;
+  body: string;
+}
+
+export interface StrategyReviewAlertItem {
+  label: string;
+  detail: string;
+  tone?: 'default' | 'positive' | 'warning' | 'danger' | string;
+}
+
+export interface StrategyReviewReportResponse {
+  generatedAt: string;
+  exchange: string;
+  days: number;
+  performance: {
+    totalJournal: number;
+    closedTrades: number;
+    openTrades: number;
+    wins: number;
+    losses: number;
+    winRate: number;
+    realizedPnlValue: number;
+    averageRealizedPnlValue: number;
+    averageRealizedPnlPct: number;
+    unrealizedPnlValue: number;
+  };
+  workflow: {
+    pending: number;
+    completed: number;
+    dismissed: number;
+    takeProfit: number;
+    cutLoss: number;
+    rebalance: number;
+  };
+  portfolio: {
+    criticalAlerts: number;
+    warningAlerts: number;
+    holdingCount: number;
+    topAlerts: StrategyReviewAlertItem[];
+  };
+  topMistakes: StrategyReviewCountItem[];
+  topActions: StrategyReviewCountItem[];
+  topReviewReasons: StrategyReviewCountItem[];
+  insights: StrategyReviewInsightItem[];
+}
+
+export interface StrategyPortfolioOverviewResponse {
+  generatedAt: string;
+  exchange: string;
+  summaryCards: Array<StrategySummaryCard & { tone?: 'default' | 'positive' | 'warning' | 'danger' | string }>;
+  totals: {
+    holdingCount: number;
+    openEntryCount: number;
+    closedEntryCount: number;
+    costBasisValue: number;
+    marketValue: number;
+    unrealizedPnlValue: number;
+    realizedPnlValue: number;
+  };
+  holdings: StrategyPortfolioHolding[];
+  exposureByStrategy: StrategyPortfolioExposureItem[];
+  exposureByIndustry: StrategyPortfolioExposureItem[];
+  alerts: StrategyPortfolioAlertItem[];
 }
 
 export interface StrategyOverviewResponse {
@@ -1025,12 +1413,16 @@ export interface StrategyOverviewResponse {
   providedIn: 'root',
 })
 export class MarketApiService {
-  private readonly baseUrl = environment.apiBaseUrl;
+  private readonly baseUrl: string;
   private readonly persistentCachePrefix = 'ssg2026:persist-cache:';
   private readonly responseCache = new Map<string, { expiresAt: number; data: unknown }>();
   private readonly inflightRequests = new Map<string, Observable<unknown>>();
+  private readonly defaultTimeoutMs = 8000;
+  private readonly heavyTimeoutMs = 15000;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, runtimeConfig: RuntimeConfigService) {
+    this.baseUrl = runtimeConfig.apiBaseUrl;
+  }
 
   private getCachedValue<T>(key: string): T | null {
     const cached = this.responseCache.get(key);
@@ -1052,7 +1444,7 @@ export class MarketApiService {
     return data;
   }
 
-  private getPersistentCacheEntry<T>(key: string): { expiresAt: number; data: T } | null {
+  private getPersistentCacheEntry<T>(key: string, allowExpired = false): { expiresAt: number; data: T } | null {
     if (typeof localStorage === 'undefined') {
       return null;
     }
@@ -1062,7 +1454,11 @@ export class MarketApiService {
         return null;
       }
       const parsed = JSON.parse(raw) as { expiresAt?: number; data?: T };
-      if (!parsed || !parsed.expiresAt || parsed.expiresAt <= Date.now()) {
+      if (!parsed || !parsed.expiresAt) {
+        localStorage.removeItem(`${this.persistentCachePrefix}${key}`);
+        return null;
+      }
+      if (!allowExpired && parsed.expiresAt <= Date.now()) {
         localStorage.removeItem(`${this.persistentCachePrefix}${key}`);
         return null;
       }
@@ -1096,7 +1492,12 @@ export class MarketApiService {
     key: string,
     ttlMs: number,
     request: Observable<T>,
-    options?: { persistent?: boolean; persistentTtlMs?: number }
+    options?: {
+      persistent?: boolean;
+      persistentTtlMs?: number;
+      timeoutMs?: number;
+      staleOnError?: boolean;
+    }
   ): Observable<T> {
     const cached = this.getCachedValue<T>(key);
     if (cached !== null) {
@@ -1119,12 +1520,26 @@ export class MarketApiService {
       return inflight as Observable<T>;
     }
 
+    const stalePersistentEntry =
+      options?.persistent && options?.staleOnError ? this.getPersistentCacheEntry<T>(key, true) : null;
+
     const sharedRequest = request.pipe(
+      timeout(options?.timeoutMs ?? this.defaultTimeoutMs),
       tap((data) => {
         this.setCachedValue(key, data, ttlMs);
         if (options?.persistent) {
           this.setPersistentCacheValue(key, data, options.persistentTtlMs ?? ttlMs);
         }
+      }),
+      catchError((error) => {
+        if (stalePersistentEntry) {
+          this.responseCache.set(key, {
+            expiresAt: Date.now() + Math.min(ttlMs, 60000),
+            data: stalePersistentEntry.data,
+          });
+          return of(stalePersistentEntry.data);
+        }
+        throw error;
       }),
       finalize(() => this.inflightRequests.delete(key)),
       shareReplay(1)
@@ -1236,6 +1651,23 @@ export class MarketApiService {
     });
 
     this.invalidateCache(Array.from(prefixes));
+  }
+
+  prewarmCoreCaches(defaultExchange: ExchangeTab = 'HSX'): void {
+    const requests: Observable<unknown>[] = [
+      this.getMySettings(),
+      this.getSyncStatus(),
+      this.getLiveIndexCards(),
+      this.getLiveIndexOptions(),
+      this.getNews(10),
+      this.listStrategyProfiles(),
+      this.listStrategyJournal(18, defaultExchange),
+      this.getStrategyOperationsOverview({ exchange: defaultExchange, limit: 120 }),
+      this.getStrategyPortfolioOverview({ exchange: defaultExchange, limit: 300 }),
+      this.getStrategyActionWorkflowOverview({ exchange: defaultExchange, limit: 100 }),
+      this.getStrategyActionHistory({ exchange: defaultExchange, days: 7, limit: 80 }),
+    ];
+    requests.forEach((request$) => request$.subscribe());
   }
 
   getLiveIndexCards(): Observable<LiveIndexCardsResponse> {
@@ -1397,9 +1829,20 @@ export class MarketApiService {
         params: {
           limit_per_section: limitPerSection,
         },
-      })
+      }),
+      { timeoutMs: this.heavyTimeoutMs, staleOnError: true }
     )
       .pipe(catchError(() => of(null)));
+  }
+
+  getSymbolNews(symbol: string, limit = 20): Observable<SymbolNewsResponse | null> {
+    return this.withCache(
+      `live:symbol-news:${symbol.toUpperCase()}:${limit}`,
+      45000,
+      this.http.get<SymbolNewsResponse>(`${this.baseUrl}/api/live/symbols/${symbol}/news`, {
+        params: { limit },
+      })
+    ).pipe(catchError(() => of(null)));
   }
 
   getNews(limit = 10): Observable<NewsItem[]> {
@@ -1540,7 +1983,7 @@ export class MarketApiService {
           include_financial_analysis: includeFinancialAnalysis,
         },
       }),
-      { persistent: true, persistentTtlMs: 180000 }
+      { persistent: true, persistentTtlMs: 180000, timeoutMs: this.heavyTimeoutMs, staleOnError: true }
     )
       .pipe(
         catchError(() =>
@@ -1570,7 +2013,7 @@ export class MarketApiService {
       this.http.get<ApiEnvelope<MarketAlertsOverviewResponse>>(`${this.baseUrl}/api/market-alerts/overview`, {
         params: { exchange },
       }),
-      { persistent: true, persistentTtlMs: 180000 }
+      { persistent: true, persistentTtlMs: 180000, timeoutMs: this.heavyTimeoutMs, staleOnError: true }
     )
       .pipe(
         catchError(() =>
@@ -1739,7 +2182,8 @@ export class MarketApiService {
     return this.withCache(
       'settings:sync-status',
       15000,
-      this.http.get<ApiEnvelope<MarketSyncStatusData>>(`${this.baseUrl}/api/settings/sync-status`)
+      this.http.get<ApiEnvelope<MarketSyncStatusData>>(`${this.baseUrl}/api/settings/sync-status`),
+      { staleOnError: true }
     ).pipe(
       catchError(() =>
         of({
@@ -1864,7 +2308,7 @@ export class MarketApiService {
       `strategy:overview:${profileId || 'active'}`,
       30000,
       this.http.get<ApiEnvelope<StrategyOverviewResponse>>(`${this.baseUrl}/api/strategy/overview`, { params }),
-      { persistent: true, persistentTtlMs: 300000 }
+      { persistent: true, persistentTtlMs: 300000, timeoutMs: this.heavyTimeoutMs, staleOnError: true }
     ).pipe(catchError(() => of({ data: null })));
   }
 
@@ -2007,8 +2451,180 @@ export class MarketApiService {
       this.http.get<ApiEnvelope<StrategyJournalEntry[]>>(`${this.baseUrl}/api/strategy/journal`, {
         params,
       }),
-      { persistent: true, persistentTtlMs: 300000 }
+      { persistent: true, persistentTtlMs: 300000, staleOnError: true }
     ).pipe(catchError(() => of({ data: [] })));
+  }
+
+  listStrategyOrderStatements(limit = 200, exchange?: string | null): Observable<ApiEnvelope<StrategyOrderStatementEntry[]>> {
+    const params: Record<string, string | number> = { limit };
+    if (exchange && exchange !== 'ALL') {
+      params['exchange'] = exchange;
+    }
+    return this.withCache(
+      `strategy:order-statements:${limit}:${exchange || 'ALL'}`,
+      30000,
+      this.http.get<ApiEnvelope<StrategyOrderStatementEntry[]>>(`${this.baseUrl}/api/strategy/order-statements`, {
+        params,
+      }),
+      { persistent: true, persistentTtlMs: 300000, staleOnError: true }
+    ).pipe(catchError(() => of({ data: [] })));
+  }
+
+  getStrategyOperationsOverview(
+    options: { profileId?: number | null; exchange?: string | null; limit?: number } = {}
+  ): Observable<ApiEnvelope<StrategyOperationsOverviewResponse | null>> {
+    const params: Record<string, string | number> = {
+      limit: options.limit || 120,
+    };
+    if (options.profileId) {
+      params['profile_id'] = options.profileId;
+    }
+    if (options.exchange && options.exchange !== 'ALL') {
+      params['exchange'] = options.exchange;
+    }
+    const cacheKey = `strategy:operations:${params['profile_id'] || 'default'}:${params['exchange'] || 'ALL'}:${params['limit']}`;
+    return this.withCache(
+      cacheKey,
+      30000,
+      this.http.get<ApiEnvelope<StrategyOperationsOverviewResponse>>(`${this.baseUrl}/api/strategy/operations/overview`, {
+        params,
+      }),
+      { persistent: true, persistentTtlMs: 180000, timeoutMs: this.heavyTimeoutMs, staleOnError: true }
+    ).pipe(catchError(() => of({ data: null })));
+  }
+
+  getStrategyPortfolioOverview(
+    options: { profileId?: number | null; exchange?: string | null; limit?: number } = {}
+  ): Observable<ApiEnvelope<StrategyPortfolioOverviewResponse | null>> {
+    const params: Record<string, string | number> = {
+      limit: options.limit || 300,
+    };
+    if (options.profileId) {
+      params['profile_id'] = options.profileId;
+    }
+    if (options.exchange && options.exchange !== 'ALL') {
+      params['exchange'] = options.exchange;
+    }
+    const cacheKey = `strategy:portfolio:${params['profile_id'] || 'default'}:${params['exchange'] || 'ALL'}:${params['limit']}`;
+    return this.withCache(
+      cacheKey,
+      30000,
+      this.http.get<ApiEnvelope<StrategyPortfolioOverviewResponse>>(`${this.baseUrl}/api/strategy/portfolio/overview`, {
+        params,
+      }),
+      { persistent: true, persistentTtlMs: 180000, timeoutMs: this.heavyTimeoutMs, staleOnError: true }
+    ).pipe(catchError(() => of({ data: null })));
+  }
+
+  getStrategyActionWorkflowOverview(
+    options: { profileId?: number | null; exchange?: string | null; limit?: number } = {}
+  ): Observable<ApiEnvelope<StrategyActionWorkflowOverviewResponse | null>> {
+    const params: Record<string, string | number> = {
+      limit: options.limit || 100,
+    };
+    if (options.profileId) {
+      params['profile_id'] = options.profileId;
+    }
+    if (options.exchange && options.exchange !== 'ALL') {
+      params['exchange'] = options.exchange;
+    }
+    const cacheKey = `strategy:workflow:${params['profile_id'] || 'default'}:${params['exchange'] || 'ALL'}:${params['limit']}`;
+    return this.withCache(
+      cacheKey,
+      15000,
+      this.http.get<ApiEnvelope<StrategyActionWorkflowOverviewResponse>>(`${this.baseUrl}/api/strategy/actions/overview`, {
+        params,
+      }),
+      { timeoutMs: this.heavyTimeoutMs, staleOnError: true }
+    ).pipe(catchError(() => of({ data: null })));
+  }
+
+  getStrategyActionHistory(
+    options: { profileId?: number | null; exchange?: string | null; status?: string | null; days?: number; limit?: number } = {}
+  ): Observable<ApiEnvelope<StrategyActionHistoryResponse | null>> {
+    const params: Record<string, string | number> = {
+      days: options.days || 7,
+      limit: options.limit || 120,
+    };
+    if (options.profileId) {
+      params['profile_id'] = options.profileId;
+    }
+    if (options.exchange && options.exchange !== 'ALL') {
+      params['exchange'] = options.exchange;
+    }
+    if (options.status && options.status !== 'all') {
+      params['status'] = options.status;
+    }
+    const cacheKey = `strategy:history:${params['profile_id'] || 'default'}:${params['exchange'] || 'ALL'}:${params['status'] || 'all'}:${params['days']}:${params['limit']}`;
+    return this.withCache(
+      cacheKey,
+      15000,
+      this.http.get<ApiEnvelope<StrategyActionHistoryResponse>>(`${this.baseUrl}/api/strategy/actions/history`, {
+        params,
+      }),
+      { timeoutMs: this.heavyTimeoutMs, staleOnError: true }
+    ).pipe(catchError(() => of({ data: null })));
+  }
+
+  getStrategyReviewReport(
+    options: { profileId?: number | null; exchange?: string | null; days?: number; limit?: number } = {}
+  ): Observable<ApiEnvelope<StrategyReviewReportResponse | null>> {
+    const params: Record<string, string | number> = {
+      days: options.days || 7,
+      limit: options.limit || 300,
+    };
+    if (options.profileId) {
+      params['profile_id'] = options.profileId;
+    }
+    if (options.exchange && options.exchange !== 'ALL') {
+      params['exchange'] = options.exchange;
+    }
+    const cacheKey = `strategy:review-report:${params['profile_id'] || 'default'}:${params['exchange'] || 'ALL'}:${params['days']}:${params['limit']}`;
+    return this.withCache(
+      cacheKey,
+      15000,
+      this.http.get<ApiEnvelope<StrategyReviewReportResponse>>(`${this.baseUrl}/api/strategy/review-report`, {
+        params,
+      }),
+      { timeoutMs: this.heavyTimeoutMs, staleOnError: true }
+    ).pipe(catchError(() => of({ data: null })));
+  }
+
+  createStrategyActionWorkflow(body: {
+    profile_id?: number | null;
+    journal_entry_id?: number | null;
+    symbol?: string | null;
+    exchange?: string | null;
+    source_type: string;
+    source_key: string;
+    action_code: string;
+    action_label: string;
+    execution_mode?: 'manual' | 'automatic' | string;
+    severity?: string | null;
+    title?: string | null;
+    message?: string | null;
+    metadata_json?: Record<string, any>;
+  }): Observable<ApiEnvelope<StrategyActionWorkflowEntry | null>> {
+    return this.http.post<ApiEnvelope<StrategyActionWorkflowEntry>>(`${this.baseUrl}/api/strategy/actions`, body).pipe(
+      tap(() => this.invalidateCache(['strategy:workflow:', 'strategy:history:', 'strategy:portfolio:', 'strategy:operations:', 'strategy:journal:'])),
+      catchError(() => of({ data: null }))
+    );
+  }
+
+  updateStrategyActionWorkflowStatus(
+    actionId: number,
+    body: {
+      status: 'open' | 'completed' | 'dismissed';
+      resolution_type?: string | null;
+      resolution_note?: string | null;
+      handled_price?: number | null;
+      handled_quantity?: number | null;
+    }
+  ): Observable<ApiEnvelope<StrategyActionWorkflowEntry | null>> {
+    return this.http.put<ApiEnvelope<StrategyActionWorkflowEntry>>(`${this.baseUrl}/api/strategy/actions/${actionId}/status`, body).pipe(
+      tap(() => this.invalidateCache(['strategy:workflow:', 'strategy:history:', 'strategy:portfolio:', 'strategy:operations:', 'strategy:journal:'])),
+      catchError(() => of({ data: null }))
+    );
   }
 
   createStrategyJournal(body: {
@@ -2038,12 +2654,49 @@ export class MarketApiService {
         tap(() =>
           this.invalidateCache([
             'strategy:journal:',
+            'strategy:operations:',
+            'strategy:portfolio:',
             'strategy:overview:',
             'strategy:rankings:',
             'strategy:risk:',
           ])
-        ),
-        catchError(() => of({ data: null }))
+        )
+      );
+  }
+
+  createStrategyOrderStatement(body: {
+    profile_id?: number | null;
+    journal_entry_id?: number | null;
+    symbol: string;
+    trade_date?: string | null;
+    settlement_date?: string | null;
+    trade_side: string;
+    order_type?: string | null;
+    channel?: string | null;
+    quantity?: number | null;
+    price?: number | null;
+    gross_value?: number | null;
+    fee?: number | null;
+    tax?: number | null;
+    transfer_fee?: number | null;
+    net_amount?: number | null;
+    broker_reference?: string | null;
+    notes?: string | null;
+    metadata_json?: Record<string, any>;
+  }): Observable<ApiEnvelope<StrategyOrderStatementEntry | null>> {
+    return this.http
+      .post<ApiEnvelope<StrategyOrderStatementEntry>>(`${this.baseUrl}/api/strategy/order-statements`, body)
+      .pipe(
+        tap(() =>
+          this.invalidateCache([
+            'strategy:order-statements:',
+            'strategy:journal:',
+            'strategy:operations:',
+            'strategy:portfolio:',
+            'strategy:history:',
+            'strategy:workflow:',
+          ])
+        )
       );
   }
 
@@ -2077,12 +2730,52 @@ export class MarketApiService {
         tap(() =>
           this.invalidateCache([
             'strategy:journal:',
+            'strategy:operations:',
+            'strategy:portfolio:',
             'strategy:overview:',
             'strategy:rankings:',
             'strategy:risk:',
           ])
-        ),
-        catchError(() => of({ data: null }))
+        )
+      );
+  }
+
+  updateStrategyOrderStatement(
+    entryId: number,
+    body: {
+      profile_id?: number | null;
+      journal_entry_id?: number | null;
+      symbol: string;
+      trade_date?: string | null;
+      settlement_date?: string | null;
+      trade_side: string;
+      order_type?: string | null;
+      channel?: string | null;
+      quantity?: number | null;
+      price?: number | null;
+      gross_value?: number | null;
+      fee?: number | null;
+      tax?: number | null;
+      transfer_fee?: number | null;
+      net_amount?: number | null;
+      broker_reference?: string | null;
+      notes?: string | null;
+      metadata_json?: Record<string, any>;
+    }
+  ): Observable<ApiEnvelope<StrategyOrderStatementEntry | null>> {
+    return this.http
+      .put<ApiEnvelope<StrategyOrderStatementEntry>>(`${this.baseUrl}/api/strategy/order-statements/${entryId}`, body)
+      .pipe(
+        tap(() =>
+          this.invalidateCache([
+            'strategy:order-statements:',
+            'strategy:journal:',
+            'strategy:operations:',
+            'strategy:portfolio:',
+            'strategy:history:',
+            'strategy:workflow:',
+          ])
+        )
       );
   }
 
@@ -2091,11 +2784,20 @@ export class MarketApiService {
       tap(() =>
         this.invalidateCache([
           'strategy:journal:',
+          'strategy:operations:',
+          'strategy:portfolio:',
           'strategy:overview:',
           'strategy:rankings:',
           'strategy:risk:',
         ])
       ),
+      catchError(() => of({ data: null }))
+    );
+  }
+
+  deleteStrategyOrderStatement(entryId: number): Observable<ApiEnvelope<StrategyOrderStatementEntry | null>> {
+    return this.http.delete<ApiEnvelope<StrategyOrderStatementEntry>>(`${this.baseUrl}/api/strategy/order-statements/${entryId}`).pipe(
+      tap(() => this.invalidateCache(['strategy:order-statements:'])),
       catchError(() => of({ data: null }))
     );
   }

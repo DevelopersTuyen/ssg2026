@@ -78,7 +78,7 @@ class MarketAlertsService:
             "summary_cards": self._build_summary_cards(context, enriched_alerts, used_fallback),
             "market_outlook": outlook,
             "alerts": enriched_alerts,
-            "news_items": context["news_items"][:6],
+            "news_items": context["news_items"],
             "watchlist_symbols": [item["symbol"] for item in context["watchlist"]],
             "alert_count": len(enriched_alerts),
             "watchlist_alert_count": sum(1 for item in enriched_alerts if item["watchlist"]),
@@ -88,14 +88,15 @@ class MarketAlertsService:
 
     async def _build_context(self, exchange: str) -> dict[str, Any]:
         index_cards = await self.repo.get_index_cards()
-        actives = await self._get_stock_board(exchange, "actives", limit=8)
-        gainers = await self._get_stock_board(exchange, "gainers", limit=8)
-        losers = await self._get_stock_board(exchange, "losers", limit=8)
-        watchlist = await self._build_watchlist_snapshot(limit=12)
-        news = await self.news_service.fetch_latest_news(limit=12, repo=self.repo)
+        actives = await self._get_stock_board(exchange, "actives", limit=50)
+        gainers = await self._get_stock_board(exchange, "gainers", limit=50)
+        losers = await self._get_stock_board(exchange, "losers", limit=50)
+        watchlist = await self._build_watchlist_snapshot(limit=None)
+        news = await self.news_service.fetch_latest_news(limit=50, repo=self.repo)
         strategy_signals = await self._load_strategy_signal_items(
             exchange=exchange,
             watchlist_symbols={item["symbol"] for item in watchlist},
+            limit=50,
         )
 
         tracked_symbols = self._collect_tracked_symbols(watchlist, actives, gainers, losers)
@@ -206,7 +207,8 @@ class MarketAlertsService:
 
     async def _build_watchlist_snapshot(self, limit: int = 12) -> list[dict[str, Any]]:
         items = await self.repo.get_active_watchlist_items()
-        items = items[:limit]
+        if limit is not None:
+            items = items[:limit]
         symbols = [item.symbol.upper() for item in items]
         intraday_map = await self.repo.get_latest_intraday_map(symbols)
         quote_map = await self.repo.get_latest_quote_map(symbols)
@@ -321,7 +323,7 @@ class MarketAlertsService:
                     )
                 )
 
-        for item in (context.get("gainers") or [])[:4]:
+        for item in context.get("gainers") or []:
             pct = float(item.get("change_percent") or 0)
             if pct < 3:
                 continue
@@ -351,7 +353,7 @@ class MarketAlertsService:
                 )
             )
 
-        for item in (context.get("losers") or [])[:4]:
+        for item in context.get("losers") or []:
             pct = float(item.get("change_percent") or 0)
             if pct > -3:
                 continue
@@ -440,9 +442,6 @@ class MarketAlertsService:
 
         for news_item in context.get("news_items") or []:
             related_symbols = news_item.get("related_symbols") or []
-            if not related_symbols and len(alerts) > 8:
-                continue
-
             symbol = related_symbols[0] if related_symbols else "NEWS"
             watchlist_hit = bool(news_item.get("watchlist_hit"))
             sentiment = self._score_news_sentiment(news_item["title"], news_item["summary"])

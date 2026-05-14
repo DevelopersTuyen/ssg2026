@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from math import isfinite
+import re
+import time
 from typing import Any
 
 import pandas as pd
@@ -22,6 +25,8 @@ class VnstockDataResult:
 
 
 class VnstockClient:
+    _cooldown_until_ts: float = 0.0
+
     def __init__(self) -> None:
         self.source = settings.vnstock_source
         self.api_key = settings.vnstock_api_key
@@ -53,6 +58,69 @@ class VnstockClient:
             logger.warning("cannot set vnstock api key automatically: %s", exc)
 
     @staticmethod
+    def _is_transient_vnstock_error(exc: Exception | str | None) -> bool:
+        message = str(exc or "").lower()
+        return any(
+            token in message
+            for token in (
+                "expecting value: line 1 column 1",
+                "jsondecodeerror",
+                "rate limit",
+                "too many requests",
+                "timed out",
+                "timeout",
+                "connection reset",
+                "temporarily unavailable",
+                "service unavailable",
+                "bad gateway",
+                "gateway timeout",
+            )
+        )
+
+    @staticmethod
+    def _extract_rate_limit_wait_seconds(message: str) -> int | None:
+        lowered = (message or "").lower()
+        for pattern in (r"ch[oờ]\s+(\d+)\s*gi[âa]y", r"wait\s+(\d+)\s*seconds?"):
+            match = re.search(pattern, lowered)
+            if match:
+                try:
+                    return max(1, int(match.group(1)))
+                except Exception:
+                    return None
+        return None
+
+    @classmethod
+    def _activate_cooldown(cls, seconds: int) -> None:
+        seconds = max(1, int(seconds))
+        until_ts = time.time() + seconds
+        if until_ts > cls._cooldown_until_ts:
+            cls._cooldown_until_ts = until_ts
+            logger.warning("vnstock rate-limit cooldown activated | seconds=%s", seconds)
+
+    @classmethod
+    def _respect_cooldown(cls) -> None:
+        remaining = int(cls._cooldown_until_ts - time.time())
+        if remaining > 0:
+            raise RuntimeError(f"vnstock rate limit cooldown active, wait {remaining} seconds")
+
+    @classmethod
+    def _normalize_vnstock_exception(cls, exc: BaseException) -> Exception:
+        if isinstance(exc, Exception):
+            message = str(exc)
+        else:
+            message = f"{exc.__class__.__name__}: {exc}"
+        wait_seconds = cls._extract_rate_limit_wait_seconds(message)
+        if wait_seconds is not None or "rate limit" in message.lower():
+            cls._activate_cooldown(wait_seconds or 45)
+        if isinstance(exc, Exception):
+            return exc
+        return RuntimeError(message)
+
+    def _retry_backoff(self, attempt: int) -> None:
+        base = max(1, int(settings.vnstock_retry_backoff_seconds or 1))
+        time.sleep(base * max(1, attempt))
+
+    @staticmethod
     def _df_to_records(df: Any) -> list[dict[str, Any]]:
         if df is None:
             return []
@@ -68,6 +136,7 @@ class VnstockClient:
     def get_listing_symbols(self, source: str | None = None) -> VnstockDataResult:
         self._ensure_ready()
         self._apply_api_key_if_supported()
+        self._respect_cooldown()
 
         listing_source = str(source or settings.symbol_master_source or self.source).strip().lower()
         raw: Any = None
@@ -80,8 +149,9 @@ class VnstockClient:
             rows = self._df_to_records(raw)
             if rows:
                 return VnstockDataResult(rows=rows, raw=raw)
-        except Exception as exc:
-            errors.append(f"Listing.symbols_by_exchange failed for {listing_source}: {exc}")
+        except BaseException as exc:
+            normalized = self._normalize_vnstock_exception(exc)
+            errors.append(f"Listing.symbols_by_exchange failed for {listing_source}: {normalized}")
 
         try:
             Listing = getattr(self._vnstock, "Listing")
@@ -90,36 +160,46 @@ class VnstockClient:
             rows = self._df_to_records(raw)
             if rows:
                 return VnstockDataResult(rows=rows, raw=raw)
-        except Exception as exc:
-            errors.append(f"Listing.all_symbols failed for {listing_source}: {exc}")
+        except BaseException as exc:
+            normalized = self._normalize_vnstock_exception(exc)
+            errors.append(f"Listing.all_symbols failed for {listing_source}: {normalized}")
 
         if errors:
             logger.warning("listing fetch failed: %s", " | ".join(errors[:3]))
         return VnstockDataResult(rows=[], raw=raw)
 
-    def get_price_board(self, symbols: list[str]) -> VnstockDataResult:
+    def get_price_board(self, symbols: list[str], *, source: str | None = None) -> VnstockDataResult:
         self._ensure_ready()
         self._apply_api_key_if_supported()
+        self._respect_cooldown()
         if not symbols:
             return VnstockDataResult(rows=[], raw=[])
+        board_source = str(source or settings.quote_source or settings.vnstock_source or self.source).strip().upper() or self.source
 
         errors: list[str] = []
         raw: Any = None
 
-        try:
-            Trading = getattr(self._vnstock, "Trading")
-            trading = Trading(source=self.source)
-            raw = trading.price_board(symbols)
-            rows = self._df_to_records(raw)
-            if rows:
-                return VnstockDataResult(rows=rows, raw=raw)
-        except Exception as exc:
-            errors.append(f"Trading.price_board failed: {exc}")
+        attempts = max(1, int(settings.vnstock_retry_attempts or 1))
+        for attempt in range(1, attempts + 1):
+            try:
+                Trading = getattr(self._vnstock, "Trading")
+                trading = Trading(source=board_source)
+                raw = trading.price_board(symbols)
+                rows = self._df_to_records(raw)
+                if rows:
+                    return VnstockDataResult(rows=rows, raw=raw, source=board_source)
+            except BaseException as exc:
+                normalized = self._normalize_vnstock_exception(exc)
+                errors.append(f"Trading.price_board failed: {normalized}")
+                if attempt < attempts and self._is_transient_vnstock_error(normalized):
+                    self._retry_backoff(attempt)
+                    continue
+                break
 
         rows: list[dict[str, Any]] = []
         for symbol in symbols:
             try:
-                quote = self._make_quote(symbol)
+                quote = self._make_quote(symbol, source=board_source)
                 hist = self._quote_history_fallback(quote, length="10D", interval="1D")
                 records = self._df_to_records(hist)
                 if not records:
@@ -151,36 +231,47 @@ class VnstockClient:
                         "time": self._pick(latest, ["time", "date", "Date"]),
                     }
                 )
-            except Exception as exc:
-                errors.append(f"fallback history failed for {symbol}: {exc}")
+            except BaseException as exc:
+                normalized = self._normalize_vnstock_exception(exc)
+                errors.append(f"fallback history failed for {symbol}: {normalized}")
 
         if errors:
             logger.warning("price_board fallback used: %s", " | ".join(errors[:5]))
-        return VnstockDataResult(rows=rows, raw=rows)
+        return VnstockDataResult(rows=rows, raw=rows, source=board_source, errors=errors)
 
-    def get_intraday(self, symbol: str, page_size: int = 10000) -> VnstockDataResult:
+    def get_intraday(self, symbol: str, page_size: int = 10000, *, source: str | None = None) -> VnstockDataResult:
         self._ensure_ready()
         self._apply_api_key_if_supported()
-        quote = self._make_quote(symbol)
+        self._respect_cooldown()
+        intraday_source = str(source or settings.intraday_source or settings.vnstock_source or self.source).strip().upper() or self.source
+        quote = self._make_quote(symbol, source=intraday_source)
 
         errors: list[str] = []
         raw: Any = None
+        attempts = max(1, int(settings.vnstock_retry_attempts or 1))
         for kwargs in (
             {"show_log": False, "page_size": page_size},
             {"show_log": False},
             {},
         ):
-            try:
-                raw = quote.intraday(**kwargs)
-                rows = self._df_to_records(raw)
-                if rows:
-                    return VnstockDataResult(rows=rows, raw=raw)
-            except Exception as exc:
-                errors.append(str(exc))
+            for attempt in range(1, attempts + 1):
+                try:
+                    raw = quote.intraday(**kwargs)
+                    rows = self._df_to_records(raw)
+                    if rows:
+                        return VnstockDataResult(rows=rows, raw=raw, source=intraday_source)
+                    break
+                except BaseException as exc:
+                    normalized = self._normalize_vnstock_exception(exc)
+                    errors.append(str(normalized))
+                    if attempt < attempts and self._is_transient_vnstock_error(normalized):
+                        self._retry_backoff(attempt)
+                        continue
+                    break
 
         if errors:
             logger.warning("intraday fetch failed for %s: %s", symbol, " | ".join(errors[:3]))
-        return VnstockDataResult(rows=[], raw=raw)
+        return VnstockDataResult(rows=[], raw=raw, source=intraday_source, errors=errors)
 
     def get_history(
         self,
@@ -191,6 +282,7 @@ class VnstockClient:
     ) -> VnstockDataResult:
         self._ensure_ready()
         self._apply_api_key_if_supported()
+        self._respect_cooldown()
         quote = self._make_quote(symbol, source=source)
         raw = self._quote_history_fallback(quote, length=f"{months}M", interval=interval)
         return VnstockDataResult(rows=self._df_to_records(raw), raw=raw)
@@ -204,6 +296,7 @@ class VnstockClient:
     ) -> VnstockDataResult:
         self._ensure_ready()
         self._apply_api_key_if_supported()
+        self._respect_cooldown()
 
         preferred_source = str(source or settings.financial_source or settings.vnstock_source or self.source).strip().upper() or self.source
         sources_to_try = [preferred_source]
@@ -221,8 +314,9 @@ class VnstockClient:
 
             try:
                 finance = self._make_finance(symbol=symbol, period=period, source=source_name)
-            except Exception as exc:
-                collected_errors.append(f"{source_name}:construct {exc}")
+            except BaseException as exc:
+                normalized = self._normalize_vnstock_exception(exc)
+                collected_errors.append(f"{source_name}:construct {normalized}")
                 continue
 
             method = getattr(finance, statement_type, None)
@@ -245,25 +339,37 @@ class VnstockClient:
                 ]
 
             errors: list[str] = []
+            attempts = max(1, int(settings.vnstock_retry_attempts or 1))
             for kwargs in call_variants:
-                try:
-                    latest_raw = method(**kwargs)
-                    rows = self._df_to_records(latest_raw)
-                    if rows:
-                        return VnstockDataResult(rows=rows, raw=latest_raw, source=source_name, errors=errors)
-                    if latest_raw is not None:
-                        return VnstockDataResult(rows=rows, raw=latest_raw, source=source_name, errors=errors)
-                except TypeError:
+                for attempt in range(1, attempts + 1):
                     try:
-                        latest_raw = method()
+                        latest_raw = method(**kwargs)
                         rows = self._df_to_records(latest_raw)
-                        if rows or latest_raw is not None:
+                        if rows:
                             return VnstockDataResult(rows=rows, raw=latest_raw, source=source_name, errors=errors)
-                    except Exception as exc:
-                        errors.append(str(exc))
-                        continue
-                except Exception as exc:
-                    errors.append(str(exc))
+                        if latest_raw is not None:
+                            return VnstockDataResult(rows=rows, raw=latest_raw, source=source_name, errors=errors)
+                        break
+                    except TypeError:
+                        try:
+                            latest_raw = method()
+                            rows = self._df_to_records(latest_raw)
+                            if rows or latest_raw is not None:
+                                return VnstockDataResult(rows=rows, raw=latest_raw, source=source_name, errors=errors)
+                        except BaseException as exc:
+                            normalized = self._normalize_vnstock_exception(exc)
+                            errors.append(str(normalized))
+                            if attempt < attempts and self._is_transient_vnstock_error(normalized):
+                                self._retry_backoff(attempt)
+                                continue
+                        break
+                    except BaseException as exc:
+                        normalized = self._normalize_vnstock_exception(exc)
+                        errors.append(str(normalized))
+                        if attempt < attempts and self._is_transient_vnstock_error(normalized):
+                            self._retry_backoff(attempt)
+                            continue
+                        break
 
             collected_errors.extend(f"{source_name}:{error}" for error in errors)
 
@@ -312,8 +418,9 @@ class VnstockClient:
         ):
             try:
                 return quote.history(**kwargs)
-            except Exception as exc:
-                errors.append(str(exc))
+            except BaseException as exc:
+                normalized = self._normalize_vnstock_exception(exc)
+                errors.append(str(normalized))
         raise RuntimeError("; ".join(errors) or "quote.history failed")
 
     @staticmethod
@@ -330,6 +437,7 @@ class VnstockClient:
         try:
             if isinstance(value, str):
                 value = value.replace(",", "").strip()
-            return float(value)
+            number = float(value)
+            return number if isfinite(number) else None
         except Exception:
             return None

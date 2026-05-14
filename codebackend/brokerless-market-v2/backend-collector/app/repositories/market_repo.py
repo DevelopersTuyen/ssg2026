@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from datetime import date
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select
@@ -16,6 +17,7 @@ from app.models.market import (
     MarketIndexDailyPoint,
     MarketIndexIntradayPoint,
     MarketIntradayPoint,
+    MarketNewsArticle,
     MarketQuoteSnapshot,
     MarketSymbol,
     MarketSyncLog,
@@ -194,6 +196,28 @@ class MarketRepository:
             )
         )
 
+    async def upsert_news_articles(self, articles: list[dict[str, Any]]) -> None:
+        if not articles:
+            return
+
+        for payload in articles:
+            normalized = dict(payload)
+            normalized["raw_json"] = to_jsonable(normalized.get("raw_json"))
+            stmt = insert(MarketNewsArticle).values(**normalized)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[MarketNewsArticle.source, MarketNewsArticle.url],
+                set_={
+                    "title": normalized.get("title"),
+                    "summary": normalized.get("summary"),
+                    "published_at": normalized.get("published_at"),
+                    "published_text": normalized.get("published_text"),
+                    "raw_json": normalized.get("raw_json"),
+                    "captured_at": normalized.get("captured_at"),
+                    "updated_at": normalized.get("updated_at"),
+                },
+            )
+            await self.session.execute(stmt)
+
     async def get_latest_quote_symbols(self, limit: int = 20) -> list[str]:
         result = await self.session.execute(
             select(MarketSymbol.symbol).where(MarketSymbol.is_active.is_(True)).limit(limit)
@@ -246,3 +270,54 @@ class MarketRepository:
             grouped.setdefault(ex, []).append(symbol.upper())
 
         return grouped
+
+    async def get_symbols_with_financial_coverage(self) -> set[str]:
+        tables = (
+            MarketFinancialBalanceSheet,
+            MarketFinancialIncomeStatement,
+            MarketFinancialRatio,
+            MarketFinancialNote,
+        )
+        covered: set[str] = set()
+        for table in tables:
+            result = await self.session.execute(select(table.symbol).distinct())
+            covered.update(symbol.upper() for symbol in result.scalars().all() if symbol)
+        return covered
+
+    async def get_financial_coverage_counts(self, *, include_cash_flow: bool = False) -> dict[str, int]:
+        tables = [
+            MarketFinancialBalanceSheet,
+            MarketFinancialIncomeStatement,
+            MarketFinancialRatio,
+            MarketFinancialNote,
+        ]
+        if include_cash_flow:
+            tables.append(MarketFinancialCashFlow)
+
+        coverage: dict[str, int] = {}
+        for table in tables:
+            result = await self.session.execute(select(table.symbol).distinct())
+            for symbol in result.scalars().all():
+                normalized = str(symbol or "").upper()
+                if not normalized:
+                    continue
+                coverage[normalized] = int(coverage.get(normalized, 0)) + 1
+        return coverage
+
+    async def get_symbols_with_cash_flow_coverage(self) -> set[str]:
+        result = await self.session.execute(select(MarketFinancialCashFlow.symbol).distinct())
+        return {str(symbol).upper() for symbol in result.scalars().all() if symbol}
+
+    async def get_symbols_with_intraday_coverage(self, trading_date: date | None = None) -> set[str]:
+        target_date = trading_date or datetime.now().date()
+        start = datetime.combine(target_date, datetime.min.time())
+        end = datetime.combine(target_date, datetime.max.time())
+        result = await self.session.execute(
+            select(MarketIntradayPoint.symbol)
+            .where(
+                MarketIntradayPoint.point_time >= start,
+                MarketIntradayPoint.point_time <= end,
+            )
+            .distinct()
+        )
+        return {str(symbol).upper() for symbol in result.scalars().all() if symbol}

@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges } from '@angular/core';
 import { Subscription, forkJoin } from 'rxjs';
+import { AppI18nService } from 'src/app/core/i18n/app-i18n.service';
 import {
   FinancialOverviewResponse,
   FinancialStatementRow,
@@ -12,11 +13,103 @@ import {
   MarketIntradayPoint,
   MarketSymbolListItem,
   MarketApiService,
+  StrategyFormulaVerdict,
+  SymbolNewsItem,
+  SymbolNewsResponse,
 } from 'src/app/core/services/market-api.service';
 
 declare const ApexCharts: any;
 
 let symbolModalChartCounter = 0;
+
+type SymbolDetailTab = 'overview' | 'news' | 'history' | 'intelligence' | 'formula' | 'financial-analysis' | 'financial';
+type SymbolDetailFinancialMetricKind = 'revenue' | 'profit';
+
+interface SymbolDetailFormulaMetric {
+  label: string;
+  value: string;
+  tone?: 'default' | 'positive' | 'danger' | 'warning' | string;
+}
+
+interface SymbolDetailFormulaItem {
+  key: string;
+  label: string;
+  expression: string;
+  detail: string;
+  status: 'pass' | 'fail' | 'warn' | 'na' | string;
+  kind: string;
+}
+
+interface SymbolDetailFormulaGroup {
+  title: string;
+  items: SymbolDetailFormulaItem[];
+}
+
+interface SymbolDetailDecisionColumns {
+  passItems: SymbolDetailFormulaItem[];
+  failItems: SymbolDetailFormulaItem[];
+  neutralItems: SymbolDetailFormulaItem[];
+}
+
+interface SymbolDetailFailItem extends SymbolDetailFormulaItem {
+  groupTitle: string;
+}
+
+interface SymbolDetailHistoryItem {
+  key: string;
+  kind: 'journal' | 'workflow' | string;
+  title: string;
+  subtitle: string;
+  body?: string;
+  meta: string[];
+  tone?: 'default' | 'positive' | 'warning' | 'danger' | string;
+}
+
+interface SymbolDetailIntelligenceView {
+  summary: string;
+  biasLabel: string;
+  actionLabel: string;
+  riskLabel: string;
+  confidenceLabel: string;
+  bullCase: string[];
+  bearCase: string[];
+  riskItems: string[];
+  actionItems: string[];
+}
+
+interface SymbolDetailFinancialChartPoint {
+  label: string;
+  shortLabel: string;
+  value: number | null;
+  displayText: string;
+  barHeight: number;
+}
+
+interface SymbolDetailFinancialSeriesVm {
+  title: string;
+  latestLabel: string;
+  latestValue: string;
+  unitLabel: string;
+  points: SymbolDetailFinancialChartPoint[];
+}
+
+interface SymbolDetailFinancialMetricItemVm {
+  label: string;
+  value: string;
+}
+
+interface SymbolDetailFinancialMetricGroupVm {
+  title: string;
+  items: SymbolDetailFinancialMetricItemVm[];
+}
+
+interface SymbolDetailFinancialAnalysisVm {
+  revenueQuarterly: SymbolDetailFinancialSeriesVm | null;
+  revenueYearly: SymbolDetailFinancialSeriesVm | null;
+  profitQuarterly: SymbolDetailFinancialSeriesVm | null;
+  profitYearly: SymbolDetailFinancialSeriesVm | null;
+  metricGroups: SymbolDetailFinancialMetricGroupVm[];
+}
 
 @Component({
   selector: 'app-symbol-detail-modal',
@@ -27,6 +120,17 @@ let symbolModalChartCounter = 0;
 export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() open = false;
   @Input() symbol = '';
+  @Input() showFormulaButton = false;
+  @Input() formulaLoading = false;
+  @Input() formulaError = '';
+  @Input() formulaMetrics: SymbolDetailFormulaMetric[] = [];
+  @Input() formulaGroups: SymbolDetailFormulaGroup[] = [];
+  @Input() formulaVerdict: StrategyFormulaVerdict | null = null;
+  @Input() formulaEmptyCopy = '';
+  @Input() historyItems: SymbolDetailHistoryItem[] = [];
+  @Input() intelligenceView: SymbolDetailIntelligenceView | null = null;
+  @Input() historyLoading = false;
+  @Input() historyError = '';
   @Output() closed = new EventEmitter<void>();
 
   readonly financialPreviewRowCount = 12;
@@ -39,10 +143,14 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
   selectedSymbolMaster: MarketSymbolListItem | null = null;
   exchangeRule: MarketExchangeRule | null = null;
   dataQualityIssues: MarketDataQualityIssue[] = [];
+  symbolNews: SymbolNewsItem[] = [];
+  symbolNewsMeta: SymbolNewsResponse | null = null;
   financialOverview: FinancialOverviewResponse | null = null;
+  financialAnalysis: SymbolDetailFinancialAnalysisVm | null = null;
   symbolLoading = false;
   financialLoading = false;
-  financialModalOpen = false;
+  selectedTab: SymbolDetailTab = 'overview';
+  selectedFinancialMetric: SymbolDetailFinancialMetricKind = 'revenue';
 
   private symbolSub?: Subscription;
   private financialSub?: Subscription;
@@ -51,7 +159,10 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
   private financialExpandedSections: Record<string, boolean> = {};
   private renderTimer?: number;
 
-  constructor(private readonly api: MarketApiService) {}
+  constructor(
+    private readonly api: MarketApiService,
+    private readonly i18n: AppI18nService
+  ) {}
 
   ngAfterViewInit(): void {
     this.scheduleChartRender();
@@ -60,11 +171,13 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['open'] && !this.open) {
       this.destroyChart();
-      this.financialModalOpen = false;
+      this.selectedTab = 'overview';
+      this.selectedFinancialMetric = 'revenue';
       return;
     }
 
     if ((changes['open'] || changes['symbol']) && this.open && this.normalizedSymbol) {
+      this.selectedTab = 'overview';
       this.loadSelectedSymbol();
     }
   }
@@ -84,6 +197,29 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
 
   get selectedSymbolDisplay(): string {
     return this.normalizedSymbol || '--';
+  }
+
+  get symbolDetailTabs(): Array<{ key: SymbolDetailTab; labelKey: string }> {
+    const tabs: Array<{ key: SymbolDetailTab; labelKey: string }> = [
+      { key: 'overview', labelKey: 'marketWatch.detailTab.overview' },
+      { key: 'news', labelKey: 'marketWatch.detailTab.news' },
+    ];
+
+    if (this.historyLoading || this.historyError || this.historyItems.length) {
+      tabs.push({ key: 'history', labelKey: 'dashboardV2.workspace.history' });
+    }
+
+    if (this.intelligenceView) {
+      tabs.push({ key: 'intelligence', labelKey: 'marketWatch.detailTab.intelligence' });
+    }
+
+    if (this.showFormulaButton) {
+      tabs.push({ key: 'formula', labelKey: 'marketWatch.detailTab.formula' });
+    }
+
+    tabs.push({ key: 'financial-analysis', labelKey: 'marketWatch.detailTab.financialAnalysis' });
+    tabs.push({ key: 'financial', labelKey: 'marketWatch.detailTab.financial' });
+    return tabs;
   }
 
   get selectedPriceText(): string {
@@ -113,7 +249,7 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
   get chartSourceText(): string {
     if (this.selectedIntraday.length) {
       const latest = this.selectedIntraday[this.selectedIntraday.length - 1];
-      return `Intraday tick / ${this.selectedIntraday.length} diem / cap nhat ${this.formatTimeHms(new Date(latest.time).getTime())}`;
+      return `Intraday tick / ${this.selectedIntraday.length} điểm / cập nhật ${this.formatTimeHms(new Date(latest.time).getTime())}`;
     }
     if (this.selectedCandles.length) {
       const latest = this.selectedCandles[this.selectedCandles.length - 1];
@@ -153,6 +289,13 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
       : `${this.dataQualityIssues.length} cảnh báo dữ liệu`;
   }
 
+  get newsSummaryText(): string {
+    if (!this.symbolNews.length) {
+      return 'Chưa phát hiện tin liên quan gần đây';
+    }
+    return `${this.symbolNews.length} tin liên quan tới mã này`;
+  }
+
   get financialHighlights() {
     return this.financialOverview?.highlights || [];
   }
@@ -165,18 +308,59 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
     return this.financialOverview?.syncStatus || null;
   }
 
+  get financialQuarterlySeries(): SymbolDetailFinancialSeriesVm | null {
+    if (!this.financialAnalysis) {
+      return null;
+    }
+    return this.selectedFinancialMetric === 'revenue'
+      ? this.financialAnalysis.revenueQuarterly
+      : this.financialAnalysis.profitQuarterly;
+  }
+
+  get financialYearlySeries(): SymbolDetailFinancialSeriesVm | null {
+    if (!this.financialAnalysis) {
+      return null;
+    }
+    return this.selectedFinancialMetric === 'revenue'
+      ? this.financialAnalysis.revenueYearly
+      : this.financialAnalysis.profitYearly;
+  }
+
+  get financialMetricGroups(): SymbolDetailFinancialMetricGroupVm[] {
+    return this.financialAnalysis?.metricGroups || [];
+  }
+
+  isTab(tab: SymbolDetailTab): boolean {
+    return this.selectedTab === tab;
+  }
+
+  changeTab(tab: SymbolDetailTab): void {
+    this.selectedTab = tab;
+    if ((tab === 'financial' || tab === 'financial-analysis') && this.normalizedSymbol) {
+      this.ensureFinancialOverview(this.normalizedSymbol);
+    }
+  }
+
+  changeFinancialMetric(metric: SymbolDetailFinancialMetricKind): void {
+    this.selectedFinancialMetric = metric;
+  }
+
   closeSymbolModal(): void {
     this.closed.emit();
   }
 
-  openFinancialModal(): void {
-    if (!this.normalizedSymbol) return;
-    this.financialModalOpen = true;
-    this.ensureFinancialOverview(this.normalizedSymbol);
+  sentimentClass(label: string | null | undefined): string {
+    const normalized = (label || '').toLowerCase();
+    if (normalized.includes('tích') || normalized.includes('positive')) return 'positive';
+    if (normalized.includes('tiêu') || normalized.includes('negative')) return 'negative';
+    return 'neutral';
   }
 
-  closeFinancialModal(): void {
-    this.financialModalOpen = false;
+  impactClass(label: string | null | undefined): string {
+    const normalized = (label || '').toLowerCase();
+    if (normalized.includes('cao') || normalized.includes('high')) return 'high';
+    if (normalized.includes('vừa') || normalized.includes('medium')) return 'medium';
+    return 'low';
   }
 
   visibleFinancialRows(section: FinancialStatementSection): FinancialStatementRow[] {
@@ -208,6 +392,119 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
     return row.metricKey;
   }
 
+  trackByFormulaItem(_: number, item: SymbolDetailFormulaItem): string {
+    return item.key;
+  }
+
+  buildFormulaDecisionColumns(group: SymbolDetailFormulaGroup): SymbolDetailDecisionColumns {
+    const passItems = group.items.filter((item) => item.status === 'pass');
+    const failItems = group.items.filter((item) => item.status === 'fail' || item.status === 'warn');
+    const neutralItems = group.items.filter((item) => item.status === 'na');
+    return { passItems, failItems, neutralItems };
+  }
+
+  buildFormulaFailHighlights(groups: SymbolDetailFormulaGroup[]): SymbolDetailFailItem[] {
+    const items: SymbolDetailFailItem[] = [];
+    groups.forEach((group: SymbolDetailFormulaGroup) => {
+      group.items
+        .filter((item: SymbolDetailFormulaItem) => item.status === 'fail' || item.status === 'warn')
+        .forEach((item: SymbolDetailFormulaItem) => {
+          items.push({
+            ...item,
+            groupTitle: group.title,
+          });
+        });
+    });
+    return items;
+  }
+
+  hasDecisionItems(group: SymbolDetailFormulaGroup): boolean {
+    return group.items.some((item) => item.status !== 'na');
+  }
+
+  hasNeutralItems(group: SymbolDetailFormulaGroup): boolean {
+    return group.items.some((item) => item.status === 'na');
+  }
+
+  formulaStatusLabel(item: SymbolDetailFormulaItem): string {
+    if (item.status === 'pass') return 'PASS';
+    if (item.status === 'fail') return 'FAIL';
+    if (item.status === 'warn') return 'Cần xem';
+    return 'N/A';
+  }
+
+  formulaFailReason(item: SymbolDetailFormulaItem): string {
+    const detail = (item.detail || '').trim();
+    if (detail) {
+      return detail;
+    }
+    if (item.status === 'warn') {
+      return 'Rule đang ở trạng thái cảnh báo, chưa đủ xác nhận để pass.';
+    }
+    if (item.status === 'fail') {
+      return 'Rule chưa đạt ngưỡng hoặc chưa thỏa điều kiện bắt buộc.';
+    }
+    return 'Chưa có lý do đánh giá cụ thể.';
+  }
+
+  formulaVerdictTone(verdict: StrategyFormulaVerdict | null | undefined): 'default' | 'positive' | 'warning' | 'danger' {
+    if (!verdict) {
+      return 'default';
+    }
+    if (verdict.riskLevel === 'high' || verdict.action === 'stand_aside' || verdict.action === 'take_profit') {
+      return 'danger';
+    }
+    if (verdict.bias === 'bullish' || verdict.action === 'add_position' || verdict.action === 'candidate') {
+      return 'positive';
+    }
+    if (verdict.bias === 'constructive' || verdict.action === 'probe_buy') {
+      return 'warning';
+    }
+    return 'default';
+  }
+
+  formatFormulaVerdictAction(verdict: StrategyFormulaVerdict | null | undefined): string {
+    const action = verdict?.action || '';
+    switch (action) {
+      case 'take_profit':
+        return 'Take profit';
+      case 'stand_aside':
+        return 'Stand aside';
+      case 'add_position':
+        return 'Add position';
+      case 'probe_buy':
+        return 'Probe buy';
+      case 'candidate':
+        return 'Candidate';
+      case 'review':
+        return 'Review';
+      default:
+        return action || '--';
+    }
+  }
+
+  intelligenceTone(value: string | null | undefined): 'default' | 'positive' | 'warning' | 'danger' {
+    const normalized = (value || '').toLowerCase();
+    if (normalized.includes('bull') || normalized.includes('constructive') || normalized.includes('candidate')) {
+      return 'positive';
+    }
+    if (normalized.includes('bear') || normalized.includes('high') || normalized.includes('take profit') || normalized.includes('stand aside')) {
+      return 'danger';
+    }
+    if (normalized.includes('review') || normalized.includes('probe')) {
+      return 'warning';
+    }
+    return 'default';
+  }
+
+  trackByHistoryItem(_: number, item: SymbolDetailHistoryItem): string {
+    return item.key;
+  }
+
+  trackByFinancialMetricGroup(_: number, item: SymbolDetailFinancialMetricGroupVm): string {
+    return item.title;
+  }
+
   private loadSelectedSymbol(): void {
     const symbol = this.normalizedSymbol;
     if (!symbol) return;
@@ -215,20 +512,25 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
     this.symbolLoading = true;
     this.symbolSub?.unsubscribe();
     this.destroyChart();
+    this.symbolNews = [];
+    this.symbolNewsMeta = null;
 
     this.symbolSub = forkJoin({
       quote: this.api.getSymbolQuote(symbol),
       intraday: this.api.getSymbolIntraday(symbol, 2000),
       candles: this.api.getSymbolCandles(symbol, '5m', 240),
       hourly: this.api.getSymbolHourly(symbol),
+      news: this.api.getSymbolNews(symbol, 20),
       master: this.api.getMarketSymbols({ keyword: symbol, pageSize: 1 }),
       rules: this.api.getExchangeRules(),
       dataQuality: this.api.getDataQualityIssues(120),
     }).subscribe({
-      next: ({ quote, intraday, candles, hourly, master, rules, dataQuality }) => {
+      next: ({ quote, intraday, candles, hourly, news, master, rules, dataQuality }) => {
         this.selectedQuote = quote.quote || null;
         this.selectedIntraday = this.normalizeIntradayPoints(intraday.data || []);
         this.selectedCandles = candles.data || [];
+        this.symbolNewsMeta = news;
+        this.symbolNews = news?.items || [];
         this.selectedSymbolMaster = this.resolveSymbolMaster(symbol, master.data?.items || []);
         const exchange = this.selectedSymbolMaster?.exchange || quote.exchange || null;
         this.exchangeRule = this.resolveExchangeRule(exchange, rules.data || []);
@@ -249,6 +551,8 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
         this.selectedSymbolMaster = null;
         this.exchangeRule = null;
         this.dataQualityIssues = [];
+        this.symbolNews = [];
+        this.symbolNewsMeta = null;
         this.symbolLoading = false;
       },
     });
@@ -335,16 +639,203 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
       next: (data) => {
         if (this.financialRequestedSymbol !== symbol) return;
         this.financialOverview = data;
+        this.financialAnalysis = this.buildFinancialAnalysis(data);
         this.financialLoading = false;
         this.financialExpandedSections = {};
       },
       error: () => {
         if (this.financialRequestedSymbol !== symbol) return;
         this.financialOverview = null;
+        this.financialAnalysis = null;
         this.financialLoading = false;
         this.financialExpandedSections = {};
       },
     });
+  }
+
+  private buildFinancialAnalysis(overview: FinancialOverviewResponse | null): SymbolDetailFinancialAnalysisVm | null {
+    if (!overview?.sections?.length) {
+      return null;
+    }
+    const rows: FinancialStatementRow[] = [];
+    overview.sections.forEach((section) => {
+      (section.rows || []).forEach((row) => rows.push(row));
+    });
+    return {
+      revenueQuarterly: this.findFinancialSeries(rows, ['doanh thu', 'revenue', 'sales'], 'quarter'),
+      revenueYearly: this.findFinancialSeries(rows, ['doanh thu', 'revenue', 'sales'], 'year'),
+      profitQuarterly: this.findFinancialSeries(
+        rows,
+        ['loi nhuan sau thue', 'lợi nhuận sau thuế', 'profit after tax', 'net income'],
+        'quarter'
+      ),
+      profitYearly: this.findFinancialSeries(
+        rows,
+        ['loi nhuan sau thue', 'lợi nhuận sau thuế', 'profit after tax', 'net income'],
+        'year'
+      ),
+      metricGroups: [
+        this.buildFinancialMetricGroup(this.t('marketWatch.financialAnalysis.valuation'), rows, [
+          { label: 'EPS', patterns: ['eps'] },
+          { label: this.t('marketWatch.financialAnalysis.dilutedEps'), patterns: ['eps pha loang', 'eps pha loãng', 'diluted eps'] },
+          { label: 'PE', patterns: ['pe'] },
+          { label: this.t('marketWatch.financialAnalysis.dilutedPe'), patterns: ['pe pha loang', 'pe pha loãng', 'diluted pe'] },
+          { label: 'PB', patterns: ['pb'] },
+        ]),
+        this.buildFinancialMetricGroup(this.t('marketWatch.financialAnalysis.profitability'), rows, [
+          { label: 'ROE', patterns: ['roe'] },
+          { label: 'ROA', patterns: ['roa'] },
+          { label: 'ROIC', patterns: ['roic'] },
+          { label: this.t('marketWatch.financialAnalysis.grossMargin'), patterns: ['ty suat ln gop', 'tỷ suất ln gộp', 'gross margin'] },
+          { label: this.t('marketWatch.financialAnalysis.netMargin'), patterns: ['bien ln rong', 'biên ln ròng', 'net margin'] },
+        ]),
+        this.buildFinancialMetricGroup(this.t('marketWatch.financialAnalysis.financialStrength'), rows, [
+          { label: this.t('marketWatch.financialAnalysis.debtEquity'), patterns: ['tong no/vcsh', 'tổng nợ/vcsh', 'debt/equity'] },
+          { label: this.t('marketWatch.financialAnalysis.debtAssets'), patterns: ['tong no/tong ts', 'tổng nợ/tổng ts', 'debt/assets'] },
+          { label: this.t('marketWatch.financialAnalysis.quickRatio'), patterns: ['thanh toan nhanh', 'quick ratio'] },
+          { label: this.t('marketWatch.financialAnalysis.currentRatio'), patterns: ['thanh toan hien hanh', 'thanh toán hiện hành', 'current ratio'] },
+        ]),
+      ].filter((group) => group.items.length),
+    };
+  }
+
+  private buildFinancialMetricGroup(
+    title: string,
+    rows: FinancialStatementRow[],
+    mappings: Array<{ label: string; patterns: string[] }>
+  ): SymbolDetailFinancialMetricGroupVm {
+    const items = mappings
+      .map((mapping) => {
+        const row = this.findFinancialMetricRow(rows, mapping.patterns);
+        return {
+          label: mapping.label,
+          value: row ? this.resolveFinancialRowLatestValue(row) : '--',
+        };
+      })
+      .filter((item) => item.value !== '--');
+    return { title, items };
+  }
+
+  private findFinancialSeries(
+    rows: FinancialStatementRow[],
+    patterns: string[],
+    periodKind: 'quarter' | 'year'
+  ): SymbolDetailFinancialSeriesVm | null {
+    const row = this.findFinancialMetricRow(rows, patterns, periodKind);
+    if (!row) {
+      return null;
+    }
+    const points = this.buildFinancialChartPoints(row);
+    if (!points.length) {
+      return null;
+    }
+    return {
+      title: periodKind === 'quarter'
+        ? this.t('marketWatch.financialAnalysis.quarterlySeries')
+        : this.t('marketWatch.financialAnalysis.yearlySeries'),
+      latestLabel: points[points.length - 1]?.label || '--',
+      latestValue: points[points.length - 1]?.displayText || '--',
+      unitLabel: this.resolveFinancialUnitLabel(points),
+      points,
+    };
+  }
+
+  private findFinancialMetricRow(
+    rows: FinancialStatementRow[],
+    patterns: string[],
+    preferredPeriodKind?: 'quarter' | 'year'
+  ): FinancialStatementRow | null {
+    const normalizedPatterns = patterns.map((pattern) => this.normalizeFinancialLabel(pattern));
+    const candidates = rows.filter((row) => {
+      const label = this.normalizeFinancialLabel(row.metricLabel || row.metricKey || '');
+      return normalizedPatterns.some((pattern) => label.includes(pattern));
+    });
+    if (!candidates.length) {
+      return null;
+    }
+    const exactType = preferredPeriodKind
+      ? candidates.find((row) => this.resolveFinancialPeriodKind(row) === preferredPeriodKind && this.hasFinancialValues(row))
+      : null;
+    if (exactType) {
+      return exactType;
+    }
+    return candidates.find((row) => this.hasFinancialValues(row)) || candidates[0];
+  }
+
+  private buildFinancialChartPoints(row: FinancialStatementRow): SymbolDetailFinancialChartPoint[] {
+    const rawPoints = (row.values || [])
+      .map((value) => ({
+        label: value.reportPeriod || '--',
+        shortLabel: this.toShortFinancialLabel(value.reportPeriod || '--'),
+        value: typeof value.valueNumber === 'number' && Number.isFinite(value.valueNumber) ? value.valueNumber : null,
+        displayText: value.displayValue || value.valueText || '--',
+      }))
+      .reverse()
+      .filter((item) => item.value !== null || item.displayText !== '--');
+
+    const maxAbs = rawPoints.reduce((max, item) => Math.max(max, Math.abs(item.value || 0)), 0);
+    return rawPoints.map((item) => ({
+      ...item,
+      barHeight: maxAbs > 0 && item.value !== null ? Math.max(10, Math.round((Math.abs(item.value) / maxAbs) * 100)) : 0,
+    }));
+  }
+
+  private resolveFinancialUnitLabel(points: SymbolDetailFinancialChartPoint[]): string {
+    const maxAbs = points.reduce((max, item) => Math.max(max, Math.abs(item.value || 0)), 0);
+    if (maxAbs >= 1_000_000_000) {
+      return this.t('marketWatch.financialAnalysis.unitBillion');
+    }
+    if (maxAbs >= 1_000_000) {
+      return this.t('marketWatch.financialAnalysis.unitMillion');
+    }
+    return this.t('marketWatch.financialAnalysis.unitRaw');
+  }
+
+  private resolveFinancialRowLatestValue(row: FinancialStatementRow): string {
+    const latest = row.displayValue && row.displayValue !== '--'
+      ? row.displayValue
+      : (row.values || []).find((value) => value.displayValue && value.displayValue !== '--')?.displayValue;
+    return latest || '--';
+  }
+
+  private hasFinancialValues(row: FinancialStatementRow): boolean {
+    return (row.values || []).some((value) => typeof value.valueNumber === 'number' && Number.isFinite(value.valueNumber));
+  }
+
+  private resolveFinancialPeriodKind(row: FinancialStatementRow): 'quarter' | 'year' | 'other' {
+    const rawType = this.normalizeFinancialLabel(row.periodType || '');
+    const periodLabel = this.normalizeFinancialLabel((row.values || [])[0]?.reportPeriod || row.reportPeriod || '');
+    if (rawType.includes('quarter') || periodLabel.includes('q') || periodLabel.includes('quy')) {
+      return 'quarter';
+    }
+    if (rawType.includes('year') || rawType.includes('annual') || periodLabel.includes('nam')) {
+      return 'year';
+    }
+    return 'other';
+  }
+
+  private normalizeFinancialLabel(value: string): string {
+    return (value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toLowerCase()
+      .trim();
+  }
+
+  private toShortFinancialLabel(value: string): string {
+    const normalized = (value || '').trim();
+    const quarterMatch = normalized.match(/(Q\d)\s*[-/]?\s*(\d{4})/i);
+    if (quarterMatch) {
+      return `${quarterMatch[1].toUpperCase()} ${quarterMatch[2]}`;
+    }
+    const yearMatch = normalized.match(/(\d{4})/);
+    return yearMatch ? yearMatch[1] : normalized;
+  }
+
+  private t(key: string): string {
+    return this.i18n.translate(key);
   }
 
   private scheduleChartRender(): void {
@@ -532,9 +1023,9 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
     }
 
     return [
-      this.buildPriceBandAnnotation(priceBand.ceiling, 'Tran', '#dc2626'),
+      this.buildPriceBandAnnotation(priceBand.ceiling, 'Trần', '#dc2626'),
       this.buildPriceBandAnnotation(priceBand.reference, 'TC', '#f59e0b'),
-      this.buildPriceBandAnnotation(priceBand.floor, 'San', '#2563eb'),
+      this.buildPriceBandAnnotation(priceBand.floor, 'Sàn', '#2563eb'),
     ];
   }
 
@@ -555,19 +1046,6 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
         text: `${label} ${this.formatPrice(value)}`,
       },
     };
-  }
-
-  private resolveYAxisPadding(values: number[]): number {
-    if (!values.length) {
-      return 1;
-    }
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min;
-    if (range <= 0) {
-      return Math.max(max * 0.01, 1);
-    }
-    return Math.max(range * 0.08, max * 0.003, 1);
   }
 
   private destroyChart(): void {

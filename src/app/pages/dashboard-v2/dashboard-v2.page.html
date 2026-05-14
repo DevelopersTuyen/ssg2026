@@ -27,6 +27,27 @@
         </div>
       </header>
 
+      <section class="dashboard-v2-job-health-strip" *ngIf="jobHealthAlerts.length">
+        <div class="dashboard-v2-job-health-head">
+          <div class="dashboard-v2-job-health-copy">
+            <strong>{{ 'dashboardV2.syncHealth.title' | translate }}</strong>
+            <span>{{ jobHealthSummary || ('dashboardV2.syncHealth.defaultBody' | translate) }}</span>
+          </div>
+          <div class="dashboard-v2-job-health-meta">
+            <span>{{ jobHealthAlerts.length }} {{ 'dashboardV2.syncHealth.overdueCount' | translate }}</span>
+            <span *ngIf="syncStatus?.checkedAt">{{ 'dashboardV2.syncHealth.checked' | translate }} {{ jobHealthCheckedLabel }}</span>
+          </div>
+        </div>
+
+        <div class="dashboard-v2-job-health-grid">
+          <article class="dashboard-v2-job-health-item" *ngFor="let item of jobHealthAlerts; trackBy: trackByPriority" [attr.data-tone]="item.tone">
+            <div class="dashboard-v2-job-health-title">{{ item.title }}</div>
+            <div class="dashboard-v2-job-health-body">{{ item.body }}</div>
+            <div class="dashboard-v2-job-health-footer">{{ item.meta }}</div>
+          </article>
+        </div>
+      </section>
+
       <section class="dashboard-v2-insight-strip" *ngIf="insightPanel.title || insightPanel.body">
         <div class="dashboard-v2-insight-copy">
           <strong>{{ insightPanel.title }}</strong>
@@ -36,7 +57,7 @@
           <span *ngIf="exchangeSessionSummary">{{ exchangeSessionSummary }}</span>
           <span *ngIf="insightPanel.meta">{{ insightPanel.meta }}</span>
           <span *ngIf="dataHealthIssues.length" class="insight-warning">{{ dataHealthIssues.length }} {{ 'dashboardV2.dataHealth.issues' | translate }}</span>
-          <span *ngIf="pendingAlertEvents.length" class="insight-warning">{{ pendingAlertEvents.length }} alert events</span>
+          <span *ngIf="pendingAlertEvents.length" class="insight-warning">{{ pendingAlertEvents.length }} {{ 'dashboardV2.operations.alertEvents' | translate }}</span>
         </div>
       </section>
 
@@ -56,56 +77,568 @@
 
           <div class="dashboard-panel-body journal-scroll">
             <div *ngIf="error" class="alert alert-danger py-2 px-3 mb-3 small">{{ error }}</div>
-            <div class="table-responsive journal-table-wrap">
+
+            <div class="journal-workspace-tabs-shell">
+              <div class="journal-workspace-tabs">
+                <button
+                  *ngFor="let item of journalWorkspaceItems()"
+                  type="button"
+                  class="panel-tab journal-workspace-tab"
+                  [class.active]="isJournalWorkspaceTab(item.key)"
+                  [attr.data-key]="item.key"
+                  [attr.data-has-count]="item.count > 0 ? 'true' : 'false'"
+                  (click)="changeJournalWorkspaceTab(item.key)"
+                >
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.count }}</strong>
+                </button>
+              </div>
+            </div>
+
+            <section class="operations-strip">
+              <div class="operations-summary-grid" *ngIf="isJournalWorkspaceTab('operations') && operationsOverview?.summaryCards?.length">
+                <article
+                  class="operations-summary-card"
+                  *ngFor="let card of (operationsOverview?.summaryCards || [])"
+                  [attr.data-tone]="card.tone || 'default'"
+                >
+                  <div class="operations-summary-label">{{ card.label }}</div>
+                  <div class="operations-summary-value">{{ card.value }}</div>
+                  <div class="operations-summary-helper">{{ card.helper }}</div>
+                </article>
+              </div>
+
+              <div class="operations-grid" *ngIf="isJournalWorkspaceTab('operations') && operationsOverview">
+                <section class="operations-card">
+                  <div class="operations-card-head">
+                    <div>
+                      <div class="dashboard-panel-kicker">Vận hành vị thế mở</div>
+                      <h3 class="operations-card-title">{{ 'dashboardV2.operations.openPositionsTitle' | translate }}</h3>
+                    </div>
+                    <span class="operations-card-count">{{ operationsOverview.totals.openCount }}</span>
+                  </div>
+                  <div class="operations-list" *ngIf="openPositionRows.length; else noOpenPositionState">
+                    <article class="operations-item" *ngFor="let item of pagedOpenPositionRows()" [attr.data-tone]="item.actionTone">
+                      <div class="operations-item-top">
+                        <button type="button" class="symbol-link-btn operations-symbol" (click)="openSymbolDetail(item.symbol, $event)">
+                          {{ item.symbol }}
+                        </button>
+                        <span class="operations-action">{{ item.actionLabel }}</span>
+                      </div>
+                      <div class="operations-item-meta">
+                        <span>Giá hiện tại: {{ item.currentPriceLabel }}</span>
+                        <span>Vốn: {{ item.capitalLabel }}</span>
+                        <span [attr.data-tone]="item.pnlTone">P/L: {{ item.pnlLabel }}</span>
+                      </div>
+                      <div class="operations-item-helper">{{ item.helper }}</div>
+                    </article>
+                  </div>
+                  <div class="alert-pager" *ngIf="totalJournalWorkspacePages('operations-open', openPositionRows.length) > 1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('operations-open', openPositionRows.length, -1)" (click)="moveJournalWorkspacePage('operations-open', openPositionRows.length, -1)">
+                      {{ 'dashboard.prev' | translate }}
+                    </button>
+                    <span>{{ 'dashboard.page' | translate }} {{ currentJournalWorkspacePage('operations-open', openPositionRows.length) }}/{{ totalJournalWorkspacePages('operations-open', openPositionRows.length) }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('operations-open', openPositionRows.length, 1)" (click)="moveJournalWorkspacePage('operations-open', openPositionRows.length, 1)">
+                      {{ 'dashboard.next' | translate }}
+                    </button>
+                  </div>
+                  <ng-template #noOpenPositionState>
+                    <div class="empty-state-panel compact">
+                      <div class="empty-state-title">{{ 'dashboardV2.operations.noOpenPositionsTitle' | translate }}</div>
+                      <div class="empty-state-copy">{{ 'dashboardV2.operations.noOpenPositionsCopy' | translate }}</div>
+                    </div>
+                  </ng-template>
+                </section>
+
+                <section class="operations-card">
+                  <div class="operations-card-head">
+                    <div>
+                      <div class="dashboard-panel-kicker">Hành động tiếp theo</div>
+                      <h3 class="operations-card-title">{{ 'dashboardV2.operations.reviewQueueTitle' | translate }}</h3>
+                    </div>
+                    <span class="operations-card-count">{{ operationsOverview.totals.reviewCount }}</span>
+                  </div>
+                  <div class="operations-action-list" *ngIf="nextActionItems.length; else noActionState">
+                    <article class="operations-action-item" *ngFor="let item of pagedNextActionItems()" [attr.data-tone]="item.tone">
+                      <div class="operations-action-title">
+                        <span *ngIf="item.symbol">{{ item.symbol }} - </span>{{ item.title }}
+                      </div>
+                      <div class="operations-action-body">{{ item.body }}</div>
+                    </article>
+                  </div>
+                  <div class="alert-pager" *ngIf="totalJournalWorkspacePages('operations-actions', nextActionItems.length) > 1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('operations-actions', nextActionItems.length, -1)" (click)="moveJournalWorkspacePage('operations-actions', nextActionItems.length, -1)">
+                      {{ 'dashboard.prev' | translate }}
+                    </button>
+                    <span>{{ 'dashboard.page' | translate }} {{ currentJournalWorkspacePage('operations-actions', nextActionItems.length) }}/{{ totalJournalWorkspacePages('operations-actions', nextActionItems.length) }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('operations-actions', nextActionItems.length, 1)" (click)="moveJournalWorkspacePage('operations-actions', nextActionItems.length, 1)">
+                      {{ 'dashboard.next' | translate }}
+                    </button>
+                  </div>
+                  <ng-template #noActionState>
+                    <div class="empty-state-panel compact">
+                      <div class="empty-state-title">{{ 'dashboardV2.operations.noReviewQueueTitle' | translate }}</div>
+                      <div class="empty-state-copy">{{ 'dashboardV2.operations.noReviewQueueCopy' | translate }}</div>
+                    </div>
+                  </ng-template>
+                </section>
+              </div>
+
+              <div class="portfolio-grid" *ngIf="isJournalWorkspaceTab('portfolio') && portfolioOverview">
+                <section class="operations-card">
+                  <div class="operations-card-head">
+                    <div>
+                      <div class="dashboard-panel-kicker">{{ 'dashboardV2.portfolio.currentKicker' | translate }}</div>
+                      <h3 class="operations-card-title">{{ 'dashboardV2.portfolio.currentTitle' | translate }}</h3>
+                    </div>
+                    <span class="operations-card-count">{{ portfolioOverview.totals.holdingCount }}</span>
+                  </div>
+                  <div class="operations-summary-grid compact" *ngIf="portfolioOverview.summaryCards?.length">
+                    <article
+                      class="operations-summary-card"
+                      *ngFor="let card of (portfolioOverview?.summaryCards || [])"
+                      [attr.data-tone]="card.tone || 'default'"
+                    >
+                      <div class="operations-summary-label">{{ card.label }}</div>
+                      <div class="operations-summary-value">{{ card.value }}</div>
+                      <div class="operations-summary-helper">{{ card.helper }}</div>
+                    </article>
+                  </div>
+                  <div class="operations-list" *ngIf="holdingRows.length; else noHoldingState">
+                    <article class="operations-item" *ngFor="let item of pagedHoldingRows()" [attr.data-tone]="item.unrealizedTone">
+                      <div class="operations-item-top">
+                        <button type="button" class="symbol-link-btn operations-symbol" (click)="openSymbolDetail(item.symbol, $event)">
+                          {{ item.symbol }}
+                        </button>
+                        <span class="operations-action">{{ item.exposureLabel }}</span>
+                      </div>
+                      <div class="operations-item-meta">
+                        <span>{{ 'dashboardV2.portfolio.marketValue' | translate }}: {{ item.marketValueLabel }}</span>
+                        <span>{{ 'dashboardV2.portfolio.costBasis' | translate }}: {{ item.costBasisLabel }}</span>
+                        <span [attr.data-tone]="item.unrealizedTone">{{ 'dashboardV2.portfolio.unrealized' | translate }}: {{ item.unrealizedLabel }}</span>
+                      </div>
+                      <div class="operations-item-helper">{{ item.strategyLabel }} / {{ item.industryLabel }}</div>
+                    </article>
+                  </div>
+                  <div class="alert-pager" *ngIf="totalJournalWorkspacePages('portfolio-holdings', holdingRows.length) > 1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('portfolio-holdings', holdingRows.length, -1)" (click)="moveJournalWorkspacePage('portfolio-holdings', holdingRows.length, -1)">
+                      {{ 'dashboard.prev' | translate }}
+                    </button>
+                    <span>{{ 'dashboard.page' | translate }} {{ currentJournalWorkspacePage('portfolio-holdings', holdingRows.length) }}/{{ totalJournalWorkspacePages('portfolio-holdings', holdingRows.length) }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('portfolio-holdings', holdingRows.length, 1)" (click)="moveJournalWorkspacePage('portfolio-holdings', holdingRows.length, 1)">
+                      {{ 'dashboard.next' | translate }}
+                    </button>
+                  </div>
+                  <ng-template #noHoldingState>
+                    <div class="empty-state-panel compact">
+                      <div class="empty-state-title">Chưa hình thành danh mục</div>
+                      <div class="empty-state-copy">Khi journal có các vị thế mở, hệ thống sẽ gom thành holdings, tính cost basis, market value và unrealized P/L tại đây.</div>
+                    </div>
+                  </ng-template>
+                </section>
+
+                <section class="operations-card">
+                  <div class="operations-card-head">
+                    <div>
+                      <div class="dashboard-panel-kicker">{{ 'dashboardV2.portfolio.exposureKicker' | translate }}</div>
+                      <h3 class="operations-card-title">{{ 'dashboardV2.portfolio.exposureTitle' | translate }}</h3>
+                    </div>
+                    <span class="operations-card-count">{{ portfolioOverview.exchange }}</span>
+                  </div>
+
+                  <div class="exposure-columns">
+                    <div class="exposure-column">
+                      <div class="detail-section-title">{{ 'dashboardV2.portfolio.byStrategy' | translate }}</div>
+                      <div class="operations-action-list" *ngIf="exposureByStrategyRows.length; else noStrategyExposureState">
+                        <article class="operations-action-item" *ngFor="let item of exposureByStrategyRows">
+                          <div class="operations-action-title">{{ item.label }}</div>
+                          <div class="operations-item-meta">
+                            <span>{{ item.valueLabel }}</span>
+                            <span>{{ item.weightLabel }}</span>
+                          </div>
+                        </article>
+                      </div>
+                      <ng-template #noStrategyExposureState>
+                        <div class="empty-state-panel compact">
+                          <div class="empty-state-copy">{{ 'dashboardV2.portfolio.emptyStrategyExposure' | translate }}</div>
+                        </div>
+                      </ng-template>
+                    </div>
+
+                    <div class="exposure-column">
+                      <div class="detail-section-title">{{ 'dashboardV2.portfolio.byIndustry' | translate }}</div>
+                      <div class="operations-action-list" *ngIf="exposureByIndustryRows.length; else noIndustryExposureState">
+                        <article class="operations-action-item" *ngFor="let item of exposureByIndustryRows">
+                          <div class="operations-action-title">{{ item.label }}</div>
+                          <div class="operations-item-meta">
+                            <span>{{ item.valueLabel }}</span>
+                            <span>{{ item.weightLabel }}</span>
+                          </div>
+                        </article>
+                      </div>
+                      <ng-template #noIndustryExposureState>
+                        <div class="empty-state-panel compact">
+                          <div class="empty-state-copy">{{ 'dashboardV2.portfolio.emptyIndustryExposure' | translate }}</div>
+                        </div>
+                      </ng-template>
+                    </div>
+                  </div>
+
+                  <div class="detail-section-title">{{ 'dashboardV2.portfolio.alertsTitle' | translate }}</div>
+                  <div class="operations-action-list" *ngIf="portfolioAlertItems.length; else noPortfolioAlertState">
+                    <article class="operations-action-item" *ngFor="let item of pagedPortfolioAlertItems()" [attr.data-tone]="item.tone">
+                      <div class="operations-action-title">{{ item.title }}</div>
+                      <div class="operations-action-body">{{ item.body }}</div>
+                    </article>
+                  </div>
+                  <div class="alert-pager" *ngIf="totalJournalWorkspacePages('portfolio-alerts', portfolioAlertItems.length) > 1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('portfolio-alerts', portfolioAlertItems.length, -1)" (click)="moveJournalWorkspacePage('portfolio-alerts', portfolioAlertItems.length, -1)">
+                      {{ 'dashboard.prev' | translate }}
+                    </button>
+                    <span>{{ 'dashboard.page' | translate }} {{ currentJournalWorkspacePage('portfolio-alerts', portfolioAlertItems.length) }}/{{ totalJournalWorkspacePages('portfolio-alerts', portfolioAlertItems.length) }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('portfolio-alerts', portfolioAlertItems.length, 1)" (click)="moveJournalWorkspacePage('portfolio-alerts', portfolioAlertItems.length, 1)">
+                      {{ 'dashboard.next' | translate }}
+                    </button>
+                  </div>
+                  <ng-template #noPortfolioAlertState>
+                    <div class="empty-state-panel compact">
+                      <div class="empty-state-copy">{{ 'dashboardV2.portfolio.emptyAlerts' | translate }}</div>
+                    </div>
+                  </ng-template>
+                </section>
+              </div>
+
+              <div class="portfolio-grid" *ngIf="isJournalWorkspaceTab('workflow') && workflowOverview">
+                <section class="operations-card">
+                  <div class="operations-card-head">
+                    <div>
+                      <div class="dashboard-panel-kicker">{{ 'dashboardV2.workflow.suggestionKicker' | translate }}</div>
+                      <h3 class="operations-card-title">{{ 'dashboardV2.workflow.suggestionTitle' | translate }}</h3>
+                    </div>
+                    <span class="operations-card-count">{{ workflowOverview.counts.suggested }}</span>
+                  </div>
+                  <div class="operations-action-list" *ngIf="workflowSuggestionItems.length; else noWorkflowSuggestionState">
+                    <article class="operations-action-item" *ngFor="let item of pagedWorkflowSuggestionItems()" [attr.data-tone]="item.tone">
+                      <div class="operations-action-title">
+                        <span *ngIf="item.symbol">{{ item.symbol }} - </span>{{ item.title }}
+                      </div>
+                      <div class="operations-action-body">{{ item.body }}</div>
+                      <div class="workflow-mode-hint">{{ 'dashboardV2.workflow.modeHint' | translate }}</div>
+                      <div class="workflow-mode-copy">
+                        <div>{{ 'dashboardV2.workflow.manualHelp' | translate }}</div>
+                        <div>{{ 'dashboardV2.workflow.automaticHelp' | translate }}</div>
+                      </div>
+                      <div class="workflow-action-buttons">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-dark"
+                          [disabled]="workflowBusyKey === ('create:' + item.sourceKey + ':manual')"
+                          (click)="createWorkflowAction(item, 'manual')"
+                        >
+                          {{ 'dashboardV2.workflow.modeManual' | translate }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          [disabled]="workflowBusyKey === ('create:' + item.sourceKey + ':automatic')"
+                          (click)="createWorkflowAction(item, 'automatic')"
+                        >
+                          {{ 'dashboardV2.workflow.modeAutomatic' | translate }}
+                        </button>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="alert-pager" *ngIf="totalJournalWorkspacePages('workflow-suggestions', workflowSuggestionItems.length) > 1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('workflow-suggestions', workflowSuggestionItems.length, -1)" (click)="moveJournalWorkspacePage('workflow-suggestions', workflowSuggestionItems.length, -1)">
+                      {{ 'dashboard.prev' | translate }}
+                    </button>
+                    <span>{{ 'dashboard.page' | translate }} {{ currentJournalWorkspacePage('workflow-suggestions', workflowSuggestionItems.length) }}/{{ totalJournalWorkspacePages('workflow-suggestions', workflowSuggestionItems.length) }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('workflow-suggestions', workflowSuggestionItems.length, 1)" (click)="moveJournalWorkspacePage('workflow-suggestions', workflowSuggestionItems.length, 1)">
+                      {{ 'dashboard.next' | translate }}
+                    </button>
+                  </div>
+                  <ng-template #noWorkflowSuggestionState>
+                    <div class="empty-state-panel compact">
+                      <div class="empty-state-copy">{{ 'dashboardV2.workflow.emptySuggestions' | translate }}</div>
+                    </div>
+                  </ng-template>
+                </section>
+
+                <section class="operations-card">
+                  <div class="operations-card-head">
+                    <div>
+                      <div class="dashboard-panel-kicker">{{ 'dashboardV2.workflow.pendingKicker' | translate }}</div>
+                      <h3 class="operations-card-title">{{ 'dashboardV2.workflow.pendingTitle' | translate }}</h3>
+                    </div>
+                    <span class="operations-card-count">{{ workflowOverview.counts.pending }}</span>
+                  </div>
+                  <div class="operations-action-list" *ngIf="workflowPendingItems.length; else noWorkflowPendingState">
+                    <article class="operations-action-item" *ngFor="let item of pagedWorkflowPendingItems()" [attr.data-tone]="item.tone">
+                      <div class="operations-action-title">
+                        <span *ngIf="item.symbol">{{ item.symbol }} - </span>{{ item.title }}
+                        <span class="workflow-mode-badge" [attr.data-mode]="item.executionMode">{{ ('dashboardV2.workflow.mode.' + item.executionMode) | translate }}</span>
+                        <span class="workflow-mode-badge" [attr.data-mode]="item.runtimeTone">{{ item.runtimeLabel }}</span>
+                      </div>
+                      <div class="operations-action-body">{{ item.body }}</div>
+                      <div class="workflow-runtime-meta">
+                        <span>#{{ item.id }}</span>
+                        <span>{{ 'dashboardV2.workflow.sourceLabel' | translate }}: {{ item.sourceLabel }}</span>
+                        <span>{{ 'dashboardV2.workflow.createdLabel' | translate }}: {{ item.createdAtLabel }}</span>
+                        <span>{{ 'dashboardV2.workflow.updatedLabel' | translate }}: {{ item.updatedAtLabel }}</span>
+                      </div>
+                      <div class="workflow-runtime-note" *ngIf="item.note">{{ item.note }}</div>
+                      <div class="workflow-action-buttons">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-success"
+                          [disabled]="workflowBusyKey === ('update:' + item.id + ':take_profit')"
+                          (click)="completeWorkflowAction(item, 'take_profit')"
+                        >
+                          {{ 'dashboardV2.workflow.doneTakeProfit' | translate }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-danger"
+                          [disabled]="workflowBusyKey === ('update:' + item.id + ':cut_loss')"
+                          (click)="completeWorkflowAction(item, 'cut_loss')"
+                        >
+                          {{ 'dashboardV2.workflow.doneCutLoss' | translate }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-warning"
+                          [disabled]="workflowBusyKey === ('update:' + item.id + ':rebalance')"
+                          (click)="completeWorkflowAction(item, 'rebalance')"
+                        >
+                          {{ 'dashboardV2.workflow.doneRebalance' | translate }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-dark"
+                          [disabled]="workflowBusyKey === ('note:' + item.id)"
+                          (click)="updateWorkflowNote(item)"
+                        >
+                          {{ 'dashboardV2.workflow.editNote' | translate }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-secondary"
+                          [disabled]="workflowBusyKey === ('dismiss:' + item.id)"
+                          (click)="dismissWorkflowAction(item)"
+                        >
+                          {{ 'dashboardV2.workflow.dismiss' | translate }}
+                        </button>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="alert-pager" *ngIf="totalJournalWorkspacePages('workflow-pending', workflowPendingItems.length) > 1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('workflow-pending', workflowPendingItems.length, -1)" (click)="moveJournalWorkspacePage('workflow-pending', workflowPendingItems.length, -1)">
+                      {{ 'dashboard.prev' | translate }}
+                    </button>
+                    <span>{{ 'dashboard.page' | translate }} {{ currentJournalWorkspacePage('workflow-pending', workflowPendingItems.length) }}/{{ totalJournalWorkspacePages('workflow-pending', workflowPendingItems.length) }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('workflow-pending', workflowPendingItems.length, 1)" (click)="moveJournalWorkspacePage('workflow-pending', workflowPendingItems.length, 1)">
+                      {{ 'dashboard.next' | translate }}
+                    </button>
+                  </div>
+                  <ng-template #noWorkflowPendingState>
+                    <div class="empty-state-panel compact">
+                      <div class="empty-state-copy">{{ 'dashboardV2.workflow.emptyPending' | translate }}</div>
+                    </div>
+                  </ng-template>
+                </section>
+              </div>
+
+              <div class="portfolio-grid history-workspace-grid" *ngIf="isJournalWorkspaceTab('history')">
+                <section class="operations-card">
+                  <div class="operations-card-head">
+                    <div>
+                      <div class="dashboard-panel-kicker">{{ 'marketSettings.history.title' | translate }}</div>
+                      <h3 class="operations-card-title">{{ 'marketSettings.history.subtitle' | translate }}</h3>
+                    </div>
+                    <span class="operations-card-count">{{ workflowHistoryItems.length }}</span>
+                  </div>
+
+                  <div class="operations-action-list history-action-list" *ngIf="workflowHistoryItems.length; else noWorkflowHistoryState">
+                    <article class="operations-action-item history-action-item" *ngFor="let item of pagedWorkflowHistoryItems(); trackBy: trackByWorkflowHistory" [attr.data-tone]="item.effectTone">
+                      <div class="operations-action-title">
+                        <span *ngIf="item.symbol">{{ item.symbol }} - </span>{{ item.title }}
+                      </div>
+
+                      <div class="history-action-badges">
+                        <span class="workflow-mode-badge" [attr.data-mode]="item.executionMode">{{ ('dashboardV2.workflow.mode.' + item.executionMode) | translate }}</span>
+                        <span class="workflow-mode-badge" [attr.data-mode]="item.runtimeTone">{{ item.runtimeLabel }}</span>
+                        <span class="workflow-mode-badge" [attr.data-mode]="item.effectTone">{{ item.effectLabel }}</span>
+                      </div>
+
+                      <div class="history-action-meta">
+                        <span>{{ 'marketSettings.history.source' | translate }}: {{ item.sourceLabel }}</span>
+                        <span>{{ 'marketSettings.history.action' | translate }}: {{ item.actionLabel }}</span>
+                        <span>{{ 'marketSettings.history.handler' | translate }}: {{ item.handledBy }}</span>
+                        <span>{{ 'marketSettings.history.time' | translate }}: {{ item.handledAtLabel }}</span>
+                        <span>{{ 'marketSettings.history.handledPrice' | translate }}: {{ item.handledPriceLabel }}</span>
+                        <span>{{ 'marketSettings.history.currentPrice' | translate }}: {{ item.currentPriceLabel }}</span>
+                        <span>{{ 'marketSettings.history.effectPct' | translate }}: {{ item.effectPctLabel }}</span>
+                        <span>{{ 'marketSettings.history.effectValue' | translate }}: {{ item.effectValueLabel }}</span>
+                      </div>
+
+                      <div class="history-action-basis">{{ item.processLabel }}</div>
+                      <div class="operations-action-body" *ngIf="item.note">{{ item.note }}</div>
+                      <div class="history-action-basis" *ngIf="item.basis">{{ item.basis }}</div>
+
+                      <div class="history-action-audit" *ngIf="item.auditSummary.length">
+                        <div class="history-action-audit-title">{{ 'marketSettings.history.auditTrail' | translate }}</div>
+                        <div class="history-action-audit-row" *ngFor="let audit of item.auditSummary">{{ audit }}</div>
+                      </div>
+                      <div class="workflow-action-buttons">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-dark"
+                          [disabled]="workflowBusyKey === ('reopen:' + item.id)"
+                          (click)="reopenWorkflowAction(item)"
+                        >
+                          {{ 'dashboardV2.workflow.reopenAction' | translate }}
+                        </button>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="alert-pager" *ngIf="totalJournalWorkspacePages('history', workflowHistoryItems.length) > 1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('history', workflowHistoryItems.length, -1)" (click)="moveJournalWorkspacePage('history', workflowHistoryItems.length, -1)">
+                      {{ 'dashboard.prev' | translate }}
+                    </button>
+                    <span>{{ 'dashboard.page' | translate }} {{ currentJournalWorkspacePage('history', workflowHistoryItems.length) }}/{{ totalJournalWorkspacePages('history', workflowHistoryItems.length) }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('history', workflowHistoryItems.length, 1)" (click)="moveJournalWorkspacePage('history', workflowHistoryItems.length, 1)">
+                      {{ 'dashboard.next' | translate }}
+                    </button>
+                  </div>
+                  <ng-template #noWorkflowHistoryState>
+                    <div class="empty-state-panel compact">
+                      <div class="empty-state-title">{{ 'marketSettings.history.emptyTitle' | translate }}</div>
+                      <div class="empty-state-copy">{{ 'marketSettings.history.emptySubtitle' | translate }}</div>
+                    </div>
+                  </ng-template>
+                </section>
+              </div>
+            </section>
+
+            <div class="journal-toolbar" *ngIf="isJournalWorkspaceTab('journal')">
+              <div class="journal-filter-group" role="group" [attr.aria-label]="'dashboardV2.journalFilter.label' | translate">
+                <button
+                  *ngFor="let item of journalFilterItems()"
+                  type="button"
+                  class="journal-filter-chip"
+                  [class.active]="journalFilter === item.key"
+                  (click)="setJournalFilter(item.key)"
+                >
+                  <span>{{ item.label }}</span>
+                  <strong>{{ journalResultCount(item.key) }}</strong>
+                </button>
+              </div>
+
+              <div class="journal-sort-group">
+                <label class="journal-sort-label" for="dashboard-v2-journal-sort">{{ 'dashboardV2.journalSort.label' | translate }}</label>
+                <select
+                  id="dashboard-v2-journal-sort"
+                  class="form-select form-select-sm journal-sort-select"
+                  [value]="journalSortBy"
+                  (change)="onJournalSortChange($event)"
+                >
+                  <option *ngFor="let item of journalSortItems()" [value]="item.key">{{ item.label }}</option>
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-secondary journal-sort-dir" (click)="toggleJournalSortDir()">
+                  {{ (journalSortDir === 'desc' ? 'dashboardV2.journalSort.desc' : 'dashboardV2.journalSort.asc') | translate }}
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive journal-table-wrap" *ngIf="isJournalWorkspaceTab('journal')">
               <table class="table table-sm table-hover align-middle journal-table mb-0">
                 <thead>
                   <tr>
                     <th>{{ 'dashboardV2.table.date' | translate }}</th>
-                    <th>{{ 'dashboardV2.table.trade' | translate }}</th>
+                    <th>{{ 'dashboardV2.table.symbol' | translate }}</th>
+                    <th>{{ 'dashboardV2.table.setup' | translate }}</th>
                     <th>{{ 'dashboardV2.table.side' | translate }}</th>
                     <th>{{ 'dashboardV2.table.capital' | translate }}</th>
                     <th>{{ 'dashboardV2.table.pnl' | translate }}</th>
                     <th>{{ 'dashboardV2.table.status' | translate }}</th>
-                    <th class="text-center">{{ 'dashboardV2.table.why' | translate }}</th>
+                    <th>{{ 'dashboardV2.table.note' | translate }}</th>
+                    <th class="text-center">{{ 'dashboardV2.table.action' | translate }}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr *ngIf="!journalRows.length">
-                    <td colspan="7" class="empty-state">{{ 'dashboardV2.empty.journal' | translate }}</td>
+                  <tr *ngIf="!visibleJournalRows().length">
+                    <td colspan="9" class="empty-state">{{ 'dashboardV2.empty.journal' | translate }}</td>
                   </tr>
                   <tr
-                    *ngFor="let row of journalRows; trackBy: trackByJournal"
+                    *ngFor="let row of pagedVisibleJournalRows(); trackBy: trackByJournal"
+                    [attr.data-result-tone]="row.resultTone"
                     (mouseenter)="showJournalInsight(row)"
                     (focusin)="showJournalInsight(row)"
                     (click)="showJournalInsight(row)"
                     (mouseleave)="resetInsightPanel()"
                   >
                     <td class="text-nowrap">{{ row.date }}</td>
-                    <td>
+                    <td class="journal-symbol-cell">
                       <button type="button" class="symbol-link-btn journal-symbol" (click)="openSymbolDetail(row.symbol, $event)">
                         {{ row.symbol }}
                       </button>
-                      <div class="journal-meta">{{ row.tradeLabel }}</div>
-                      <div class="journal-note">{{ row.note }}</div>
+                      <div class="journal-meta" *ngIf="row.strategyLabel !== '--'">{{ row.strategyLabel }}</div>
+                    </td>
+                    <td class="journal-setup-cell">
+                      <div class="journal-setup">{{ row.setupLabel }}</div>
                     </td>
                     <td>
                       <span class="journal-side" [attr.data-side]="row.sideLabel.toLowerCase()">{{ row.sideLabel }}</span>
                     </td>
-                    <td class="text-nowrap">{{ row.capitalLabel }}</td>
-                    <td class="text-nowrap" [attr.data-pnl-tone]="row.pnlTone">{{ row.pnlLabel }}</td>
+                    <td class="text-nowrap journal-capital">{{ row.capitalLabel }}</td>
+                    <td class="text-nowrap journal-pnl" [attr.data-pnl-tone]="row.pnlTone">{{ row.pnlLabel }}</td>
                     <td>
-                      <span class="journal-result" [attr.data-result]="row.resultLabel.toLowerCase()">
-                        {{ row.resultLabel }}
-                      </span>
+                      <div class="journal-status-stack">
+                        <span class="journal-result" [attr.data-result]="row.resultLabel.toLowerCase()">
+                          {{ row.resultLabel }}
+                        </span>
+                        <span class="journal-mini-state" [attr.data-tone]="row.portfolioStateTone">
+                          {{ row.portfolioStateLabel }}
+                        </span>
+                        <span class="journal-mini-state" [attr.data-tone]="row.workflowStateTone">
+                          {{ row.workflowStateLabel }}
+                        </span>
+                      </div>
                     </td>
-                    <td class="text-center">
-                      <button type="button" class="icon-button" (click)="openJournalDetail(row)" [attr.aria-label]="'dashboardV2.table.openDetail' | translate">
-                        <ion-icon name="sparkles-outline"></ion-icon>
-                      </button>
+                    <td class="journal-note-cell">
+                      <div class="journal-note">{{ row.note }}</div>
+                      <div class="journal-note-meta">{{ row.workflowReason }}</div>
+                    </td>
+                    <td class="text-center journal-action-cell">
+                      <div class="journal-action-group">
+                        <button
+                          *ngIf="canCreateWorkflowFromRow(row)"
+                          type="button"
+                          class="icon-button workflow-create"
+                          [disabled]="workflowBusyKey === ('journal-workflow:' + row.id)"
+                          (click)="createJournalWorkflow(row, $event)"
+                          [attr.aria-label]="'dashboardV2.table.createWorkflow' | translate"
+                          [attr.title]="'dashboardV2.table.createWorkflow' | translate"
+                        >
+                          <ion-icon name="git-branch-outline"></ion-icon>
+                        </button>
+                        <button type="button" class="icon-button" (click)="openJournalDetail(row)" [attr.aria-label]="'dashboardV2.table.openDetail' | translate">
+                          <ion-icon name="sparkles-outline"></ion-icon>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div class="alert-pager" *ngIf="isJournalWorkspaceTab('journal') && totalJournalWorkspacePages('journal', visibleJournalRows().length) > 1">
+              <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('journal', visibleJournalRows().length, -1)" (click)="moveJournalWorkspacePage('journal', visibleJournalRows().length, -1)">
+                {{ 'dashboard.prev' | translate }}
+              </button>
+              <span>{{ 'dashboard.page' | translate }} {{ currentJournalWorkspacePage('journal', visibleJournalRows().length) }}/{{ totalJournalWorkspacePages('journal', visibleJournalRows().length) }}</span>
+              <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveJournalWorkspacePage('journal', visibleJournalRows().length, 1)" (click)="moveJournalWorkspacePage('journal', visibleJournalRows().length, 1)">
+                {{ 'dashboard.next' | translate }}
+              </button>
             </div>
           </div>
         </article>
@@ -247,13 +780,23 @@
               <div *ngIf="isAlertTab('priority')" class="priority-list">
                 <div class="alert-tab-heading">
                   <span>{{ 'dashboardV2.alertTab.priority' | translate }}</span>
-                  <strong>{{ priorityItems.length }}</strong>
+                  <strong>{{ currentAlertItemsCount('priority') }}</strong>
                 </div>
-                <article class="priority-item" *ngFor="let item of priorityItems; trackBy: trackByPriority" [attr.data-tone]="item.tone" (mouseenter)="showPriorityInsight(item)" (click)="showPriorityInsight(item)" (mouseleave)="resetInsightPanel()">
+                <article class="priority-item" *ngFor="let item of pagedPriorityItems(); trackBy: trackByPriority" [attr.data-tone]="item.tone" (mouseenter)="showPriorityInsight(item)" (click)="showPriorityInsight(item)" (mouseleave)="resetInsightPanel()">
                   <div class="priority-item-title">{{ item.title }}</div>
                   <div class="priority-item-body">{{ item.body }}</div>
                   <div class="priority-item-meta">{{ item.meta }}</div>
                 </article>
+
+                <div class="alert-pager" *ngIf="totalAlertPages('priority') > 1">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveAlertPage('priority', -1)" (click)="moveAlertPage('priority', -1)">
+                    {{ 'dashboard.prev' | translate }}
+                  </button>
+                  <span>{{ 'dashboard.page' | translate }} {{ currentAlertPage('priority') }}/{{ totalAlertPages('priority') }}</span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveAlertPage('priority', 1)" (click)="moveAlertPage('priority', 1)">
+                    {{ 'dashboard.next' | translate }}
+                  </button>
+                </div>
 
                 <div *ngIf="!priorityItems.length" class="empty-state-panel">
                   <div class="empty-state-title">{{ 'dashboardV2.empty.priorityTitle' | translate }}</div>
@@ -264,10 +807,10 @@
               <div *ngIf="isAlertTab('alerts')" class="alerts-tab-body">
                 <div class="alert-tab-heading">
                   <span>{{ 'dashboardV2.alertTab.alerts' | translate }}</span>
-                  <strong>{{ alertItems.length }}</strong>
+                  <strong>{{ currentAlertItemsCount('alerts') }}</strong>
                 </div>
                 <div class="alerts-list" *ngIf="alertItems.length; else noAlertState">
-                  <article class="alert-item" *ngFor="let item of alertItems; trackBy: trackByAlert" [attr.data-severity]="item.severity" (mouseenter)="showAlertInsight(item)" (click)="showAlertInsight(item)" (mouseleave)="resetInsightPanel()">
+                  <article class="alert-item" *ngFor="let item of pagedAlertItems(); trackBy: trackByAlert" [attr.data-severity]="item.severity" (mouseenter)="showAlertInsight(item)" (click)="showAlertInsight(item)" (mouseleave)="resetInsightPanel()">
                     <div class="alert-item-head">
                       <div>
                         <button type="button" class="symbol-link-btn alert-item-symbol" (click)="openSymbolDetail(item.symbol, $event)">
@@ -293,6 +836,16 @@
                   </article>
                 </div>
 
+                <div class="alert-pager" *ngIf="totalAlertPages('alerts') > 1">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveAlertPage('alerts', -1)" (click)="moveAlertPage('alerts', -1)">
+                    {{ 'dashboard.prev' | translate }}
+                  </button>
+                  <span>{{ 'dashboard.page' | translate }} {{ currentAlertPage('alerts') }}/{{ totalAlertPages('alerts') }}</span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveAlertPage('alerts', 1)" (click)="moveAlertPage('alerts', 1)">
+                    {{ 'dashboard.next' | translate }}
+                  </button>
+                </div>
+
                 <ng-template #noAlertState>
                   <div class="empty-state-panel">
                     <div class="empty-state-title">{{ 'dashboardV2.empty.alertsTitle' | translate }}</div>
@@ -304,15 +857,25 @@
               <div *ngIf="isAlertTab('news')" class="news-strip-list">
                 <div class="alert-tab-heading">
                   <span>{{ 'dashboardV2.alertTab.news' | translate }}</span>
-                  <strong>{{ newsItems.length }}</strong>
+                  <strong>{{ currentAlertItemsCount('news') }}</strong>
                 </div>
-                <article class="news-strip-item" *ngFor="let news of newsItems | slice:0:6; trackBy: trackByNews" (mouseenter)="showNewsInsight(news)" (click)="showNewsInsight(news)" (mouseleave)="resetInsightPanel()">
+                <article class="news-strip-item" *ngFor="let news of pagedNewsItems(); trackBy: trackByNews" (mouseenter)="showNewsInsight(news)" (click)="showNewsInsight(news)" (mouseleave)="resetInsightPanel()">
                   <div class="news-strip-item-title">{{ news.title }}</div>
                   <div class="news-strip-item-meta">
                     <span>{{ newsScopeLabel(news) }}</span>
                     <span>{{ news.published_at || '--' }}</span>
                   </div>
                 </article>
+
+                <div class="alert-pager" *ngIf="totalAlertPages('news') > 1">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveAlertPage('news', -1)" (click)="moveAlertPage('news', -1)">
+                    {{ 'dashboard.prev' | translate }}
+                  </button>
+                  <span>{{ 'dashboard.page' | translate }} {{ currentAlertPage('news') }}/{{ totalAlertPages('news') }}</span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveAlertPage('news', 1)" (click)="moveAlertPage('news', 1)">
+                    {{ 'dashboard.next' | translate }}
+                  </button>
+                </div>
 
                 <div *ngIf="!newsItems.length" class="empty-state-panel">
                   <div class="empty-state-title">{{ 'dashboardV2.empty.newsTitle' | translate }}</div>
@@ -323,11 +886,11 @@
               <div *ngIf="isAlertTab('ai')" class="ai-analysis-list">
                 <div class="alert-tab-heading">
                   <span>{{ 'dashboardV2.alertTab.ai' | translate }}</span>
-                  <strong>{{ aiAnalysisItems.length }}</strong>
+                  <strong>{{ currentAlertItemsCount('ai') }}</strong>
                 </div>
                 <article
                   class="ai-analysis-item"
-                  *ngFor="let item of aiAnalysisItems; trackBy: trackByPriority"
+                  *ngFor="let item of pagedAiAnalysisItems(); trackBy: trackByPriority"
                   [attr.data-tone]="item.tone"
                   (mouseenter)="showPriorityInsight(item)"
                   (pointerdown)="showPriorityInsight(item)"
@@ -339,6 +902,16 @@
                   </div>
                   <p class="ai-analysis-body mb-0">{{ item.body }}</p>
                 </article>
+
+                <div class="alert-pager" *ngIf="totalAlertPages('ai') > 1">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveAlertPage('ai', -1)" (click)="moveAlertPage('ai', -1)">
+                    {{ 'dashboard.prev' | translate }}
+                  </button>
+                  <span>{{ 'dashboard.page' | translate }} {{ currentAlertPage('ai') }}/{{ totalAlertPages('ai') }}</span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="!canMoveAlertPage('ai', 1)" (click)="moveAlertPage('ai', 1)">
+                    {{ 'dashboard.next' | translate }}
+                  </button>
+                </div>
 
                 <div *ngIf="!aiAnalysisItems.length" class="empty-state-panel">
                   <div class="empty-state-title">{{ 'dashboardV2.empty.aiTitle' | translate }}</div>
@@ -501,6 +1074,14 @@
   <app-symbol-detail-modal
     [open]="symbolDetailOpen"
     [symbol]="symbolDetailSymbol"
+    [showFormulaButton]="hasJournalFormulaForSymbol(symbolDetailSymbol)"
+    [formulaLoading]="symbolDetailFormulaLoading"
+    [formulaError]="symbolDetailFormulaError"
+    [formulaGroups]="symbolDetailFormulaGroups"
+    [formulaMetrics]="symbolDetailFormulaMetrics"
+    [formulaVerdict]="symbolDetailFormulaVerdict"
+    [intelligenceView]="symbolDetailIntelligence"
+    [historyItems]="symbolDetailHistoryItems"
     (closed)="closeSymbolDetail()"
   ></app-symbol-detail-modal>
 </ion-content>

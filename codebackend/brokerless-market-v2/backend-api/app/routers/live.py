@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
+import re
 
 from fastapi import APIRouter, Depends, Query
 
@@ -25,6 +26,134 @@ def _to_iso(value):
     if isinstance(value, date):
         return value.isoformat()
     return str(value)
+
+
+def _normalize_text(value: str | None) -> str:
+    return (value or "").strip()
+
+
+POSITIVE_NEWS_KEYWORDS = (
+    "tăng trưởng",
+    "lợi nhuận",
+    "lãi",
+    "cổ tức",
+    "mở rộng",
+    "hợp đồng",
+    "đầu tư",
+    "bứt phá",
+    "mua ròng",
+    "tích cực",
+    "khởi công",
+    "nâng hạng",
+)
+
+NEGATIVE_NEWS_KEYWORDS = (
+    "lỗ",
+    "giảm mạnh",
+    "suy giảm",
+    "xử phạt",
+    "khởi tố",
+    "điều tra",
+    "bán ròng",
+    "áp lực",
+    "nợ",
+    "hủy",
+    "trì hoãn",
+    "rủi ro",
+)
+
+HIGH_IMPACT_KEYWORDS = (
+    "kết quả kinh doanh",
+    "báo cáo tài chính",
+    "lợi nhuận",
+    "cổ tức",
+    "phát hành",
+    "mua lại",
+    "sáp nhập",
+    "thoái vốn",
+    "room ngoại",
+    "hợp đồng",
+    "dự án",
+    "khởi tố",
+    "xử phạt",
+    "trái phiếu",
+)
+
+
+def _symbol_related(article_title: str, article_summary: str | None, symbol: str, company_name: str | None) -> bool:
+    haystack = f"{_normalize_text(article_title)} {_normalize_text(article_summary)}"
+    if not haystack:
+        return False
+
+    symbol_pattern = rf"\b{re.escape(symbol.upper())}\b"
+    if re.search(symbol_pattern, haystack.upper()):
+        return True
+
+    cleaned_name = _normalize_text(company_name)
+    if cleaned_name and len(cleaned_name) >= 5 and cleaned_name.lower() in haystack.lower():
+        return True
+
+    return False
+
+
+def _score_news_sentiment(title: str, summary: str | None) -> int:
+    text = f"{_normalize_text(title)} {_normalize_text(summary)}".lower()
+    score = 0
+    for keyword in POSITIVE_NEWS_KEYWORDS:
+        if keyword in text:
+            score += 1
+    for keyword in NEGATIVE_NEWS_KEYWORDS:
+        if keyword in text:
+            score -= 1
+    return score
+
+
+def _sentiment_label(score: int) -> str:
+    if score > 0:
+        return "Tích cực"
+    if score < 0:
+        return "Tiêu cực"
+    return "Trung tính"
+
+
+def _impact_payload(title: str, summary: str | None, symbol: str, company_name: str | None) -> tuple[int, str, list[str]]:
+    title_text = _normalize_text(title)
+    summary_text = _normalize_text(summary)
+    title_upper = title_text.upper()
+    summary_upper = summary_text.upper()
+    title_lower = title_text.lower()
+    summary_lower = summary_text.lower()
+    company_lower = _normalize_text(company_name).lower()
+
+    score = 25
+    reasons: list[str] = []
+    symbol_pattern = rf"\b{re.escape(symbol.upper())}\b"
+
+    if re.search(symbol_pattern, title_upper):
+        score += 35
+        reasons.append("Mã xuất hiện trực tiếp trong tiêu đề")
+    if re.search(symbol_pattern, summary_upper):
+        score += 20
+        reasons.append("Mã xuất hiện trong nội dung tóm tắt")
+    if company_lower and len(company_lower) >= 5 and company_lower in title_lower:
+        score += 25
+        reasons.append("Tên công ty xuất hiện trong tiêu đề")
+    elif company_lower and len(company_lower) >= 5 and company_lower in summary_lower:
+        score += 15
+        reasons.append("Tên công ty xuất hiện trong tóm tắt")
+
+    full_text = f"{title_lower} {summary_lower}"
+    matched_keywords = [keyword for keyword in HIGH_IMPACT_KEYWORDS if keyword in full_text]
+    if matched_keywords:
+        score += min(30, len(matched_keywords) * 8)
+        reasons.append(f"Chứa từ khóa ảnh hưởng mạnh: {', '.join(matched_keywords[:3])}")
+
+    score = max(0, min(100, score))
+    if score >= 75:
+        return score, "Cao", reasons or ["Tin bám rất sát vào mã và sự kiện doanh nghiệp"]
+    if score >= 45:
+        return score, "Vừa", reasons or ["Tin có liên quan tới mã nhưng cần xác nhận thêm"]
+    return score, "Thấp", reasons or ["Tin chỉ liên quan gián tiếp tới mã"]
 
 
 @router.get("/stocks")
@@ -209,6 +338,61 @@ async def get_symbol_financials(
     repo: MarketReadRepository = Depends(get_repo),
 ):
     return await repo.get_symbol_financial_bundle(symbol=symbol, limit_per_section=limit_per_section)
+
+
+@router.get("/symbols/{symbol}/news")
+async def get_symbol_news(
+    symbol: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    repo: MarketReadRepository = Depends(get_repo),
+):
+    normalized_symbol = symbol.strip().upper()
+    symbol_rows = await repo.search_symbols(normalized_symbol, limit=5)
+    exact_row = next((row for row in symbol_rows if (row.symbol or "").upper() == normalized_symbol), None)
+    company_name = getattr(exact_row, "name", None)
+    exchange = getattr(exact_row, "exchange", None)
+
+    articles = await repo.get_latest_news_articles(source="CafeF", limit=250)
+    matched_items = []
+    for index, article in enumerate(articles, start=1):
+        if not _symbol_related(article.title, article.summary, normalized_symbol, company_name):
+            continue
+        sentiment_score = _score_news_sentiment(article.title, article.summary)
+        impact_score, impact_label, impact_reasons = _impact_payload(
+            article.title,
+            article.summary,
+            normalized_symbol,
+            company_name,
+        )
+        matched_items.append(
+            {
+                "id": str(article.id or index),
+                "symbol": normalized_symbol,
+                "exchange": exchange,
+                "title": article.title,
+                "summary": article.summary,
+                "publishedAt": _to_iso(article.published_at),
+                "capturedAt": _to_iso(article.captured_at),
+                "url": article.url,
+                "source": article.source,
+                "relatedSymbols": [normalized_symbol],
+                "sentimentScore": sentiment_score,
+                "sentimentLabel": _sentiment_label(sentiment_score),
+                "impactScore": impact_score,
+                "impactLabel": impact_label,
+                "impactReasons": impact_reasons,
+            }
+        )
+        if len(matched_items) >= limit:
+            break
+
+    return {
+        "symbol": normalized_symbol,
+        "exchange": exchange,
+        "companyName": company_name,
+        "items": matched_items,
+        "total": len(matched_items),
+    }
 
 
 @router.get("/news")

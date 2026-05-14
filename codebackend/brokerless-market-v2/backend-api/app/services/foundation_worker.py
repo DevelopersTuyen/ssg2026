@@ -6,11 +6,13 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.core.json_utils import make_json_safe
 from app.core.logging import get_logger
 from app.models.market import MarketSyncLog
 from app.services.alert_delivery_service import AlertDeliveryService
 from app.services.candle_service import CandleService
 from app.services.data_quality_service import DataQualityService
+from app.services.sync_log_service import write_sync_log_safely
 
 logger = get_logger(__name__)
 
@@ -44,9 +46,9 @@ class FoundationWorker:
             await self._sleep_or_stop(wait_seconds)
 
     async def run_once(self) -> None:
-        candle_result = await self._run_candle_job()
-        quality_result = await self._run_data_quality_job()
-        alert_result = await self._run_alert_job()
+        candle_result = await self._run_job_safely("foundation_candles", self._run_candle_job)
+        quality_result = await self._run_job_safely("foundation_data_quality", self._run_data_quality_job)
+        alert_result = await self._run_job_safely("foundation_alert_delivery", self._run_alert_job)
         logger.info(
             "foundation worker completed | candles=%s quality=%s alerts=%s",
             candle_result,
@@ -128,9 +130,27 @@ class FoundationWorker:
                 started_at=started_at,
                 finished_at=datetime.now(),
                 message=message,
-                extra_json=extra_json,
+                extra_json=make_json_safe(extra_json),
             )
         )
+
+    async def _run_job_safely(self, job_name: str, runner) -> dict[str, Any]:
+        started_at = datetime.now()
+        try:
+            result = await runner()
+            if isinstance(result, dict):
+                return {"status": "success", **result}
+            return {"status": "success", "result": result}
+        except Exception as exc:
+            logger.exception("foundation sub-job failed | job=%s | err=%s", job_name, exc)
+            await write_sync_log_safely(
+                job_name=job_name,
+                status="error",
+                started_at=started_at,
+                finished_at=datetime.now(),
+                message=str(exc),
+            )
+            return {"status": "error", "error": str(exc)}
 
     def _configured_timeframes(self) -> list[str]:
         values = [

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from math import isfinite
 from typing import Any
@@ -41,6 +41,9 @@ def to_jsonable(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
 
+    if isinstance(value, time):
+        return value.replace(tzinfo=None).isoformat()
+
     if pd is not None:
         if isinstance(value, pd.Timestamp):
             return value.to_pydatetime().replace(tzinfo=None).isoformat()
@@ -66,5 +69,11 @@ def to_jsonable(value: Any) -> Any:
 
     if isinstance(value, (list, tuple, set)):
         return [to_jsonable(v) for v in value]
+
+    if hasattr(value, "item"):
+        try:
+            return to_jsonable(value.item())
+        except Exception:
+            pass
 
     return str(value)

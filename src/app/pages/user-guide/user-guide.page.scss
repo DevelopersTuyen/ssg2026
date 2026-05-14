@@ -36,6 +36,50 @@ ion-content.guide-content {
   }
 }
 
+.guide-search-panel {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  border: 1px solid #dbe4ee;
+  background: #ffffff;
+}
+
+.guide-search-copy {
+  display: grid;
+  gap: 6px;
+
+  p {
+    margin: 0;
+    color: #5b6472;
+    line-height: 1.6;
+  }
+}
+
+.guide-search-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #152033;
+}
+
+.guide-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 520px);
+}
+
+.guide-search-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #d1dbe8;
+  background: #f8fbff;
+  color: #152033;
+}
+
 .page-kicker,
 .panel-kicker {
   text-transform: uppercase;
@@ -145,6 +189,58 @@ ion-content.guide-content {
   gap: 16px;
 }
 
+.practical-grid,
+.daily-flow-grid,
+.faq-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.practical-grid,
+.faq-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.practical-card,
+.module-guide-card,
+.faq-card,
+.practical-stage-card {
+  display: grid;
+  gap: 12px;
+}
+
+.practical-card-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #152033;
+}
+
+.practical-card p,
+.module-guide-card p,
+.faq-card p,
+.practical-stage-card .stage-goal {
+  margin: 0;
+  color: #5b6472;
+  line-height: 1.7;
+}
+
+.compact-checklist {
+  gap: 8px;
+}
+
+.module-guide-grid {
+  align-items: start;
+}
+
+.caution-list li {
+  color: #8a3b12;
+}
+
+.workflow-state-grid .link-card {
+  display: grid;
+  gap: 10px;
+}
+
 .formula-hero-note {
   padding: 14px 16px;
   border: 1px solid #dbe4ee;
@@ -230,6 +326,17 @@ ion-content.guide-content {
   line-height: 1.6;
 }
 
+.formula-snippet {
+  padding: 10px 12px;
+  border: 1px solid #dbe4ee;
+  background: #f3f8ff;
+  color: #26415d;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
 .guide-list.compact {
   gap: 8px;
 }
@@ -303,6 +410,14 @@ ion-content.guide-content {
 }
 
 @media (max-width: 991px) {
+  .guide-search-panel {
+    display: grid;
+  }
+
+  .guide-search-box {
+    width: 100%;
+  }
+
   .guide-layout {
     grid-template-columns: 1fr;
   }
@@ -322,6 +437,8 @@ ion-content.guide-content {
     grid-template-columns: 1fr;
   }
 
+  .practical-grid,
+  .faq-grid,
   .formula-workflow,
   .formula-grid,
   .formula-results-grid {

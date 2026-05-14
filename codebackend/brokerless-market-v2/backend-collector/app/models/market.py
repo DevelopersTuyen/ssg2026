@@ -360,6 +360,26 @@ class MarketSyncLog(Base):
     message: Mapped[str | None] = mapped_column(Text)
     extra_json: Mapped[dict | list | None] = mapped_column(JSON)
 
+
+class MarketNewsArticle(Base):
+    __tablename__ = "market_news_articles"
+    __table_args__ = (
+        UniqueConstraint("source", "url", name="uq_market_news_source_url"),
+        Index("ix_market_news_source_captured", "source", "captured_at"),
+        Index("ix_market_news_published", "published_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(50), index=True)
+    title: Mapped[str] = mapped_column(String(500), index=True)
+    summary: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(String(1000))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), index=True)
+    published_text: Mapped[str | None] = mapped_column(String(255))
+    raw_json: Mapped[dict | list | None] = mapped_column(JSON)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
 class MarketWatchlistItem(Base):
     __tablename__ = "market_watchlist_items"
     __table_args__ = (

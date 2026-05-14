@@ -1,9 +1,9 @@
-<ion-content [fullscreen]="true" class="settings-content">
+﻿<ion-content [fullscreen]="true" class="settings-content">
   <div class="settings-page container-fluid">
     <div class="settings-breadcrumb">
       <ion-icon name="settings-outline"></ion-icon>
       <span>{{ 'common.system' | translate }}</span>
-      <span class="sep">›</span>
+      <span class="sep">â€º</span>
       <span>{{ 'tabs.settings' | translate }}</span>
     </div>
 
@@ -203,6 +203,7 @@
         </div>
 
         <div *ngSwitchCase="'data'" class="settings-section">
+          @defer (when selectedTab === 'data'; prefetch on idle) {
           <div class="section-title">{{ 'settings.dataTitle' | translate }}</div>
           <div class="data-sync-hero">
             <div>
@@ -214,73 +215,184 @@
           <div class="sync-status-grid">
             <article class="sync-status-card">
               <div class="sync-status-head">
-                <strong>Quote market</strong>
-                <span class="sync-status-badge">{{ syncStatus.quotes.status }}</span>
+                <strong>{{ 'marketSettings.sync.quoteMarket' | translate }}</strong>
+                <span class="sync-status-badge" [attr.data-health]="getSyncHealthTone(syncStatus.quotes)">{{ getSyncHealthLabel(syncStatus.quotes) }}</span>
               </div>
-              <div class="sync-status-line">Batch: {{ getSyncBatchText(syncStatus.quotes) }}</div>
-              <div class="sync-status-line">Con lai: {{ getSyncRemainingText(syncStatus.quotes) }}</div>
-              <div class="sync-status-line">Requests/luot: {{ syncStatus.quotes.itemsInBatch ?? '--' }}</div>
-              <div class="sync-status-line">Tong requests: {{ syncStatus.quotes.itemsResolved ?? '--' }}</div>
-              <div class="sync-status-time">Lan cuoi: {{ formatSyncTime(syncStatus.quotes.finishedAt) }}</div>
-              <div class="sync-status-message">{{ syncStatus.quotes.message || 'Chua co log quote.' }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.runtime' | translate }}: {{ syncStatus.quotes.status }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.batch' | translate }}: {{ getSyncBatchText(syncStatus.quotes) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.remaining' | translate }}: {{ getSyncRemainingText(syncStatus.quotes) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.source' | translate }}: {{ getSyncSourceText(syncStatus.quotes) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.requestsPerBatch' | translate }}: {{ syncStatus.quotes.itemsInBatch ?? '--' }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.totalRequests' | translate }}: {{ syncStatus.quotes.itemsResolved ?? '--' }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.lag' | translate }}: {{ getSyncLagText(syncStatus.quotes) }}</div>
+              <div class="sync-status-line" *ngIf="syncStatus.quotes.consecutiveFailures">{{ 'marketSettings.sync.consecutiveFailures' | translate }}: {{ syncStatus.quotes.consecutiveFailures }}</div>
+              <div class="sync-status-line" *ngIf="syncStatus.quotes.lastSuccessAt">{{ 'marketSettings.sync.lastOk' | translate }}: {{ formatSyncTime(syncStatus.quotes.lastSuccessAt) }}</div>
+              <div class="sync-status-time">{{ 'marketSettings.sync.lastRun' | translate }}: {{ formatSyncTime(syncStatus.quotes.finishedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.quotes.message || ('marketSettings.sync.noQuoteLog' | translate) }}</div>
+              <div class="sync-status-error" *ngIf="hasSyncIssue(syncStatus.quotes)">{{ syncStatus.quotes.lastError || ('marketSettings.sync.noErrorDetail' | translate) }}</div>
             </article>
 
             <article class="sync-status-card">
               <div class="sync-status-head">
-                <strong>Intraday market</strong>
-                <span class="sync-status-badge">{{ syncStatus.intraday.status }}</span>
+                <strong>{{ 'marketSettings.sync.intradayMarket' | translate }}</strong>
+                <span class="sync-status-badge" [attr.data-health]="getSyncHealthTone(syncStatus.intraday)">{{ getSyncHealthLabel(syncStatus.intraday) }}</span>
               </div>
-              <div class="sync-status-line">Batch: {{ getSyncBatchText(syncStatus.intraday) }}</div>
-              <div class="sync-status-line">Con lai: {{ getSyncRemainingText(syncStatus.intraday) }}</div>
-              <div class="sync-status-line">Ma/luot: {{ syncStatus.intraday.itemsInBatch ?? '--' }}</div>
-              <div class="sync-status-line">Tong ma: {{ syncStatus.intraday.itemsResolved ?? '--' }}</div>
-              <div class="sync-status-time">Lan cuoi: {{ formatSyncTime(syncStatus.intraday.finishedAt) }}</div>
-              <div class="sync-status-message">{{ syncStatus.intraday.message || 'Chua co log intraday.' }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.runtime' | translate }}: {{ syncStatus.intraday.status }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.batch' | translate }}: {{ getSyncBatchText(syncStatus.intraday) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.remaining' | translate }}: {{ getSyncRemainingText(syncStatus.intraday) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.source' | translate }}: {{ getSyncSourceText(syncStatus.intraday) }}</div>
+              <div class="sync-status-line">
+                {{ 'marketSettings.sync.coverageMode' | translate }}:
+                <span class="sync-status-badge inline" [attr.data-health]="getIntradayCoverageTone(syncStatus.intraday)">{{ getIntradayCoverageLabel(syncStatus.intraday) }}</span>
+              </div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.symbolsPerBatch' | translate }}: {{ syncStatus.intraday.itemsInBatch ?? '--' }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.totalSymbols' | translate }}: {{ syncStatus.intraday.itemsResolved ?? '--' }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.intradayBackfill' | translate }}: {{ getSyncHealthLabel(syncStatus.intradayBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.intradayBackfillBatch' | translate }}: {{ getSyncBatchText(syncStatus.intradayBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.intradayBackfillLag' | translate }}: {{ getSyncLagText(syncStatus.intradayBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.lag' | translate }}: {{ getSyncLagText(syncStatus.intraday) }}</div>
+              <div class="sync-status-line" *ngIf="syncStatus.intraday.consecutiveFailures">{{ 'marketSettings.sync.consecutiveFailures' | translate }}: {{ syncStatus.intraday.consecutiveFailures }}</div>
+              <div class="sync-status-line" *ngIf="syncStatus.intraday.lastSuccessAt">{{ 'marketSettings.sync.lastOk' | translate }}: {{ formatSyncTime(syncStatus.intraday.lastSuccessAt) }}</div>
+              <div class="sync-status-time">{{ 'marketSettings.sync.lastRun' | translate }}: {{ formatSyncTime(syncStatus.intraday.finishedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.intradayBackfill.message || syncStatus.intraday.message || ('marketSettings.sync.noIntradayLog' | translate) }}</div>
+              <div class="sync-status-error" *ngIf="hasSyncIssue(syncStatus.intradayBackfill) || hasSyncIssue(syncStatus.intraday)">{{ syncStatus.intradayBackfill.lastError || syncStatus.intraday.lastError || ('marketSettings.sync.noErrorDetail' | translate) }}</div>
             </article>
 
             <article class="sync-status-card">
               <div class="sync-status-head">
-                <strong>Index / Seed</strong>
-                <span class="sync-status-badge">{{ syncStatus.indexDaily.status }}</span>
+                <strong>{{ 'marketSettings.sync.indexSeed' | translate }}</strong>
+                <span class="sync-status-badge" [attr.data-health]="getSyncHealthTone(syncStatus.indexDaily.health === 'hard-failed' ? syncStatus.indexDaily : syncStatus.seedSymbols)">{{ getSyncHealthLabel(syncStatus.indexDaily.health === 'hard-failed' ? syncStatus.indexDaily : syncStatus.seedSymbols) }}</span>
               </div>
-              <div class="sync-status-line">Index daily: {{ formatSyncTime(syncStatus.indexDaily.finishedAt) }}</div>
-              <div class="sync-status-line">Seed symbols: {{ formatSyncTime(syncStatus.seedSymbols.finishedAt) }}</div>
-              <div class="sync-status-time">Checked: {{ formatSyncTime(syncStatus.checkedAt) }}</div>
-              <div class="sync-status-message">{{ syncStatus.seedSymbols.message || syncStatus.indexDaily.message || 'Chua co log index/seed.' }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.indexDaily' | translate }}: {{ formatSyncTime(syncStatus.indexDaily.finishedAt) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.indexHealth' | translate }}: {{ getSyncHealthLabel(syncStatus.indexDaily) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.source' | translate }}: {{ getSyncSourceText(syncStatus.indexDaily) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.seedSymbols' | translate }}: {{ formatSyncTime(syncStatus.seedSymbols.finishedAt) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.seedHealth' | translate }}: {{ getSyncHealthLabel(syncStatus.seedSymbols) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.symbolMasterSource' | translate }}: {{ getSyncSourceText(syncStatus.seedSymbols) }}</div>
+              <div class="sync-status-time">{{ 'marketSettings.sync.checked' | translate }}: {{ formatSyncTime(syncStatus.checkedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.seedSymbols.message || syncStatus.indexDaily.message || ('marketSettings.sync.noIndexSeedLog' | translate) }}</div>
+              <div class="sync-status-error" *ngIf="hasSyncIssue(syncStatus.indexDaily) || hasSyncIssue(syncStatus.seedSymbols)">
+                {{ syncStatus.seedSymbols.lastError || syncStatus.indexDaily.lastError || ('marketSettings.sync.noErrorDetail' | translate) }}
+              </div>
             </article>
 
             <article class="sync-status-card">
               <div class="sync-status-head">
-                <strong>CafeF news</strong>
-                <span class="sync-status-badge">{{ syncStatus.news.status }}</span>
+                <strong>{{ 'marketSettings.sync.financialFoundation' | translate }}</strong>
+                <span class="sync-status-badge" [attr.data-health]="getSyncHealthTone(syncStatus.financial)">{{ getSyncHealthLabel(syncStatus.financial) }}</span>
               </div>
-              <div class="sync-status-line">Lan cuoi: {{ formatSyncTime(syncStatus.news.finishedAt) }}</div>
-              <div class="sync-status-message">{{ syncStatus.news.message || 'Chua co tin CafeF.' }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.financial' | translate }}: {{ formatSyncTime(syncStatus.financial.finishedAt) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.source' | translate }}: {{ getSyncSourceText(syncStatus.financial) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.financialBackfill' | translate }}: {{ getSyncHealthLabel(syncStatus.financialBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.backfillBatch' | translate }}: {{ getSyncBatchText(syncStatus.financialBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.backfillLag' | translate }}: {{ getSyncLagText(syncStatus.financialBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.cashFlowBackfill' | translate }}: {{ getSyncHealthLabel(syncStatus.cashFlowBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.cashFlowBatch' | translate }}: {{ getSyncBatchText(syncStatus.cashFlowBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.cashFlowLag' | translate }}: {{ getSyncLagText(syncStatus.cashFlowBackfill) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.candles' | translate }}: {{ getSyncHealthLabel(syncStatus.foundationCandles) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.dataQuality' | translate }}: {{ getSyncHealthLabel(syncStatus.foundationDataQuality) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.alertDelivery' | translate }}: {{ getSyncHealthLabel(syncStatus.foundationAlerts) }}</div>
+              <div class="sync-status-message">
+                {{ syncStatus.cashFlowBackfill.message || syncStatus.financialBackfill.message || syncStatus.financial.message || syncStatus.foundationCandles.message || syncStatus.foundationDataQuality.message || syncStatus.foundationAlerts.message || ('marketSettings.sync.noFinancialFoundationLog' | translate) }}
+              </div>
+              <div class="sync-status-error" *ngIf="hasSyncIssue(syncStatus.cashFlowBackfill) || hasSyncIssue(syncStatus.financialBackfill) || hasSyncIssue(syncStatus.financial) || hasSyncIssue(syncStatus.foundationCandles) || hasSyncIssue(syncStatus.foundationDataQuality) || hasSyncIssue(syncStatus.foundationAlerts)">
+                {{ syncStatus.cashFlowBackfill.lastError || syncStatus.financialBackfill.lastError || syncStatus.financial.lastError || syncStatus.foundationCandles.lastError || syncStatus.foundationDataQuality.lastError || syncStatus.foundationAlerts.lastError || ('marketSettings.sync.noErrorDetail' | translate) }}
+              </div>
+            </article>
+
+            <article class="sync-status-card">
+              <div class="sync-status-head">
+                <strong>{{ 'marketSettings.workflowAuto.runtimeTitle' | translate }}</strong>
+                <span class="sync-status-badge" [attr.data-health]="getSyncHealthTone(syncStatus.workflowAutomation)">{{ getSyncHealthLabel(syncStatus.workflowAutomation) }}</span>
+              </div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.runtime' | translate }}: {{ syncStatus.workflowAutomation.status }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.lag' | translate }}: {{ getSyncLagText(syncStatus.workflowAutomation) }}</div>
+              <div class="sync-status-line" *ngIf="syncStatus.workflowAutomation.consecutiveFailures">{{ 'marketSettings.sync.consecutiveFailures' | translate }}: {{ syncStatus.workflowAutomation.consecutiveFailures }}</div>
+              <div class="sync-status-line" *ngIf="syncStatus.workflowAutomation.lastSuccessAt">{{ 'marketSettings.sync.lastOk' | translate }}: {{ formatSyncTime(syncStatus.workflowAutomation.lastSuccessAt) }}</div>
+              <div class="sync-status-time">{{ 'marketSettings.sync.lastRun' | translate }}: {{ formatSyncTime(syncStatus.workflowAutomation.finishedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.workflowAutomation.message || ('marketSettings.workflowAuto.runtimeEmpty' | translate) }}</div>
+              <div class="sync-status-error" *ngIf="hasSyncIssue(syncStatus.workflowAutomation)">{{ syncStatus.workflowAutomation.lastError || ('marketSettings.sync.noErrorDetail' | translate) }}</div>
+            </article>
+
+            <article class="sync-status-card">
+              <div class="sync-status-head">
+                <strong>{{ 'marketSettings.sync.cafefNews' | translate }}</strong>
+                <span class="sync-status-badge" [attr.data-health]="getSyncHealthTone(syncStatus.news)">{{ getSyncHealthLabel(syncStatus.news) }}</span>
+              </div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.runtime' | translate }}: {{ syncStatus.news.status }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.source' | translate }}: {{ getSyncSourceText(syncStatus.news) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.lag' | translate }}: {{ getSyncLagText(syncStatus.news) }}</div>
+              <div class="sync-status-line" *ngIf="syncStatus.news.consecutiveFailures">{{ 'marketSettings.sync.consecutiveFailures' | translate }}: {{ syncStatus.news.consecutiveFailures }}</div>
+              <div class="sync-status-line" *ngIf="syncStatus.news.lastSuccessAt">{{ 'marketSettings.sync.lastOk' | translate }}: {{ formatSyncTime(syncStatus.news.lastSuccessAt) }}</div>
+              <div class="sync-status-line">{{ 'marketSettings.sync.lastRun' | translate }}: {{ formatSyncTime(syncStatus.news.finishedAt) }}</div>
+              <div class="sync-status-message">{{ syncStatus.news.message || ('marketSettings.sync.noNewsLog' | translate) }}</div>
+              <div class="sync-status-error" *ngIf="hasSyncIssue(syncStatus.news)">{{ syncStatus.news.lastError || ('marketSettings.sync.noErrorDetail' | translate) }}</div>
             </article>
           </div>
+
+          <section class="coverage-board" *ngIf="coverageBuckets().length">
+            <div class="coverage-board-head">
+              <div>
+                <div class="section-title mb-1">{{ 'marketSettings.coverage.title' | translate }}</div>
+                <p class="mb-0">
+                  {{ 'marketSettings.coverage.subtitle' | translate }}
+                  <span *ngIf="syncStatus.coverage?.latestIntradayDate">
+                    {{ 'marketSettings.coverage.intradayDate' | translate }}: {{ syncStatus.coverage?.latestIntradayDate }}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div class="coverage-grid">
+              <article class="coverage-card" *ngFor="let item of coverageBuckets()">
+                <div class="coverage-card-head">
+                  <strong>{{ item.exchange }}</strong>
+                  <span>{{ item.totalSymbols }} {{ 'marketSettings.coverage.symbolUnit' | translate }}</span>
+                </div>
+
+                <div class="coverage-row">
+                  <span>{{ 'marketSettings.coverage.intraday' | translate }}</span>
+                  <strong>{{ formatCoveragePercent(item.intradayPct) }}</strong>
+                </div>
+                <div class="coverage-meta">{{ formatCoverageCount(item.intradaySymbols, item.totalSymbols) }}</div>
+
+                <div class="coverage-row">
+                  <span>{{ 'marketSettings.coverage.financial' | translate }}</span>
+                  <strong>{{ formatCoveragePercent(item.financialPct) }}</strong>
+                </div>
+                <div class="coverage-meta">{{ formatCoverageCount(item.financialSymbols, item.totalSymbols) }}</div>
+
+                <div class="coverage-row">
+                  <span>{{ 'marketSettings.coverage.cashFlow' | translate }}</span>
+                  <strong>{{ formatCoveragePercent(item.cashFlowPct) }}</strong>
+                </div>
+                <div class="coverage-meta">{{ formatCoverageCount(item.cashFlowSymbols, item.totalSymbols) }}</div>
+              </article>
+            </div>
+          </section>
 
           <section class="foundation-board">
             <div class="foundation-toolbar">
               <div>
-                <div class="section-title mb-1">Data Foundation</div>
-                <p class="mb-0">Rule sàn, kiểm tra chất lượng dữ liệu, alert event và master data mã.</p>
+                <div class="section-title mb-1">{{ 'marketSettings.foundation.title' | translate }}</div>
+                <p class="mb-0">{{ 'marketSettings.foundation.subtitle' | translate }}</p>
               </div>
               <div class="foundation-actions">
                 <select class="form-select form-select-sm" [(ngModel)]="foundationExchange">
-                  <option value="ALL">Tất cả sàn</option>
+                  <option value="ALL">{{ 'marketSettings.foundation.allExchanges' | translate }}</option>
                   <option value="HSX">HSX</option>
                   <option value="HNX">HNX</option>
                   <option value="UPCOM">UPCOM</option>
                 </select>
-                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadDataFoundation()" [disabled]="foundationLoading">Tải nền</button>
-                <button type="button" class="btn btn-sm btn-dark" (click)="scanDataQuality()" [disabled]="foundationLoading">Scan dữ liệu</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" (click)="refreshAlertEvents()" [disabled]="foundationLoading">Tạo alert events</button>
-                <button type="button" class="btn btn-sm btn-outline-success" (click)="deliverAlertEvents()" [disabled]="foundationLoading">Gửi pending</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadDataFoundation()" [disabled]="foundationLoading">{{ 'marketSettings.foundation.load' | translate }}</button>
+                <button type="button" class="btn btn-sm btn-dark" (click)="scanDataQuality()" [disabled]="foundationLoading">{{ 'marketSettings.foundation.scan' | translate }}</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="refreshAlertEvents()" [disabled]="foundationLoading">{{ 'marketSettings.foundation.createAlerts' | translate }}</button>
+                <button type="button" class="btn btn-sm btn-outline-success" (click)="deliverAlertEvents()" [disabled]="foundationLoading">{{ 'marketSettings.foundation.deliverPending' | translate }}</button>
               </div>
             </div>
 
             <div class="status-row px-0" *ngIf="foundationLoading || foundationMessage || foundationError">
-              <div class="status-pill loading" *ngIf="foundationLoading">Đang xử lý nền dữ liệu...</div>
+              <div class="status-pill loading" *ngIf="foundationLoading">{{ 'marketSettings.foundation.processing' | translate }}</div>
               <div class="status-pill success" *ngIf="foundationMessage">{{ foundationMessage }}</div>
               <div class="status-pill error" *ngIf="foundationError">{{ foundationError }}</div>
             </div>
@@ -288,18 +400,18 @@
             <div class="foundation-grid">
               <article class="foundation-card foundation-rules">
                 <div class="foundation-card-head">
-                  <strong>Exchange rules</strong>
-                  <span>{{ exchangeRules.length }} sàn</span>
+                  <strong>{{ 'marketSettings.foundation.exchangeRules' | translate }}</strong>
+                  <span>{{ exchangeRules.length }} {{ 'marketSettings.foundation.exchangeCount' | translate }}</span>
                 </div>
                 <div class="table-responsive">
                   <table class="table table-sm align-middle mb-0">
                     <thead>
                       <tr>
-                        <th>Sàn</th>
-                        <th>Biên độ</th>
+                        <th>{{ 'marketSettings.foundation.exchange' | translate }}</th>
+                        <th>{{ 'marketSettings.foundation.priceLimit' | translate }}</th>
                         <th>Lot</th>
-                        <th>Bước giá</th>
-                        <th>Lệnh</th>
+                        <th>{{ 'marketSettings.foundation.tickSize' | translate }}</th>
+                        <th>{{ 'marketSettings.foundation.orderTypes' | translate }}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -307,11 +419,11 @@
                         <td><strong>{{ rule.exchange }}</strong></td>
                         <td>{{ rule.price_limit_percent || '--' }}%</td>
                         <td>{{ rule.lot_size }}</td>
-                        <td>{{ rule.tick_size_rules.length }} rule</td>
+                        <td>{{ rule.tick_size_rules.length }} {{ 'marketSettings.foundation.ruleUnit' | translate }}</td>
                         <td>{{ rule.supported_order_types.join(', ') }}</td>
                       </tr>
                       <tr *ngIf="!exchangeRules.length">
-                        <td colspan="5" class="text-muted">Chưa có rule sàn.</td>
+                        <td colspan="5" class="text-muted">{{ 'marketSettings.foundation.noExchangeRules' | translate }}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -320,8 +432,8 @@
 
               <article class="foundation-card">
                 <div class="foundation-card-head">
-                  <strong>Data quality</strong>
-                  <span>{{ dataQualityIssues.length }} lỗi mở</span>
+                  <strong>{{ 'marketSettings.sync.dataQuality' | translate }}</strong>
+                  <span>{{ dataQualityIssues.length }} {{ 'marketSettings.foundation.openIssues' | translate }}</span>
                 </div>
                 <div class="foundation-list">
                   <div class="foundation-list-row" *ngFor="let issue of dataQualityIssues | slice:0:8" [attr.data-tone]="issueSeverityClass(issue)">
@@ -330,16 +442,16 @@
                     <small>{{ issue.severity }} / {{ issue.detected_at | date:'short' }}</small>
                   </div>
                   <div class="empty-state-panel compact" *ngIf="!dataQualityIssues.length">
-                    <div class="empty-state-title">Chưa có lỗi mở</div>
-                    <div class="empty-state-copy">Bấm Scan dữ liệu để kiểm tra quote/intraday mới nhất.</div>
+                    <div class="empty-state-title">{{ 'marketSettings.foundation.noOpenIssues' | translate }}</div>
+                    <div class="empty-state-copy">{{ 'marketSettings.foundation.noOpenIssuesHint' | translate }}</div>
                   </div>
                 </div>
               </article>
 
               <article class="foundation-card">
                 <div class="foundation-card-head">
-                  <strong>Alert delivery</strong>
-                  <span>{{ alertEvents.length }} pending</span>
+                  <strong>{{ 'marketSettings.sync.alertDelivery' | translate }}</strong>
+                  <span>{{ alertEvents.length }} {{ 'marketSettings.foundation.pending' | translate }}</span>
                 </div>
                 <div class="foundation-list">
                   <div class="foundation-list-row" *ngFor="let event of alertEvents | slice:0:8" [attr.data-tone]="event.severity">
@@ -348,30 +460,30 @@
                     <small>{{ event.delivery_channels.join(', ') }} / {{ event.created_at | date:'short' }}</small>
                   </div>
                   <div class="empty-state-panel compact" *ngIf="!alertEvents.length">
-                    <div class="empty-state-title">Chưa có alert pending</div>
-                    <div class="empty-state-copy">Bấm Tạo alert events để materialize cảnh báo từ overview.</div>
+                    <div class="empty-state-title">{{ 'marketSettings.foundation.noPendingAlerts' | translate }}</div>
+                    <div class="empty-state-copy">{{ 'marketSettings.foundation.noPendingAlertsHint' | translate }}</div>
                   </div>
                 </div>
               </article>
 
               <article class="foundation-card">
                 <div class="foundation-card-head">
-                  <strong>Master data</strong>
-                  <span>{{ masterDataItems.length }} mã</span>
+                  <strong>{{ 'marketSettings.foundation.masterData' | translate }}</strong>
+                  <span>{{ masterDataItems.length }} {{ 'marketSettings.foundation.symbolUnit' | translate }}</span>
                 </div>
                 <div class="input-group input-group-sm mb-2">
-                  <input class="form-control" placeholder="Tìm mã, ví dụ FPT" [(ngModel)]="masterDataKeyword" (keyup.enter)="searchMasterData()" />
-                  <button type="button" class="btn btn-outline-secondary" (click)="searchMasterData()">Tìm</button>
+                  <input class="form-control" [placeholder]="'marketSettings.foundation.searchPlaceholder' | translate" [(ngModel)]="masterDataKeyword" (keyup.enter)="searchMasterData()" />
+                  <button type="button" class="btn btn-outline-secondary" (click)="searchMasterData()">{{ 'marketSettings.foundation.search' | translate }}</button>
                 </div>
                 <div class="foundation-list">
                   <div class="foundation-list-row" *ngFor="let item of masterDataItems">
                     <strong>{{ item.symbol }} <small>{{ item.exchange || '--' }}</small></strong>
                     <span>{{ item.name || '--' }}</span>
-                    <small>{{ item.industry || item.sector || 'Chưa có ngành' }} / {{ formatLargeNumber(item.market_cap) }}</small>
+                    <small>{{ item.industry || item.sector || ('marketSettings.foundation.noIndustry' | translate) }} / {{ formatLargeNumber(item.market_cap) }}</small>
                   </div>
                   <div class="empty-state-panel compact" *ngIf="!masterDataItems.length">
-                    <div class="empty-state-title">Tìm mã để kiểm tra kho chuẩn</div>
-                    <div class="empty-state-copy">Hiển thị ngành, sector, vốn hóa, room ngoại, trạng thái khi backend có dữ liệu.</div>
+                    <div class="empty-state-title">{{ 'marketSettings.foundation.searchToInspect' | translate }}</div>
+                    <div class="empty-state-copy">{{ 'marketSettings.foundation.searchToInspectHint' | translate }}</div>
                   </div>
                 </div>
               </article>
@@ -380,7 +492,7 @@
 
           <div class="form-grid">
             <div class="form-item">
-              <label>Auto refresh (giay)</label>
+              <label>{{ 'marketSettings.data.autoRefreshSeconds' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.autoRefreshSeconds">
                 <option value="5">5</option>
                 <option value="10">10</option>
@@ -390,7 +502,7 @@
               </select>
             </div>
             <div class="form-item">
-              <label>Cache days</label>
+              <label>{{ 'marketSettings.data.cacheDays' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.cacheDays">
                 <option value="7">7</option>
                 <option value="15">15</option>
@@ -399,6 +511,182 @@
               </select>
             </div>
           </div>
+
+          <section class="settings-card">
+            <div class="section-title">{{ 'marketSettings.data.runtimeSyncTitle' | translate }}</div>
+            <p class="mb-3">{{ 'marketSettings.data.runtimeSyncSubtitle' | translate }}</p>
+
+            <div class="form-grid">
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.quotePollSeconds' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorQuotePollSeconds" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.intradayPollSeconds' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorIntradayPollSeconds" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.indexPollSeconds' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorIndexDailyPollSeconds" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.financialPollSeconds' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorFinancialPollSeconds" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.newsPollSeconds' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorNewsPollSeconds" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.quoteRequestsPerRun' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorQuoteRequestsPerRun" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.intradayRequestsPerRun' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorIntradayRequestsPerRun" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.intradayConcurrency' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorIntradayMaxConcurrency" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.financialSymbolsPerRun' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorFinancialSymbolsPerRun" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.intradayBackfillIntervalSeconds' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorIntradayBackfillIntervalSeconds" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.intradayBackfillRequestsPerRun' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorIntradayBackfillRequestsPerRun" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.financialBackfillIntervalSeconds' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorFinancialBackfillIntervalSeconds" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.financialBackfillSymbolsPerRun' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorFinancialBackfillSymbolsPerRun" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.cashFlowBackfillIntervalSeconds' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorCashFlowBackfillIntervalSeconds" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.cashFlowBackfillSymbolsPerRun' | translate }}</label>
+                <input class="form-control" type="number" min="1" [(ngModel)]="settings.collectorCashFlowBackfillSymbolsPerRun" />
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.quoteSource' | translate }}</label>
+                <select class="form-select" [(ngModel)]="settings.collectorQuoteSource">
+                  <option value="VCI">VCI</option>
+                  <option value="KBS">KBS</option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.intradaySource' | translate }}</label>
+                <select class="form-select" [(ngModel)]="settings.collectorIntradaySource">
+                  <option value="VCI">VCI</option>
+                  <option value="KBS">KBS</option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.indexSource' | translate }}</label>
+                <select class="form-select" [(ngModel)]="settings.collectorIndexSource">
+                  <option value="VCI">VCI</option>
+                  <option value="KBS">KBS</option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.financialSource' | translate }}</label>
+                <select class="form-select" [(ngModel)]="settings.collectorFinancialSource">
+                  <option value="CAFEF">CAFEF</option>
+                  <option value="VCI">VCI</option>
+                  <option value="KBS">KBS</option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>{{ 'marketSettings.data.symbolMasterSource' | translate }}</label>
+                <select class="form-select" [(ngModel)]="settings.collectorSymbolMasterSource">
+                  <option value="VCI">VCI</option>
+                  <option value="KBS">KBS</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <div class="section-title">{{ 'marketSettings.workflowAuto.title' | translate }}</div>
+            <p class="mb-3">{{ 'marketSettings.workflowAuto.subtitle' | translate }}</p>
+
+            <div class="toggle-list">
+              <div class="toggle-row toggle-row-highlight">
+                <div class="toggle-copy">
+                  <span>{{ 'marketSettings.workflowAuto.enabled' | translate }}</span>
+                  <small>{{ 'marketSettings.workflowAuto.enabledHelp' | translate }}</small>
+                </div>
+                <ion-toggle [(ngModel)]="settings.workflowAutoEnabled"></ion-toggle>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-item">
+                <label>{{ 'marketSettings.workflowAuto.exchangeScope' | translate }}</label>
+                <select class="form-select" [(ngModel)]="settings.workflowAutoExchangeScope">
+                  <option value="ALL">ALL</option>
+                  <option value="HSX">HSX</option>
+                  <option value="HNX">HNX</option>
+                  <option value="UPCOM">UPCOM</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="toggle-list">
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <span>{{ 'marketSettings.workflowAuto.takeProfit' | translate }}</span>
+                  <small>{{ 'marketSettings.workflowAuto.takeProfitHelp' | translate }}</small>
+                </div>
+                <ion-toggle [(ngModel)]="settings.workflowAutoTakeProfit"></ion-toggle>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <span>{{ 'marketSettings.workflowAuto.cutLoss' | translate }}</span>
+                  <small>{{ 'marketSettings.workflowAuto.cutLossHelp' | translate }}</small>
+                </div>
+                <ion-toggle [(ngModel)]="settings.workflowAutoCutLoss"></ion-toggle>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <span>{{ 'marketSettings.workflowAuto.rebalance' | translate }}</span>
+                  <small>{{ 'marketSettings.workflowAuto.rebalanceHelp' | translate }}</small>
+                </div>
+                <ion-toggle [(ngModel)]="settings.workflowAutoRebalance"></ion-toggle>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <span>{{ 'marketSettings.workflowAuto.reviewPortfolio' | translate }}</span>
+                  <small>{{ 'marketSettings.workflowAuto.reviewPortfolioHelp' | translate }}</small>
+                </div>
+                <ion-toggle [(ngModel)]="settings.workflowAutoReviewPortfolio"></ion-toggle>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <span>{{ 'marketSettings.workflowAuto.probeBuy' | translate }}</span>
+                  <small>{{ 'marketSettings.workflowAuto.probeBuyHelp' | translate }}</small>
+                </div>
+                <ion-toggle [(ngModel)]="settings.workflowAutoProbeBuy"></ion-toggle>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <span>{{ 'marketSettings.workflowAuto.addPosition' | translate }}</span>
+                  <small>{{ 'marketSettings.workflowAuto.addPositionHelp' | translate }}</small>
+                </div>
+                <ion-toggle [(ngModel)]="settings.workflowAutoAddPosition"></ion-toggle>
+              </div>
+            </div>
+          </section>
 
           <div class="toggle-list">
             <div class="toggle-row toggle-row-highlight">
@@ -416,111 +704,142 @@
               <ion-toggle [(ngModel)]="settings.syncNewsData"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Preload chart</span>
+              <span>{{ 'marketSettings.data.preloadCharts' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.preloadCharts"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Sync cloud</span>
+              <span>{{ 'marketSettings.data.syncCloud' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.syncCloud"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Chi tai khi co Wi-Fi</span>
+              <span>{{ 'marketSettings.data.wifiOnly' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.downloadOnWifiOnly"></ion-toggle>
             </div>
           </div>
+          } @placeholder {
+          <div class="defer-placeholder">
+            <div class="section-title">{{ 'marketSettings.data.deferTitle' | translate }}</div>
+            <p class="mb-0">{{ 'marketSettings.data.deferSubtitle' | translate }}</p>
+          </div>
+          }
         </div>
 
         <div *ngSwitchCase="'ai'" class="settings-section">
-          <div class="section-title">AI va tu dong hoa</div>
-          <div class="toggle-list">
-            <div class="toggle-row">
-              <span>Bat AI Agent</span>
-              <ion-toggle [(ngModel)]="settings.aiEnabled"></ion-toggle>
-            </div>
-            <div class="toggle-row">
-              <span>Auto market summary</span>
-              <ion-toggle [(ngModel)]="settings.aiSummaryAuto"></ion-toggle>
-            </div>
-            <div class="toggle-row">
-              <span>Monitor watchlist</span>
-              <ion-toggle [(ngModel)]="settings.aiWatchlistMonitor"></ion-toggle>
-            </div>
-            <div class="toggle-row">
-              <span>Explain price moves</span>
-              <ion-toggle [(ngModel)]="settings.aiExplainMove"></ion-toggle>
-            </div>
-            <div class="toggle-row">
-              <span>News digest</span>
-              <ion-toggle [(ngModel)]="settings.aiNewsDigest"></ion-toggle>
-            </div>
-          </div>
+          <div class="section-title">{{ 'marketSettings.ai.title' | translate }}</div>
+          <p class="mb-3">{{ 'marketSettings.ai.subtitle' | translate }}</p>
 
-          <div class="form-grid">
-            <div class="form-item">
-              <label>Model</label>
-              <select class="form-select" [(ngModel)]="settings.aiModel">
-                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                <option value="fallback">fallback</option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>AI tone</label>
-              <select class="form-select" [(ngModel)]="settings.aiTone">
-                <option value="ngan gon">Ngan gon</option>
-                <option value="chi tiet">Chi tiet</option>
-                <option value="chuyen gia">Chuyen gia</option>
-              </select>
-            </div>
-            <div class="form-item full">
-              <label>Lich chay AI</label>
-              <input class="form-control" [(ngModel)]="settings.aiTaskSchedule" />
-            </div>
-          </div>
-
-          <div class="settings-subsection">
-            <div class="section-title">AI Local</div>
-            <p class="section-help">
-              Cac tuy chon cua AI Local duoc luu chung trong market settings va se duoc ap dung lai khi mo man hinh AI Local.
-            </p>
-          </div>
-
-          <div class="toggle-list">
-            <div class="toggle-row toggle-row-highlight">
-              <div class="toggle-copy">
-                <span>{{ 'aiLocal.autoAnalysis' | translate }}</span>
-                <small>{{ 'aiLocal.autoAnalysisNote' | translate }}</small>
+          <div class="foundation-grid">
+            <section class="settings-card">
+              <div class="settings-section-head">
+                <h3>{{ 'marketSettings.ai.onlineTitle' | translate }}</h3>
+                <p>{{ 'marketSettings.ai.onlineSubtitle' | translate }}</p>
               </div>
-              <ion-toggle [(ngModel)]="settings.aiLocalAutoAnalysis"></ion-toggle>
-            </div>
-            <div class="toggle-row toggle-row-highlight">
-              <div class="toggle-copy">
-                <span>{{ 'aiLocal.financialAnalysis' | translate }}</span>
-                <small>{{ 'aiLocal.financialAnalysisNote' | translate }}</small>
-              </div>
-              <ion-toggle [(ngModel)]="settings.aiLocalFinancialAnalysis"></ion-toggle>
-            </div>
-          </div>
 
-          <div class="data-sync-hero">
-            <div>
-              <strong>Ollama local provider</strong>
-              <p>
-                Provider va model cua AI Local duoc lay tu cau hinh backend local. Man hinh nay chi quan ly hanh vi su dung
-                cua tung tai khoan.
-              </p>
-            </div>
+              <div class="toggle-list">
+                <div class="toggle-row toggle-row-highlight">
+                  <div class="toggle-copy">
+                    <span>{{ 'marketSettings.ai.enabled' | translate }}</span>
+                    <small>{{ 'marketSettings.ai.enabledHelp' | translate }}</small>
+                  </div>
+                  <ion-toggle [(ngModel)]="settings.aiEnabled"></ion-toggle>
+                </div>
+                <div class="toggle-row">
+                  <div class="toggle-copy">
+                    <span>{{ 'marketSettings.ai.summaryAuto' | translate }}</span>
+                    <small>{{ 'marketSettings.ai.summaryAutoHelp' | translate }}</small>
+                  </div>
+                  <ion-toggle [(ngModel)]="settings.aiSummaryAuto"></ion-toggle>
+                </div>
+                <div class="toggle-row">
+                  <div class="toggle-copy">
+                    <span>{{ 'marketSettings.ai.watchlistMonitor' | translate }}</span>
+                    <small>{{ 'marketSettings.ai.watchlistMonitorHelp' | translate }}</small>
+                  </div>
+                  <ion-toggle [(ngModel)]="settings.aiWatchlistMonitor"></ion-toggle>
+                </div>
+                <div class="toggle-row">
+                  <div class="toggle-copy">
+                    <span>{{ 'marketSettings.ai.explainMove' | translate }}</span>
+                    <small>{{ 'marketSettings.ai.explainMoveHelp' | translate }}</small>
+                  </div>
+                  <ion-toggle [(ngModel)]="settings.aiExplainMove"></ion-toggle>
+                </div>
+                <div class="toggle-row">
+                  <div class="toggle-copy">
+                    <span>{{ 'marketSettings.ai.newsDigest' | translate }}</span>
+                    <small>{{ 'marketSettings.ai.newsDigestHelp' | translate }}</small>
+                  </div>
+                  <ion-toggle [(ngModel)]="settings.aiNewsDigest"></ion-toggle>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="form-item">
+                  <label>{{ 'marketSettings.ai.model' | translate }}</label>
+                  <input class="form-control" [(ngModel)]="settings.aiModel" />
+                </div>
+                <div class="form-item">
+                  <label>{{ 'marketSettings.ai.tone' | translate }}</label>
+                  <select class="form-select" [(ngModel)]="settings.aiTone">
+                    <option value="ngan gon">{{ 'marketSettings.ai.toneBrief' | translate }}</option>
+                    <option value="can bang">{{ 'marketSettings.ai.toneBalanced' | translate }}</option>
+                    <option value="chi tiet">{{ 'marketSettings.ai.toneDetailed' | translate }}</option>
+                  </select>
+                </div>
+                <div class="form-item">
+                  <label>{{ 'marketSettings.ai.schedule' | translate }}</label>
+                  <input class="form-control" [(ngModel)]="settings.aiTaskSchedule" [placeholder]="'marketSettings.ai.schedulePlaceholder' | translate" />
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-card">
+              <div class="settings-section-head">
+                <h3>{{ 'marketSettings.ai.localTitle' | translate }}</h3>
+                <p>{{ 'marketSettings.ai.localSubtitle' | translate }}</p>
+              </div>
+
+              <div class="toggle-list">
+                <div class="toggle-row toggle-row-highlight">
+                  <div class="toggle-copy">
+                    <span>{{ 'marketSettings.ai.localAutoAnalysis' | translate }}</span>
+                    <small>{{ 'marketSettings.ai.localAutoAnalysisHelp' | translate }}</small>
+                  </div>
+                  <ion-toggle [(ngModel)]="settings.aiLocalAutoAnalysis"></ion-toggle>
+                </div>
+                <div class="toggle-row">
+                  <div class="toggle-copy">
+                    <span>{{ 'marketSettings.ai.localFinancialAnalysis' | translate }}</span>
+                    <small>{{ 'marketSettings.ai.localFinancialAnalysisHelp' | translate }}</small>
+                  </div>
+                  <ion-toggle [(ngModel)]="settings.aiLocalFinancialAnalysis"></ion-toggle>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="form-item">
+                  <label>{{ 'marketSettings.ai.localModel' | translate }}</label>
+                  <input class="form-control" [(ngModel)]="settings.aiLocalModel" [placeholder]="'marketSettings.ai.localModelPlaceholder' | translate" />
+                </div>
+              </div>
+
+              <div class="empty-state-panel compact">
+                <div class="empty-state-title">{{ 'marketSettings.ai.localHintTitle' | translate }}</div>
+                <div class="empty-state-copy">{{ 'marketSettings.ai.localHintBody' | translate }}</div>
+              </div>
+            </section>
           </div>
         </div>
 
         <div *ngSwitchCase="'strategy'" class="settings-section strategy-settings-section">
+          @defer (when selectedTab === 'strategy'; prefetch on idle) {
           <div class="strategy-section-headline">
-            <div class="section-title">Strategy engine</div>
-            <span class="unsaved-badge" *ngIf="hasUnsavedStrategyChanges">Dang co thay doi chua luu</span>
+            <div class="section-title">{{ 'marketSettings.strategy.headline' | translate }}</div>
+            <span class="unsaved-badge" *ngIf="hasUnsavedStrategyChanges">{{ 'marketSettings.strategy.unsaved' | translate }}</span>
           </div>
 
           <div class="strategy-status-row" *ngIf="strategyLoading || strategyMessage || strategyError">
-            <div class="status-pill loading" *ngIf="strategyLoading">Dang tai strategy config...</div>
+            <div class="status-pill loading" *ngIf="strategyLoading">{{ 'marketSettings.strategy.loadingConfig' | translate }}</div>
             <div class="status-pill success" *ngIf="strategyMessage">{{ strategyMessage }}</div>
             <div class="status-pill error" *ngIf="strategyError">{{ strategyError }}</div>
           </div>
@@ -533,19 +852,19 @@
 
             <div class="strategy-quick-stats" *ngIf="strategyConfig">
               <div>
-                <span>Formulas</span>
+                <span>{{ 'marketSettings.strategy.formulas' | translate }}</span>
                 <strong>{{ getStrategySectionCount('formulas') }}</strong>
               </div>
               <div>
-                <span>Rules</span>
+                <span>{{ 'marketSettings.strategy.rules' | translate }}</span>
                 <strong>{{ getStrategySectionCount('screenRules') + getStrategySectionCount('alertRules') }}</strong>
               </div>
               <div>
-                <span>Checklists</span>
+                <span>{{ 'marketSettings.strategy.checklists' | translate }}</span>
                 <strong>{{ getStrategySectionCount('checklists') }}</strong>
               </div>
               <div>
-                <span>Versions</span>
+                <span>{{ 'marketSettings.strategy.versions' | translate }}</span>
                 <strong>{{ getStrategySectionCount('versions') }}</strong>
               </div>
             </div>
@@ -560,13 +879,13 @@
                 *ngIf="selectedStrategySection !== 'profiles' && selectedStrategySection !== 'versions'"
                 class="toolbar-input strategy-search-input"
                 [(ngModel)]="strategyConfigSearch"
-                placeholder="Tim cong thuc, rule, bien..."
+                [placeholder]="'marketSettings.strategy.searchPlaceholder' | translate"
               />
               <button type="button" class="btn btn-outline-secondary" (click)="loadStrategyOverview()" [disabled]="strategyLoading">
-                Tai lai
+                {{ 'marketSettings.strategy.reload' | translate }}
               </button>
               <button type="button" class="btn btn-light btn-reset" (click)="saveStrategyConfig()" [disabled]="strategySaving">
-                {{ strategySaving ? 'Dang luu...' : 'Luu' }}
+                {{ strategySaving ? ('marketSettings.strategy.saving' | translate) : ('marketSettings.strategy.save' | translate) }}
               </button>
               <button
                 type="button"
@@ -574,10 +893,10 @@
                 (click)="applyStrategyToHub()"
                 [disabled]="strategySaving || strategyPublishing || strategyLoading || !strategyConfig"
               >
-                Ap dung
+                {{ 'marketSettings.strategy.apply' | translate }}
               </button>
               <button type="button" class="btn btn-save" (click)="publishStrategyConfig()" [disabled]="strategyPublishing">
-                {{ strategyPublishing ? 'Dang publish...' : 'Publish' }}
+                {{ strategyPublishing ? ('marketSettings.strategy.publishing' | translate) : ('marketSettings.strategy.publish' | translate) }}
               </button>
             </div>
           </div>
@@ -590,7 +909,7 @@
                 [class.active]="selectedStrategySection === 'profiles'"
                 (click)="selectStrategySection('profiles')"
               >
-                <span>Profiles</span>
+                <span>{{ 'marketSettings.strategy.sections.profiles' | translate }}</span>
                 <strong>{{ getStrategySectionCount('profiles') }}</strong>
               </button>
               <button
@@ -599,7 +918,7 @@
                 [class.active]="selectedStrategySection === 'formulas'"
                 (click)="selectStrategySection('formulas')"
               >
-                <span>Formulas</span>
+                <span>{{ 'marketSettings.strategy.sections.formulas' | translate }}</span>
                 <strong>{{ getStrategySectionCount('formulas') }}</strong>
               </button>
               <button
@@ -626,7 +945,7 @@
                 [class.active]="selectedStrategySection === 'checklists'"
                 (click)="selectStrategySection('checklists')"
               >
-                <span>Checklists</span>
+                <span>{{ 'marketSettings.strategy.sections.checklists' | translate }}</span>
                 <strong>{{ getStrategySectionCount('checklists') }}</strong>
               </button>
               <button
@@ -635,7 +954,7 @@
                 [class.active]="selectedStrategySection === 'versions'"
                 (click)="selectStrategySection('versions')"
               >
-                <span>Versions</span>
+                <span>{{ 'marketSettings.strategy.sections.versions' | translate }}</span>
                 <strong>{{ getStrategySectionCount('versions') }}</strong>
               </button>
             </aside>
@@ -643,8 +962,8 @@
             <article class="settings-panel settings-detail-panel" *ngIf="selectedStrategySection === 'profiles'">
               <div class="settings-section-head">
                 <div>
-                  <h3>Profiles</h3>
-                  <p>Chon profile dang dung hoac tao profile moi cho strategy engine.</p>
+                  <h3>{{ 'marketSettings.strategy.sections.profiles' | translate }}</h3>
+                  <p>{{ 'marketSettings.strategy.help.profiles' | translate }}</p>
                 </div>
               </div>
               <div class="profile-list strategy-card-grid">
@@ -653,32 +972,32 @@
                     <strong>{{ profile.name }}</strong>
                     <small>{{ profile.description || profile.code }}</small>
                   </div>
-                  <span *ngIf="profile.isDefault">Default</span>
+                    <span *ngIf="profile.isDefault">{{ 'common.default' | translate }}</span>
                 </button>
               </div>
               <div class="config-card strategy-create-card">
                 <div class="settings-section-head">
                   <div>
-                    <h3>Tao profile moi</h3>
-                    <p>Nhap code, ten va mo ta ngan de tach bo cong thuc theo phong cach dau tu.</p>
+                    <h3>{{ 'marketSettings.strategy.profileCreateTitle' | translate }}</h3>
+                    <p>{{ 'marketSettings.strategy.profileCreateDesc' | translate }}</p>
                   </div>
                 </div>
                 <div class="form-grid compact">
                   <div class="form-item">
-                    <label>Code</label>
+                    <label>{{ 'marketSettings.strategy.code' | translate }}</label>
                     <input class="form-control" [(ngModel)]="newStrategyProfile.code" />
                   </div>
                   <div class="form-item">
-                    <label>Name</label>
+                    <label>{{ 'marketSettings.strategy.name' | translate }}</label>
                     <input class="form-control" [(ngModel)]="newStrategyProfile.name" />
                   </div>
                   <div class="form-item full">
-                    <label>Description</label>
+                    <label>{{ 'marketSettings.strategy.description' | translate }}</label>
                     <input class="form-control" [(ngModel)]="newStrategyProfile.description" />
                   </div>
                 </div>
                 <button type="button" class="btn btn-outline-secondary create-profile-btn" (click)="createStrategyProfile()">
-                  Tao profile
+                  {{ 'marketSettings.strategy.createProfile' | translate }}
                 </button>
               </div>
             </article>
@@ -686,14 +1005,14 @@
             <article class="settings-panel settings-detail-panel" *ngIf="selectedStrategySection === 'versions'">
               <div class="settings-section-head">
                 <div>
-                  <h3>Versions</h3>
-                  <p>Lich su publish cau hinh strategy de doi chieu khi can rollback hoac audit.</p>
+                  <h3>{{ 'marketSettings.strategy.sections.versions' | translate }}</h3>
+                  <p>{{ 'marketSettings.strategy.help.versions' | translate }}</p>
                 </div>
               </div>
               <div class="version-list strategy-card-grid">
                 <div class="version-row strategy-lite-card" *ngFor="let version of strategyConfig.versions">
                   <strong>#{{ version.versionNo }}</strong>
-                  <span>{{ version.changeSummary || 'Publish strategy profile' }}</span>
+                  <span>{{ version.changeSummary || ('marketSettings.strategy.publishProfileFallback' | translate) }}</span>
                 </div>
               </div>
             </article>
@@ -701,8 +1020,8 @@
             <article class="settings-panel settings-detail-panel" *ngIf="selectedStrategySection === 'formulas'">
               <div class="settings-section-head">
                 <div>
-                  <h3>Formulas</h3>
-                  <p>Chi mo cong thuc dang chinh de tranh roi. Bam vao dong nao thi bung dong do.</p>
+                  <h3>{{ 'marketSettings.strategy.sections.formulas' | translate }}</h3>
+                  <p>{{ 'marketSettings.strategy.help.formulas' | translate }}</p>
                 </div>
               </div>
               <div
@@ -714,17 +1033,17 @@
                 <button type="button" class="config-header config-toggle" (click)="toggleStrategyCard('formulas', formula)">
                   <div>
                     <strong>{{ formula.label }}</strong>
-                    <small>{{ formula.formulaCode }} · cong thuc ky thuat</small>
+                    <small>{{ formula.formulaCode }} Â· cong thuc ky thuat</small>
                   </div>
                   <div class="config-header-actions">
-                    <span class="config-status" [class.off]="!formula.isEnabled">{{ formula.isEnabled ? 'Dang bat' : 'Dang tat' }}</span>
-                    <span class="config-arrow">{{ isStrategyCardOpen('formulas', formula) ? '−' : '+' }}</span>
+                    <span class="config-status" [class.off]="!formula.isEnabled">{{ formula.isEnabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}</span>
+                    <span class="config-arrow">{{ isStrategyCardOpen('formulas', formula) ? 'âˆ’' : '+' }}</span>
                   </div>
                 </button>
                 <div class="config-body" *ngIf="isStrategyCardOpen('formulas', formula)">
                   <label class="toggle-inline">
                     <input type="checkbox" [(ngModel)]="formula.isEnabled" />
-                    Enabled
+                    {{ 'common.enabled' | translate }}
                   </label>
                   <div class="formula-readable">
                     <span>Ten hien thi cho nguoi dung</span>
@@ -732,7 +1051,7 @@
                   </div>
                   <textarea #formulaEditor class="form-control formula-editor" rows="3" [(ngModel)]="formula.expression"></textarea>
                   <div class="formula-operators">
-                    <div class="builder-title">Toan tu</div>
+                    <div class="builder-title">{{ 'marketSettings.strategy.operators' | translate }}</div>
                     <div class="builder-operators">
                       <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                         <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(formula, formulaEditor, operator)">
@@ -799,7 +1118,7 @@
                 <div class="toolbar">
                   <button type="button" class="btn btn-outline-secondary" *ngIf="strategyJournalSuggestion" (click)="useStrategyJournalSuggestion()">
                     <ion-icon name="sparkles-outline"></ion-icon>
-                    Them dong de xuat
+                    {{ 'marketSettings.strategy.insertSuggestedRow' | translate }}
                   </button>
                   <button type="button" class="btn btn-outline-secondary" (click)="reloadStrategyJournal()" [disabled]="strategyLoading">
                     Tai lai
@@ -838,9 +1157,9 @@
                   <table class="data-table journal-table">
                     <thead>
                       <tr>
-                        <th>Mã</th>
-                        <th>Ngày</th>
-                        <th>Loại</th>
+                        <th>{{ 'strategyHub.table.symbol' | translate }}</th>
+                        <th>{{ 'marketSettings.history.time' | translate }}</th>
+                        <th>Loáº¡i</th>
                         <th>Side</th>
                         <th>Entry</th>
                         <th>Exit</th>
@@ -848,13 +1167,13 @@
                         <th>TP</th>
                         <th>Qty</th>
                         <th>%</th>
-                        <th>Vốn</th>
+                        <th>{{ 'strategyHub.common.capitalShort' | translate }}</th>
                         <th>Strategy</th>
-                        <th>Tâm lý</th>
+                        <th>{{ 'strategyHub.common.psychology' | translate }}</th>
                         <th>Tags</th>
                         <th>Notes</th>
-                        <th class="table-action-cell">Lưu</th>
-                        <th class="table-action-cell">Xóa</th>
+                        <th class="table-action-cell">LÆ°u</th>
+                        <th class="table-action-cell">{{ 'marketSettings.journal.delete' | translate }}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -911,17 +1230,17 @@
                 <div class="journal-add-row">
                   <button type="button" class="btn btn-outline-secondary" (click)="addStrategyJournalRow()">
                     <ion-icon name="add-circle-outline"></ion-icon>
-                    Them 1 dong moi
+                    {{ 'marketSettings.journal.addOneRow' | translate }}
                   </button>
                 </div>
               </div>
 
               <ng-template #emptyStrategyJournal>
                 <div class="empty-state journal-empty-state">
-                  <div>Chua co journal entry nao cho profile dang chon.</div>
+                  <div>{{ 'marketSettings.journal.emptyTitle' | translate }}</div>
                   <button type="button" class="btn btn-outline-secondary" (click)="addStrategyJournalRow()">
                     <ion-icon name="add-circle-outline"></ion-icon>
-                    Them dong dau tien
+                    {{ 'marketSettings.journal.firstRow' | translate }}
                   </button>
                 </div>
               </ng-template>
@@ -943,17 +1262,17 @@
                 <button type="button" class="config-header config-toggle" (click)="toggleStrategyCard('screenRules', rule)">
                   <div>
                     <strong>{{ rule.label }}</strong>
-                    <small>{{ rule.layerCode }} · rule loc</small>
+                    <small>{{ rule.layerCode }} Â· rule loc</small>
                   </div>
                   <div class="config-header-actions">
-                    <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Dang bat' : 'Dang tat' }}</span>
-                    <span class="config-arrow">{{ isStrategyCardOpen('screenRules', rule) ? '−' : '+' }}</span>
+                    <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}</span>
+                    <span class="config-arrow">{{ isStrategyCardOpen('screenRules', rule) ? 'âˆ’' : '+' }}</span>
                   </div>
                 </button>
                 <div class="config-body" *ngIf="isStrategyCardOpen('screenRules', rule)">
                   <label class="toggle-inline">
                     <input type="checkbox" [(ngModel)]="rule.isEnabled" />
-                    Enabled
+                    {{ 'common.enabled' | translate }}
                   </label>
                   <div class="formula-readable">
                     <span>Dien giai business</span>
@@ -961,7 +1280,7 @@
                   </div>
                   <textarea #screenRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
                   <div class="formula-operators">
-                    <div class="builder-title">Toan tu</div>
+                    <div class="builder-title">{{ 'marketSettings.strategy.operators' | translate }}</div>
                     <div class="builder-operators">
                       <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                         <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, screenRuleEditor, operator)">
@@ -1027,17 +1346,17 @@
                 <button type="button" class="config-header config-toggle" (click)="toggleStrategyCard('alertRules', rule)">
                   <div>
                     <strong>{{ rule.label }}</strong>
-                    <small>{{ rule.ruleCode }} · rule canh bao</small>
+                    <small>{{ rule.ruleCode }} Â· rule canh bao</small>
                   </div>
                   <div class="config-header-actions">
-                    <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? 'Dang bat' : 'Dang tat' }}</span>
-                    <span class="config-arrow">{{ isStrategyCardOpen('alertRules', rule) ? '−' : '+' }}</span>
+                    <span class="config-status" [class.off]="!rule.isEnabled">{{ rule.isEnabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}</span>
+                    <span class="config-arrow">{{ isStrategyCardOpen('alertRules', rule) ? 'âˆ’' : '+' }}</span>
                   </div>
                 </button>
                 <div class="config-body" *ngIf="isStrategyCardOpen('alertRules', rule)">
                   <label class="toggle-inline">
                     <input type="checkbox" [(ngModel)]="rule.isEnabled" />
-                    Enabled
+                    {{ 'common.enabled' | translate }}
                   </label>
                   <div class="formula-readable">
                     <span>Dien giai business</span>
@@ -1045,7 +1364,7 @@
                   </div>
                   <textarea #alertRuleEditor class="form-control formula-editor" rows="2" [(ngModel)]="rule.expression"></textarea>
                   <div class="formula-operators">
-                    <div class="builder-title">Toan tu</div>
+                    <div class="builder-title">{{ 'marketSettings.strategy.operators' | translate }}</div>
                     <div class="builder-operators">
                       <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                         <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(rule, alertRuleEditor, operator)">
@@ -1099,8 +1418,8 @@
 
               <div class="settings-section-head" *ngIf="selectedStrategySection === 'checklists'">
                 <div>
-                  <h3>Checklists</h3>
-                  <p>Giu rieng checklist de nguoi dung tap trung vao quy trinh thay vi doc lan cong thuc cham diem.</p>
+                  <h3>{{ 'marketSettings.strategy.sections.checklists' | translate }}</h3>
+                  <p>{{ 'marketSettings.strategy.help.checklists' | translate }}</p>
                 </div>
               </div>
               <div
@@ -1112,17 +1431,17 @@
                 <button type="button" class="config-header config-toggle" (click)="toggleStrategyCard('checklists', item)">
                   <div>
                     <strong>{{ item.label }}</strong>
-                    <small>{{ item.checklistType }} · checklist</small>
+                    <small>{{ item.checklistType }} Â· checklist</small>
                   </div>
                   <div class="config-header-actions">
-                    <span class="config-status" [class.off]="!item.isEnabled">{{ item.isEnabled ? 'Dang bat' : 'Dang tat' }}</span>
-                    <span class="config-arrow">{{ isStrategyCardOpen('checklists', item) ? '−' : '+' }}</span>
+                    <span class="config-status" [class.off]="!item.isEnabled">{{ item.isEnabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}</span>
+                    <span class="config-arrow">{{ isStrategyCardOpen('checklists', item) ? 'âˆ’' : '+' }}</span>
                   </div>
                 </button>
                 <div class="config-body" *ngIf="isStrategyCardOpen('checklists', item)">
                   <label class="toggle-inline">
                     <input type="checkbox" [(ngModel)]="item.isEnabled" />
-                    Enabled
+                    {{ 'common.enabled' | translate }}
                   </label>
                   <div class="formula-readable">
                     <span>Dien giai business</span>
@@ -1130,7 +1449,7 @@
                   </div>
                   <textarea #checklistEditor class="form-control formula-editor" rows="2" [(ngModel)]="item.expression"></textarea>
                   <div class="formula-operators">
-                    <div class="builder-title">Toan tu</div>
+                    <div class="builder-title">{{ 'marketSettings.strategy.operators' | translate }}</div>
                     <div class="builder-operators">
                       <div class="builder-operator-row" *ngFor="let group of expressionOperatorGroups">
                         <button type="button" class="builder-chip operator" *ngFor="let operator of group" (click)="insertExpressionToken(item, checklistEditor, operator)">
@@ -1182,31 +1501,35 @@
               </div>
             </article>
           </div>
+          } @placeholder {
+          <div class="defer-placeholder">
+            <div class="section-title">Đang chuẩn bị strategy engine...</div>
+            <p class="mb-0">Bộ chỉnh profile, công thức và rule được hoãn dựng để giảm tải lần đầu.</p>
+          </div>
+          }
         </div>
-
         <div *ngSwitchCase="'journal'" class="settings-section">
+          @defer (when selectedTab === 'journal'; prefetch on idle) {
           <div class="card journal-hero shadow-sm border-0 mb-3">
             <div class="card-body d-flex flex-wrap justify-content-between align-items-start gap-3">
               <div class="pe-3">
-                <div class="journal-kicker">Trading Journal</div>
-                <h3 class="journal-title mb-1">Ghi nhanh giao dịch</h3>
-                <p class="journal-subtitle mb-0">
-                  Bảng BS5 cho nhập liệu nhanh: sửa trực tiếp từng dòng, lưu bằng icon, xóa bằng icon, thêm dòng bằng nút +.
-                </p>
+                <div class="journal-kicker">{{ 'marketSettings.journal.heroKicker' | translate }}</div>
+                <h3 class="journal-title mb-1">{{ 'marketSettings.journal.heroTitle' | translate }}</h3>
+                <p class="journal-subtitle mb-0">{{ 'marketSettings.journal.heroSubtitle' | translate }}</p>
               </div>
 
               <div class="journal-actions d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-primary btn-sm" *ngIf="strategyJournalSuggestion" (click)="useStrategyJournalSuggestion()">
                   <ion-icon name="sparkles-outline"></ion-icon>
-                  Dùng đề xuất
+                  {{ 'marketSettings.journal.useSuggestion' | translate }}
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" (click)="reloadStrategyJournal()" [disabled]="strategyLoading">
                   <ion-icon name="refresh-outline"></ion-icon>
-                  Tải lại
+                  {{ 'marketSettings.journal.reload' | translate }}
                 </button>
                 <button type="button" class="btn btn-primary btn-sm" (click)="addStrategyJournalRow()">
                   <ion-icon name="add-circle-outline"></ion-icon>
-                  Thêm dòng
+                  {{ 'marketSettings.journal.addRow' | translate }}
                 </button>
               </div>
             </div>
@@ -1216,9 +1539,9 @@
             <div class="card-body">
               <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
                 <div>
-                  <div class="text-uppercase small fw-semibold text-primary mb-1">Gợi ý từ Strategy Hub</div>
+                  <div class="text-uppercase small fw-semibold text-primary mb-1">{{ 'marketSettings.journal.suggestionTitle' | translate }}</div>
                   <h5 class="mb-1">{{ suggestion.symbol }}</h5>
-                  <p class="text-body-secondary mb-0">Nội dung đã được điền sẵn từ scoring, volume và execution engine.</p>
+                  <p class="text-body-secondary mb-0">{{ 'marketSettings.journal.suggestionSubtitle' | translate }}</p>
                 </div>
                 <span class="badge bg-light text-primary border border-primary px-3 py-2">
                   {{ suggestion.strategyName }}
@@ -1228,32 +1551,32 @@
               <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3">
                 <div class="col">
                   <div class="journal-mini-card">
-                    <span>Loại setup</span>
+                    <span>{{ 'marketSettings.journal.setupType' | translate }}</span>
                     <strong>{{ suggestion.classification }}</strong>
                   </div>
                 </div>
                 <div class="col">
                   <div class="journal-mini-card">
-                    <span>Hướng giao dịch</span>
+                    <span>{{ 'marketSettings.journal.tradeDirection' | translate }}</span>
                     <strong>{{ suggestion.tradeSide | uppercase }}</strong>
                   </div>
                 </div>
                 <div class="col">
                   <div class="journal-mini-card">
-                    <span>Tỷ trọng</span>
+                    <span>{{ 'marketSettings.journal.positionWeight' | translate }}</span>
                     <strong>{{ suggestion.positionSize !== null ? (suggestion.positionSize + '%') : '-' }}</strong>
                   </div>
                 </div>
                 <div class="col">
                   <div class="journal-mini-card">
-                    <span>Strategy</span>
+                    <span>{{ 'marketSettings.journal.strategy' | translate }}</span>
                     <strong>{{ suggestion.strategyName }}</strong>
                   </div>
                 </div>
               </div>
 
               <div class="mt-3">
-                <div class="small fw-semibold text-secondary mb-2">Lý do đề xuất</div>
+                <div class="small fw-semibold text-secondary mb-2">{{ 'marketSettings.journal.reasons' | translate }}</div>
                 <ul class="journal-reason-list mb-0">
                   <li *ngFor="let reason of suggestion.reasons">{{ reason }}</li>
                 </ul>
@@ -1261,44 +1584,73 @@
             </div>
           </div>
 
-          <div class="card journal-table-card shadow-sm border-0">
+          <div class="journal-ledger-stack">
+          <div class="d-flex justify-content-end gap-2 mb-3">
+            <button type="button" class="btn btn-sm btn-outline-primary" (click)="addStrategyLedgerExamples()">
+              <ion-icon name="albums-outline"></ion-icon>
+              Thêm bộ mẫu
+            </button>
+            <button type="button" class="btn btn-sm btn-primary" [disabled]="strategyLedgerSaving" (click)="saveAllStrategyLedger()">
+              <ion-icon name="save-outline"></ion-icon>
+              {{ strategyLedgerSaving ? 'Đang lưu...' : 'Lưu tất cả' }}
+            </button>
+          </div>
+          <div class="strategy-status-row journal-ledger-status" *ngIf="strategyLedgerSaving || strategyMessage || strategyError">
+            <div class="status-pill loading" *ngIf="strategyLedgerSaving">Đang lưu Journal...</div>
+            <div class="status-pill success" *ngIf="!strategyLedgerSaving && strategyMessage">{{ strategyMessage }}</div>
+            <div class="status-pill error" *ngIf="strategyError">{{ strategyError }}</div>
+          </div>
+          <div class="card journal-table-card journal-entries-secondary shadow-sm border-0">
             <div class="card-header bg-white border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
               <div>
-                <h5 class="mb-0">Entries</h5>
-                <small class="text-body-secondary">{{ strategyJournalRows.length }} dòng</small>
+                <h5 class="mb-0">{{ 'marketSettings.journal.entries' | translate }}</h5>
+                <small class="text-body-secondary">Bảng tổng hợp nghiệp vụ ăn theo các dòng Sao kê khớp lệnh và bổ sung SL, TP, strategy, psychology, notes.</small>
               </div>
-              <div class="d-flex align-items-center gap-2">
-                <span class="badge text-bg-light border">BS5 table</span>
-                <span class="badge text-bg-light border">Inline edit</span>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge text-bg-light border">{{ strategyJournalRows.length }} {{ 'marketSettings.journal.rows' | translate }}</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="showStrategyEntries = !showStrategyEntries">
+                  {{ showStrategyEntries ? 'Ẩn Entries' : 'Hiện Entries' }}
+                </button>
               </div>
             </div>
 
+            @if (showStrategyEntries) {
             <div class="table-responsive journal-table-scroll">
               <table class="table table-sm table-striped table-hover align-middle mb-0 journal-table">
                 <thead class="table-light">
                   <tr>
-                    <th>Mã</th>
-                    <th>Ngày</th>
-                    <th>Loại</th>
-                    <th>Side</th>
-                    <th>Entry</th>
-                    <th>Exit</th>
-                    <th>SL</th>
-                    <th>TP</th>
-                    <th>Qty</th>
-                    <th>%</th>
-                    <th>Vốn</th>
-                    <th>Strategy</th>
-                    <th>Tâm lý</th>
-                    <th>Tags</th>
-                    <th>Notes</th>
-                    <th class="text-center">Lưu</th>
-                    <th class="text-center">Xóa</th>
+                    <th title="Mã cổ phiếu hoặc tài sản của dòng nhật ký này.">{{ 'strategyHub.table.symbol' | translate }}</th>
+                    <th title="Ngày giao dịch hoặc ngày bạn ghi nhận quyết định vào lệnh.">{{ 'marketSettings.history.time' | translate }}</th>
+                    <th title="Loại setup hoặc bối cảnh giao dịch như swing, breakout, retest.">{{ 'marketSettings.journal.setupType' | translate }}</th>
+                    <th title="Chiều giao dịch: mua hoặc bán.">Side</th>
+                    <th title="Giá vào lệnh dự kiến hoặc giá đã vào thực tế.">Entry</th>
+                    <th title="Giá ra lệnh khi vị thế đã đóng hoặc chốt xong.">Exit</th>
+                    <th title="Mức cắt lỗ theo kế hoạch của giao dịch.">SL</th>
+                    <th title="Mức chốt lời theo kế hoạch của giao dịch.">TP</th>
+                    <th title="Số lượng cổ phiếu hoặc khối lượng vị thế.">Qty</th>
+                    <th title="Tỷ trọng hoặc kích thước vị thế theo phần trăm.">%</th>
+                    <th title="Tổng số vốn dùng cho giao dịch này.">{{ 'strategyHub.common.capitalShort' | translate }}</th>
+                    <th title="Tên chiến lược hoặc logic giao dịch được áp dụng.">Strategy</th>
+                    <th title="Tâm lý hoặc trạng thái cảm xúc khi vào lệnh.">{{ 'strategyHub.common.psychology' | translate }}</th>
+                    <th title="Các nhãn nhanh để phân loại lỗi, bối cảnh hoặc ghi chú ngắn.">Tags</th>
+                    <th title="Ghi chú chi tiết cho quyết định giao dịch này.">Notes</th>
+                    <th class="text-center" title="Xóa dòng nhật ký hiện tại khỏi hệ thống.">{{ 'marketSettings.journal.delete' | translate }}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr *ngFor="let row of strategyJournalRows; trackBy: trackByStrategyJournalRow">
-                    <td><input class="form-control form-control-sm journal-input" [(ngModel)]="row.symbol" /></td>
+                  <ng-container *ngFor="let row of strategyJournalRows; trackBy: trackByStrategyJournalRow">
+                  <tr>
+                    <td>
+                      <input class="form-control form-control-sm journal-input" [(ngModel)]="row.symbol" />
+                      @if (hasOrderStatementSync(row)) {
+                      <div class="journal-linked-meta">
+                        <button type="button" class="badge text-bg-light border journal-linked-toggle" (click)="toggleLinkedOrderStatements(row)">
+                          {{ getLinkedOrderStatementCount(row) }} fills
+                        </button>
+                        <span class="journal-linked-text">{{ formatOrderStatementNumber(getLinkedOrderStatementGrossTotal(row)) }}</span>
+                      </div>
+                      }
+                    </td>
                     <td><input class="form-control form-control-sm journal-input" type="date" [(ngModel)]="row.trade_date" /></td>
                     <td>
                       <select class="form-select form-select-sm journal-input" [(ngModel)]="row.classification">
@@ -1314,13 +1666,13 @@
                         <option value="sell">Sell</option>
                       </select>
                     </td>
-                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.entry_price" /></td>
-                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.exit_price" /></td>
-                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.stop_loss_price" /></td>
-                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.take_profit_price" /></td>
-                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.quantity" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'entry_price')" (focus)="beginFormattedNumberEdit(row, 'entry_price')" (input)="updateFormattedNumberField(row, 'entry_price', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'entry_price')" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'exit_price')" (focus)="beginFormattedNumberEdit(row, 'exit_price')" (input)="updateFormattedNumberField(row, 'exit_price', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'exit_price')" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'stop_loss_price')" (focus)="beginFormattedNumberEdit(row, 'stop_loss_price')" (input)="updateFormattedNumberField(row, 'stop_loss_price', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'stop_loss_price')" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'take_profit_price')" (focus)="beginFormattedNumberEdit(row, 'take_profit_price')" (input)="updateFormattedNumberField(row, 'take_profit_price', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'take_profit_price')" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'quantity')" (focus)="beginFormattedNumberEdit(row, 'quantity')" (input)="updateFormattedNumberField(row, 'quantity', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'quantity')" /></td>
                     <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.position_size" /></td>
-                    <td><input class="form-control form-control-sm journal-input" type="number" [(ngModel)]="row.total_capital" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'total_capital')" (focus)="beginFormattedNumberEdit(row, 'total_capital')" (input)="updateFormattedNumberField(row, 'total_capital', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'total_capital')" /></td>
                     <td><input class="form-control form-control-sm journal-input" [(ngModel)]="row.strategy_name" /></td>
                     <td><input class="form-control form-control-sm journal-input" [(ngModel)]="row.psychology" /></td>
                     <td>
@@ -1331,11 +1683,11 @@
                         placeholder="tag1, tag2"
                       />
                     </td>
-                    <td><input class="form-control form-control-sm journal-input journal-notes" [(ngModel)]="row.notes" /></td>
-                    <td class="text-center journal-action-cell">
-                      <button type="button" class="btn btn-sm btn-success journal-action-btn" [disabled]="row.isSaving" (click)="saveStrategyJournalRow(row)">
-                        <ion-icon name="save-outline"></ion-icon>
-                      </button>
+                    <td>
+                      <input class="form-control form-control-sm journal-input journal-notes" [(ngModel)]="row.notes" />
+                      <div class="journal-linked-note" [class.is-empty]="!hasOrderStatementSync(row)">
+                        {{ getOrderStatementSyncSummary(row) }}
+                      </div>
                     </td>
                     <td class="text-center journal-action-cell">
                       <button type="button" class="btn btn-sm btn-outline-danger journal-action-btn" (click)="deleteStrategyJournalRow(row)">
@@ -1343,54 +1695,360 @@
                       </button>
                     </td>
                   </tr>
+                  @if (isLinkedOrderStatementsExpanded(row)) {
+                  <tr class="journal-linked-detail-row">
+                    <td colspan="16">
+                      <div class="journal-linked-detail-shell">
+                        <div class="journal-linked-detail-head">
+                          <strong>Linked statement rows</strong>
+                          <span>{{ getLinkedOrderStatementCount(row) }} fills</span>
+                        </div>
+                        <div class="journal-linked-detail-list">
+                          @for (fill of getLinkedOrderStatementRows(row); track fill.id ?? fill.clientKey ?? $index) {
+                          <div class="journal-linked-detail-item">
+                            <span>{{ fill.trade_date || '--' }}</span>
+                            <span>{{ formatOrderStatementSide(fill.trade_side) }}</span>
+                            <span>{{ formatOrderStatementNumber(fill.quantity) }}</span>
+                            <span>{{ formatOrderStatementNumber(fill.price) }}</span>
+                            <span>{{ formatOrderStatementNumber(computeOrderStatementGrossValue(fill)) }}</span>
+                            <span>{{ formatOrderStatementNumber(computeOrderStatementNetAmount(fill)) }}</span>
+                          </div>
+                          }
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  }
+                  </ng-container>
+                </tbody>
+                </table>
+              </div>
+
+            <div class="card-footer bg-white border-0 d-flex justify-content-end gap-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addStrategyJournalRow()">
+                <ion-icon name="add-circle-outline"></ion-icon>
+                {{ 'marketSettings.journal.addOneRow' | translate }}
+              </button>
+            </div>
+            } @else {
+            <div class="card-body journal-collapsed-body">
+              <div class="journal-collapsed-copy">
+                <strong>Entries đang được thu gọn.</strong>
+                <span>Mở ra khi cần sửa logic giao dịch, stop-loss, take-profit, psychology hoặc tags.</span>
+              </div>
+            </div>
+            }
+          </div>
+
+          <div class="card journal-table-card order-statement-primary shadow-sm border-0 mt-3">
+            <div class="card-header bg-white border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <div>
+                <h5 class="mb-0">{{ 'marketSettings.orderStatement.title' | translate }}</h5>
+                <small class="text-body-secondary">{{ strategyOrderStatementRows.length }} {{ 'marketSettings.orderStatement.rows' | translate }}</small>
+              </div>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="badge text-bg-light border">Order match statement</span>
+                <span class="badge text-bg-light border">Execution layer</span>
+                <div class="statement-group-toggle">
+                  <span class="statement-group-label">{{ 'marketSettings.orderStatement.groupBy' | translate }}</span>
+                  @for (item of orderStatementGroupItems(); track item.key) {
+                  <button
+                    type="button"
+                    class="btn btn-sm"
+                    [class.btn-dark]="orderStatementGroupMode === item.key"
+                    [class.btn-outline-secondary]="orderStatementGroupMode !== item.key"
+                    (click)="orderStatementGroupMode = item.key"
+                  >
+                    {{ item.label }}
+                  </button>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div class="table-responsive journal-table-scroll">
+              <table class="table table-sm table-striped table-hover align-middle mb-0 journal-table statement-table">
+                <thead class="table-light">
+                  <tr>
+                    <th title="Ngày lệnh được khớp trên thị trường.">{{ 'marketSettings.orderStatement.tradeDate' | translate }}</th>
+                    <th title="Ngày thanh toán dự kiến của lệnh khớp.">{{ 'marketSettings.orderStatement.settlementDate' | translate }}</th>
+                    <th title="Mã cổ phiếu được khớp trong sao kê này.">{{ 'strategyHub.table.symbol' | translate }}</th>
+                    <th title="Chiều khớp lệnh: mua hoặc bán.">{{ 'marketSettings.orderStatement.side' | translate }}</th>
+                    <th title="Khối lượng cổ phiếu đã khớp của dòng này.">{{ 'marketSettings.orderStatement.quantity' | translate }}</th>
+                    <th title="Giá khớp của từng cổ phiếu trong dòng sao kê.">{{ 'marketSettings.orderStatement.price' | translate }}</th>
+                    <th title="Giá trị khớp lệnh trước các khoản điều chỉnh, tự tính từ số lượng nhân giá.">{{ 'marketSettings.orderStatement.grossValue' | translate }}</th>
+                    <th title="Phí chuyển hoặc điều chỉnh phát sinh thêm trên dòng sao kê này.">{{ 'marketSettings.orderStatement.transferFee' | translate }}</th>
+                    <th title="Thành tiền ròng sau khi cộng hoặc trừ các khoản phí hiện có.">{{ 'marketSettings.orderStatement.netAmount' | translate }}</th>
+                    <th class="text-center" title="Nhân bản hoặc xóa dòng sao kê hiện tại.">Tác vụ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (group of groupedOrderStatementRows(); track group.key) {
+                  <tr class="statement-group-row">
+                    <td colspan="10">
+                      <div class="statement-group-head">
+                        <div class="statement-group-title">
+                          <strong>{{ group.label }}</strong>
+                          <span class="badge text-bg-light border">{{ group.rows.length }} {{ 'marketSettings.orderStatement.rows' | translate }}</span>
+                        </div>
+                        <div class="statement-group-metrics">
+                          <span>{{ 'marketSettings.orderStatement.totalGross' | translate }}: <strong>{{ formatOrderStatementNumber(group.totalGrossValue) }}</strong></span>
+                          <span>{{ 'marketSettings.orderStatement.totalNet' | translate }}: <strong>{{ formatOrderStatementNumber(group.totalNetAmount) }}</strong></span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  @for (row of group.rows; track trackByStrategyOrderStatementRow($index, row)) {
+                  <tr>
+                    <td><input class="form-control form-control-sm journal-input" type="date" [(ngModel)]="row.trade_date" [ngModelOptions]="{ updateOn: 'blur' }" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="date" [(ngModel)]="row.settlement_date" /></td>
+                    <td><input class="form-control form-control-sm journal-input" [(ngModel)]="row.symbol" [ngModelOptions]="{ updateOn: 'blur' }" /></td>
+                    <td>
+                      <select class="form-select form-select-sm journal-input" [(ngModel)]="row.trade_side">
+                        <option value="buy">{{ 'marketSettings.orderStatement.sideBuy' | translate }}</option>
+                        <option value="sell">{{ 'marketSettings.orderStatement.sideSell' | translate }}</option>
+                      </select>
+                    </td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'quantity')" (focus)="beginFormattedNumberEdit(row, 'quantity')" (input)="updateFormattedNumberField(row, 'quantity', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'quantity')" /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'price')" (focus)="beginFormattedNumberEdit(row, 'price')" (input)="updateFormattedNumberField(row, 'price', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'price')" /></td>
+                    <td><input class="form-control form-control-sm journal-input statement-derived" [value]="formatOrderStatementNumber(computeOrderStatementGrossValue(row))" readonly /></td>
+                    <td><input class="form-control form-control-sm journal-input" type="text" inputmode="numeric" [value]="getFormattedNumberInputValue(row, 'transfer_fee')" (focus)="beginFormattedNumberEdit(row, 'transfer_fee')" (input)="updateFormattedNumberField(row, 'transfer_fee', $any($event.target).value)" (blur)="endFormattedNumberEdit(row, 'transfer_fee')" /></td>
+                    <td><input class="form-control form-control-sm journal-input statement-derived" [value]="formatOrderStatementNumber(computeOrderStatementNetAmount(row))" readonly /></td>
+                    <td class="text-center journal-action-cell">
+                      <div class="statement-action-group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary journal-action-btn" [disabled]="row.isSaving" (click)="duplicateStrategyOrderStatementRow(row)">
+                          <ion-icon name="copy-outline"></ion-icon>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger journal-action-btn" (click)="deleteStrategyOrderStatementRow(row)">
+                          <ion-icon name="trash-outline"></ion-icon>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  }
+                  }
                 </tbody>
               </table>
             </div>
 
-            <div class="card-footer bg-white border-0 d-flex justify-content-end">
-              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addStrategyJournalRow()">
+            <div class="card-footer bg-white border-0 d-flex justify-content-end gap-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addStrategyOrderStatementRow()">
                 <ion-icon name="add-circle-outline"></ion-icon>
-                Thêm 1 dòng mới
+                {{ 'marketSettings.orderStatement.addOneRow' | translate }}
               </button>
             </div>
+          </div>
           </div>
 
           <ng-template #emptyJournalTab>
             <div class="card empty-state journal-empty-state shadow-sm border-0">
               <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <div>
-                  <h5 class="mb-1">Chưa có journal entry nào</h5>
-                  <p class="text-body-secondary mb-0">Bấm nút thêm dòng để nhập nhanh một giao dịch mới.</p>
+                  <h5 class="mb-1">{{ 'marketSettings.journal.emptyTitle' | translate }}</h5>
+                  <p class="text-body-secondary mb-0">{{ 'marketSettings.journal.emptySubtitle' | translate }}</p>
                 </div>
                 <button type="button" class="btn btn-primary" (click)="addStrategyJournalRow()">
                   <ion-icon name="add-circle-outline"></ion-icon>
-                  Thêm dòng đầu tiên
+                  {{ 'marketSettings.journal.firstRow' | translate }}
                 </button>
               </div>
             </div>
           </ng-template>
+          } @placeholder {
+          <div class="defer-placeholder">
+            <div class="section-title">{{ 'marketSettings.journal.deferTitle' | translate }}</div>
+            <p class="mb-0">{{ 'marketSettings.journal.deferSubtitle' | translate }}</p>
+          </div>
+          }
         </div>
+        <div *ngSwitchCase="'history'" class="settings-section">
+          @defer (when selectedTab === 'history'; prefetch on idle) {
+          <div class="history-hero">
+            <div>
+              <div class="section-title mb-1">{{ 'marketSettings.history.title' | translate }}</div>
+              <p class="mb-0">{{ 'marketSettings.history.subtitle' | translate }}</p>
+            </div>
+            <div class="history-toolbar">
+              <select class="form-select form-select-sm" [(ngModel)]="strategyHistoryStatusFilter" (ngModelChange)="onStrategyHistoryFilterChange()">
+                <option value="all">{{ 'marketSettings.history.statusAll' | translate }}</option>
+                <option value="open">{{ 'marketSettings.history.statusOpen' | translate }}</option>
+                <option value="completed">{{ 'marketSettings.history.statusCompleted' | translate }}</option>
+                <option value="dismissed">{{ 'marketSettings.history.statusDismissed' | translate }}</option>
+              </select>
+              <select class="form-select form-select-sm" [(ngModel)]="strategyHistoryDays" (ngModelChange)="onStrategyHistoryFilterChange()">
+                <option [ngValue]="3">3 ngày</option>
+                <option [ngValue]="7">7 ngày</option>
+                <option [ngValue]="14">14 ngày</option>
+                <option [ngValue]="30">30 ngày</option>
+              </select>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="loadStrategyHistory(false, true)" [disabled]="strategyHistoryLoading">
+                <ion-icon name="refresh-outline"></ion-icon>
+                {{ 'marketSettings.history.reload' | translate }}
+              </button>
+            </div>
+          </div>
 
+          <div class="status-row px-0" *ngIf="strategyHistoryLoading">
+            <div class="status-pill loading">{{ 'marketSettings.history.loading' | translate }}</div>
+          </div>
+
+          <div class="history-summary-grid" *ngIf="strategyHistoryOverview?.counts as counts">
+            <article class="history-summary-card">
+              <span>{{ 'marketSettings.history.totalWorkflow' | translate }}</span>
+              <strong>{{ counts.total }}</strong>
+            </article>
+            <article class="history-summary-card">
+              <span>Đã hoàn tất</span>
+              <strong>{{ counts.completed }}</strong>
+            </article>
+            <article class="history-summary-card">
+              <span>{{ 'marketSettings.history.portfolioDecisions' | translate }}</span>
+              <strong>{{ counts.portfolioDecisions }}</strong>
+            </article>
+            <article class="history-summary-card">
+              <span>{{ 'marketSettings.history.cutLossTakeProfit' | translate }}</span>
+              <strong>{{ counts.cutLoss }} / {{ counts.takeProfit }}</strong>
+            </article>
+          </div>
+
+          <div class="history-review-panel" *ngIf="strategyReviewReport as report">
+            <div class="history-review-head">
+              <div>
+                <h5 class="mb-1">{{ 'marketSettings.history.reviewTitle' | translate }}</h5>
+                <p class="mb-0">{{ 'marketSettings.history.reviewSubtitle' | translate }}</p>
+              </div>
+              <small>{{ report.days }} {{ 'marketSettings.history.reviewDays' | translate }}</small>
+            </div>
+
+            <div class="history-summary-grid">
+              <article class="history-summary-card" *ngFor="let card of strategyReviewSummaryCards">
+                <span>{{ card.label }}</span>
+                <strong [attr.data-tone]="card.tone">{{ card.value }}</strong>
+              </article>
+            </div>
+
+            <div class="history-review-grid">
+              <article class="history-review-card" *ngIf="report.topMistakes.length">
+                <h6>{{ 'marketSettings.history.topMistakes' | translate }}</h6>
+                <div class="history-review-list">
+                  <div class="history-review-row" *ngFor="let item of report.topMistakes">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.count }}</strong>
+                  </div>
+                </div>
+              </article>
+
+              <article class="history-review-card" *ngIf="report.topActions.length">
+                <h6>{{ 'marketSettings.history.topActions' | translate }}</h6>
+                <div class="history-review-list">
+                  <div class="history-review-row" *ngFor="let item of report.topActions">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.count }}</strong>
+                  </div>
+                </div>
+              </article>
+
+              <article class="history-review-card" *ngIf="report.topReviewReasons.length">
+                <h6>{{ 'marketSettings.history.topReasons' | translate }}</h6>
+                <div class="history-review-list">
+                  <div class="history-review-row" *ngFor="let item of report.topReviewReasons">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.count }}</strong>
+                  </div>
+                </div>
+              </article>
+
+              <article class="history-review-card" *ngIf="report.portfolio.topAlerts.length">
+                <h6>{{ 'marketSettings.history.topAlerts' | translate }}</h6>
+                <div class="history-review-list">
+                  <div class="history-review-alert" *ngFor="let item of report.portfolio.topAlerts">
+                    <strong>{{ item.label }}</strong>
+                    <span>{{ item.detail }}</span>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div class="history-insight-grid" *ngIf="report.insights.length">
+              <article class="history-insight-card" *ngFor="let insight of report.insights" [attr.data-tone]="insight.tone">
+                <strong>{{ insight.title }}</strong>
+                <p>{{ insight.body }}</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="history-list" *ngIf="strategyHistoryItems.length; else emptyStrategyHistory">
+            <article class="history-item" *ngFor="let item of strategyHistoryItems; trackBy: trackByStrategyHistory">
+              <div class="history-item-head">
+                <div>
+                  <strong>{{ item.symbol || item.title || item.sourceKey }}</strong>
+                  <div class="history-item-subtitle">{{ item.title || item.actionLabel }}</div>
+                </div>
+                <div class="history-item-badges">
+                  <span class="history-badge" [attr.data-tone]="workflowStatusClass(item.status)">{{ item.status }}</span>
+                  <span class="history-badge" [attr.data-tone]="workflowToneClass(item.effectTone)">{{ item.effectLabel }}</span>
+                </div>
+              </div>
+
+              <div class="history-meta-grid">
+                <div><span>{{ 'marketSettings.history.source' | translate }}</span><strong>{{ item.sourceLabel }}</strong></div>
+                <div><span>{{ 'marketSettings.history.action' | translate }}</span><strong>{{ formatHistoryActionLabel(item) }}</strong></div>
+                <div><span>{{ 'marketSettings.history.handler' | translate }}</span><strong>{{ item.handledBy || '--' }}</strong></div>
+                <div><span>{{ 'marketSettings.history.time' | translate }}</span><strong>{{ item.handledAt ? (item.handledAt | date:'short') : '--' }}</strong></div>
+                <div><span>{{ 'marketSettings.history.handledPrice' | translate }}</span><strong>{{ item.handledPrice ?? '--' }}</strong></div>
+                <div><span>{{ 'marketSettings.history.currentPrice' | translate }}</span><strong>{{ item.currentPrice ?? '--' }}</strong></div>
+                <div><span>{{ 'marketSettings.history.effectPct' | translate }}</span><strong>{{ item.effectPct ?? '--' }}</strong></div>
+                <div><span>{{ 'marketSettings.history.effectValue' | translate }}</span><strong>{{ item.effectValue ?? '--' }}</strong></div>
+              </div>
+
+              <div class="history-note" *ngIf="item.message">{{ item.message }}</div>
+              <div class="history-note" *ngIf="item.resolutionNote">{{ item.resolutionNote }}</div>
+              <div class="history-basis">{{ item.effectBasis }}</div>
+
+              <div class="history-audit-trail" *ngIf="item.auditTrail.length">
+                <div class="history-audit-title">{{ 'marketSettings.history.auditTrail' | translate }}</div>
+                <div class="history-audit-row" *ngFor="let audit of item.auditTrail | slice:0:4">
+                  <strong>{{ audit.action }}</strong>
+                  <span>{{ audit.changedBy || '--' }}</span>
+                  <small>{{ audit.changedAt ? (audit.changedAt | date:'short') : '--' }}</small>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <ng-template #emptyStrategyHistory>
+            <div class="empty-state-panel compact">
+              <div class="empty-state-title">{{ 'marketSettings.history.emptyTitle' | translate }}</div>
+              <div class="empty-state-copy">{{ 'marketSettings.history.emptySubtitle' | translate }}</div>
+            </div>
+          </ng-template>
+          } @placeholder {
+          <div class="defer-placeholder">
+            <div class="section-title">{{ 'marketSettings.history.deferTitle' | translate }}</div>
+            <p class="mb-0">{{ 'marketSettings.history.deferSubtitle' | translate }}</p>
+          </div>
+          }
+        </div>
         <div *ngSwitchCase="'security'" class="settings-section">
-          <div class="section-title">Bao mat va session</div>
+          <div class="section-title">{{ 'marketSettings.security.title' | translate }}</div>
           <div class="toggle-list">
             <div class="toggle-row">
-              <span>Safe mode</span>
+              <span>{{ 'marketSettings.security.safeMode' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.safeMode"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Biometric login</span>
+              <span>{{ 'marketSettings.security.biometricLogin' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.biometricLogin"></ion-toggle>
             </div>
             <div class="toggle-row">
-              <span>Device binding</span>
+              <span>{{ 'marketSettings.security.deviceBinding' | translate }}</span>
               <ion-toggle [(ngModel)]="settings.deviceBinding"></ion-toggle>
             </div>
           </div>
 
           <div class="form-grid">
             <div class="form-item">
-              <label>Session timeout (phut)</label>
+              <label>{{ 'marketSettings.security.sessionTimeout' | translate }}</label>
               <select class="form-select" [(ngModel)]="settings.sessionTimeout">
                 <option value="15">15</option>
                 <option value="30">30</option>

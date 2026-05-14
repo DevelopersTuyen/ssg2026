@@ -731,3 +731,70 @@ class StrategyTradeJournalEntry(Base):
     mistake_tags_json: Mapped[dict | list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
+
+class StrategyOrderStatementEntry(Base):
+    __tablename__ = "strategy_order_statement_entries"
+    __table_args__ = (
+        Index("ix_strategy_order_statement_user_created", "user_id", "created_at"),
+        Index("ix_strategy_order_statement_profile_created", "profile_id", "created_at"),
+        Index("ix_strategy_order_statement_symbol_trade", "company_code", "symbol", "trade_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    company_code: Mapped[str] = mapped_column(String(30), index=True)
+    profile_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    journal_entry_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    trade_date: Mapped[date | None] = mapped_column(Date, index=True)
+    settlement_date: Mapped[date | None] = mapped_column(Date, index=True)
+    trade_side: Mapped[str] = mapped_column(String(20), index=True)
+    order_type: Mapped[str | None] = mapped_column(String(100), index=True)
+    channel: Mapped[str | None] = mapped_column(String(50), index=True)
+    quantity: Mapped[float | None] = mapped_column(Float)
+    price: Mapped[float | None] = mapped_column(Float)
+    gross_value: Mapped[float | None] = mapped_column(Float)
+    fee: Mapped[float | None] = mapped_column(Float)
+    tax: Mapped[float | None] = mapped_column(Float)
+    transfer_fee: Mapped[float | None] = mapped_column(Float)
+    net_amount: Mapped[float | None] = mapped_column(Float)
+    broker_reference: Mapped[str | None] = mapped_column(String(120), index=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict | list | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+
+
+class StrategyActionWorkflowEntry(Base):
+    __tablename__ = "strategy_action_workflow_entries"
+    __table_args__ = (
+        UniqueConstraint("company_code", "source_key", name="uq_strategy_action_workflow_company_source"),
+        Index("ix_strategy_action_workflow_status", "company_code", "status", "updated_at"),
+        Index("ix_strategy_action_workflow_symbol", "company_code", "symbol", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    company_code: Mapped[str] = mapped_column(String(30), index=True)
+    profile_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    journal_entry_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    symbol: Mapped[str | None] = mapped_column(String(30), index=True)
+    exchange: Mapped[str | None] = mapped_column(String(20), index=True)
+    source_type: Mapped[str] = mapped_column(String(50), index=True)
+    source_key: Mapped[str] = mapped_column(String(255), index=True)
+    action_code: Mapped[str] = mapped_column(String(80), index=True)
+    action_label: Mapped[str] = mapped_column(String(255))
+    execution_mode: Mapped[str] = mapped_column(String(30), default="manual", index=True)
+    status: Mapped[str] = mapped_column(String(30), default="open", index=True)
+    severity: Mapped[str | None] = mapped_column(String(30), index=True)
+    title: Mapped[str | None] = mapped_column(String(255))
+    message: Mapped[str | None] = mapped_column(Text)
+    resolution_type: Mapped[str | None] = mapped_column(String(80), index=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text)
+    handled_price: Mapped[float | None] = mapped_column(Float)
+    handled_quantity: Mapped[float | None] = mapped_column(Float)
+    metadata_json: Mapped[dict | list | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), index=True)

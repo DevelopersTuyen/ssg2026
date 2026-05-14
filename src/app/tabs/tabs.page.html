@@ -83,11 +83,19 @@
     <div class="desktop-sidebar-spacer"></div>
 
     <div class="desktop-sidebar-footer" [class.is-collapsed]="sidebarCollapsed">
-      <div class="desktop-sidebar-status-dot"></div>
-      <div class="desktop-sidebar-status-copy" [class.is-hidden]="sidebarCollapsed">
-        <strong>Workspace</strong>
-        <span>Desktop navigation</span>
-      </div>
+      <button
+        type="button"
+        class="desktop-sidebar-logout"
+        (click)="logout()"
+        [attr.aria-label]="'common.logout' | translate"
+        [attr.title]="sidebarCollapsed ? (('common.logout' | translate)) : null"
+      >
+        <span class="desktop-sidebar-status-dot"></span>
+        <span class="desktop-sidebar-status-copy" [class.is-hidden]="sidebarCollapsed">
+          <strong>{{ 'common.logout' | translate }}</strong>
+          <span>End current session</span>
+        </span>
+      </button>
     </div>
   </aside>
 
@@ -129,6 +137,11 @@
         <ion-icon name="settings-outline"></ion-icon>
         <span>{{ 'tabs.settings' | translate }}</span>
       </a>
+
+      <button type="button" class="mobile-tab-link mobile-logout-link" (click)="logout()">
+        <ion-icon name="log-out-outline"></ion-icon>
+        <span>{{ 'common.logout' | translate }}</span>
+      </button>
     </nav>
   </div>
 </div>

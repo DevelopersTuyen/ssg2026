@@ -32,10 +32,12 @@ async def init_db() -> None:
         MarketSyncLog,
         MarketWatchlistItem,
         StrategyAlertRule,
+        StrategyActionWorkflowEntry,
         StrategyAuditLog,
         StrategyChecklistItem,
         StrategyFormulaDefinition,
         StrategyFormulaParameter,
+        StrategyOrderStatementEntry,
         StrategyProfile,
         StrategyScreenRule,
         StrategySignalSnapshot,
@@ -68,6 +70,17 @@ async def init_db() -> None:
         await conn.exec_driver_sql("ALTER TABLE strategy_trade_journal_entries ADD COLUMN IF NOT EXISTS psychology TEXT")
         await conn.exec_driver_sql("ALTER TABLE strategy_trade_journal_entries ADD COLUMN IF NOT EXISTS signal_snapshot_json JSON")
         await conn.exec_driver_sql("ALTER TABLE strategy_trade_journal_entries ADD COLUMN IF NOT EXISTS result_snapshot_json JSON")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS journal_entry_id INTEGER")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS settlement_date DATE")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS trade_side VARCHAR(20)")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS order_type VARCHAR(100)")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS channel VARCHAR(50)")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS gross_value DOUBLE PRECISION")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS transfer_fee DOUBLE PRECISION")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS net_amount DOUBLE PRECISION")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS broker_reference VARCHAR(120)")
+        await conn.exec_driver_sql("ALTER TABLE strategy_order_statement_entries ADD COLUMN IF NOT EXISTS metadata_json JSON")
+        await conn.exec_driver_sql("ALTER TABLE strategy_action_workflow_entries ADD COLUMN IF NOT EXISTS execution_mode VARCHAR(30) DEFAULT 'manual'")
 
     async with SessionLocal() as session:
         await seed_authorization_data(AuthRepository(session))
