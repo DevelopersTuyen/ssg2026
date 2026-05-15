@@ -243,35 +243,47 @@ class VnstockClient:
         self._ensure_ready()
         self._apply_api_key_if_supported()
         self._respect_cooldown()
-        intraday_source = str(source or settings.intraday_source or settings.vnstock_source or self.source).strip().upper() or self.source
-        quote = self._make_quote(symbol, source=intraday_source)
+        preferred_source = str(source or settings.intraday_source or settings.vnstock_source or self.source).strip().upper() or self.source
+        sources_to_try: list[str] = []
+        for candidate in (preferred_source, "VCI", "KBS"):
+            normalized_candidate = str(candidate or "").strip().upper()
+            if normalized_candidate and normalized_candidate not in sources_to_try:
+                sources_to_try.append(normalized_candidate)
 
         errors: list[str] = []
-        raw: Any = None
+        latest_raw: Any = None
         attempts = max(1, int(settings.vnstock_retry_attempts or 1))
-        for kwargs in (
-            {"show_log": False, "page_size": page_size},
-            {"show_log": False},
-            {},
-        ):
-            for attempt in range(1, attempts + 1):
-                try:
-                    raw = quote.intraday(**kwargs)
-                    rows = self._df_to_records(raw)
-                    if rows:
-                        return VnstockDataResult(rows=rows, raw=raw, source=intraday_source)
-                    break
-                except BaseException as exc:
-                    normalized = self._normalize_vnstock_exception(exc)
-                    errors.append(str(normalized))
-                    if attempt < attempts and self._is_transient_vnstock_error(normalized):
-                        self._retry_backoff(attempt)
-                        continue
-                    break
+
+        for intraday_source in sources_to_try:
+            quote = self._make_quote(symbol, source=intraday_source)
+            source_errors_before = len(errors)
+
+            for kwargs in (
+                {"show_log": False, "page_size": page_size},
+                {"show_log": False},
+                {},
+            ):
+                for attempt in range(1, attempts + 1):
+                    try:
+                        latest_raw = quote.intraday(**kwargs)
+                        rows = self._df_to_records(latest_raw)
+                        if rows:
+                            return VnstockDataResult(rows=rows, raw=latest_raw, source=intraday_source, errors=errors)
+                        break
+                    except BaseException as exc:
+                        normalized = self._normalize_vnstock_exception(exc)
+                        errors.append(f"{intraday_source}:{normalized}")
+                        if attempt < attempts and self._is_transient_vnstock_error(normalized):
+                            self._retry_backoff(attempt)
+                            continue
+                        break
+
+            if len(errors) == source_errors_before:
+                return VnstockDataResult(rows=[], raw=latest_raw, source=intraday_source, errors=errors)
 
         if errors:
             logger.warning("intraday fetch failed for %s: %s", symbol, " | ".join(errors[:3]))
-        return VnstockDataResult(rows=[], raw=raw, source=intraday_source, errors=errors)
+        return VnstockDataResult(rows=[], raw=latest_raw, source=preferred_source, errors=errors)
 
     def get_history(
         self,
