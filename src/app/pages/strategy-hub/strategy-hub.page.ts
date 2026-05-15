@@ -290,6 +290,7 @@ export class StrategyHubPage implements OnInit, OnDestroy {
   selectedScoreItem: StrategyScoredItem | null = null;
   symbolDetailOpen = false;
   symbolDetailSymbol = '';
+  symbolDetailFallbackSnapshot: Record<string, any> | null = null;
   journalSuggestion: StrategyJournalSuggestion | null = null;
 
   scoringExchange = 'ALL';
@@ -1042,12 +1043,51 @@ export class StrategyHubPage implements OnInit, OnDestroy {
     if (!normalized) {
       return;
     }
+    this.symbolDetailFallbackSnapshot = this.buildSymbolDetailFallbackSnapshot(normalized);
     this.symbolDetailSymbol = normalized;
     this.symbolDetailOpen = true;
   }
 
   closeSymbolDetail(): void {
     this.symbolDetailOpen = false;
+    this.symbolDetailFallbackSnapshot = null;
+  }
+
+  private buildSymbolDetailFallbackSnapshot(symbol: string): Record<string, any> | null {
+    const normalized = (symbol || '').trim().toUpperCase();
+    if (!normalized) {
+      return null;
+    }
+    const source =
+      (this.selectedScoreItem && (this.selectedScoreItem.symbol || '').trim().toUpperCase() === normalized
+        ? this.selectedScoreItem
+        : null) ||
+      this.rankings?.items?.find((item) => (item.symbol || '').trim().toUpperCase() === normalized) ||
+      null;
+
+    if (!source) {
+      return null;
+    }
+
+    return {
+      symbol: source.symbol,
+      exchange: source.exchange,
+      name: source.name,
+      price: source.price,
+      currentPrice: source.currentPrice || source.price,
+      changePercent: source.changePercent,
+      tradingValue: source.tradingValue,
+      volume: source.volume,
+      fairValue: source.fairValue,
+      marginOfSafety: source.marginOfSafety,
+      qScore: source.qScore,
+      lScore: source.lScore,
+      mScore: source.mScore,
+      pScore: source.pScore,
+      winningScore: source.winningScore,
+      riskScore: source.riskScore,
+      newsMentions: source.newsMentions,
+    };
   }
 
   private buildLightOverview(

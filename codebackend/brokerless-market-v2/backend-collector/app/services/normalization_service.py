@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from math import isfinite
 from typing import Any
+import re
 
 from app.utils.json_safe import to_jsonable
 
@@ -44,10 +45,28 @@ def normalize_exchange(exchange: str | None) -> str | None:
 
 class NormalizationService:
     @staticmethod
+    def _normalize_key(value: Any) -> str:
+        return re.sub(r"[^a-z0-9]+", "", str(value or "").strip().lower())
+
+    @staticmethod
     def pick(row: dict[str, Any], keys: list[str]) -> Any:
         for key in keys:
             if key in row and row[key] not in (None, ""):
                 return row[key]
+        normalized_targets = [NormalizationService._normalize_key(key) for key in keys if key]
+        for actual_key, actual_value in row.items():
+            if actual_value in (None, ""):
+                continue
+            normalized_actual = NormalizationService._normalize_key(actual_key)
+            if not normalized_actual:
+                continue
+            if any(
+                normalized_actual == target
+                or normalized_actual.endswith(target)
+                for target in normalized_targets
+                if target
+            ):
+                return actual_value
         return None
 
     @staticmethod

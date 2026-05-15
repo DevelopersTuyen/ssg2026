@@ -424,6 +424,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
   selectedDetailTab: DashboardDetailTab = 'overview';
   symbolDetailOpen = false;
   symbolDetailSymbol = '';
+  symbolDetailFallbackSnapshot: Record<string, any> | null = null;
   symbolDetailFormulaLoading = false;
   symbolDetailFormulaError = '';
   symbolDetailFormulaGroups: DashboardV2DetailGroupVm[] = [];
@@ -949,6 +950,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     if (!normalized) {
       return;
     }
+    this.symbolDetailFallbackSnapshot = this.buildSymbolDetailFallbackSnapshot(normalized);
     this.symbolDetailSymbol = normalized;
     this.symbolDetailOpen = true;
     this.symbolDetailHistoryItems = this.buildSymbolHistoryItems(normalized);
@@ -966,6 +968,7 @@ export class DashboardV2Page implements OnInit, OnDestroy {
 
   closeSymbolDetail(): void {
     this.symbolDetailOpen = false;
+    this.symbolDetailFallbackSnapshot = null;
     this.symbolDetailFormulaLoading = false;
     this.symbolDetailFormulaError = '';
     this.symbolDetailFormulaGroups = [];
@@ -974,6 +977,34 @@ export class DashboardV2Page implements OnInit, OnDestroy {
     this.symbolDetailIntelligence = null;
     this.symbolDetailHistoryItems = [];
     this.symbolFormulaSub?.unsubscribe();
+  }
+
+  private buildSymbolDetailFallbackSnapshot(symbol: string): Record<string, any> | null {
+    const normalized = (symbol || '').trim().toUpperCase();
+    if (!normalized) {
+      return null;
+    }
+
+    const journal = [...this.journalEntries]
+      .filter((item) => (item.symbol || '').trim().toUpperCase() === normalized)
+      .sort((left, right) => new Date(right.updatedAt || right.createdAt || right.tradeDate || 0).getTime() - new Date(left.updatedAt || left.createdAt || left.tradeDate || 0).getTime())[0];
+    const holding = (this.portfolioOverview?.holdings || []).find((item) => (item.symbol || '').trim().toUpperCase() === normalized) || null;
+
+    if (!journal && !holding) {
+      return null;
+    }
+
+    return {
+      symbol: normalized,
+      exchange: holding?.exchange || journal?.exchange || null,
+      name: holding?.name || null,
+      price: journal?.currentPrice || holding?.currentPrice || journal?.entryPrice || null,
+      currentPrice: journal?.currentPrice || holding?.currentPrice || journal?.entryPrice || null,
+      volume: null,
+      tradingValue: holding?.marketValue || journal?.totalCapital || null,
+      changeValue: journal?.pnlValue || null,
+      changePercent: journal?.pnlPercent || null,
+    };
   }
 
   closeJournalDetail(): void {

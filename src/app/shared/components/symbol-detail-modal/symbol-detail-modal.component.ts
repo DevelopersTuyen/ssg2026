@@ -111,6 +111,27 @@ interface SymbolDetailFinancialAnalysisVm {
   metricGroups: SymbolDetailFinancialMetricGroupVm[];
 }
 
+interface SymbolDetailFallbackSnapshot {
+  symbol?: string;
+  exchange?: string | null;
+  name?: string | null;
+  price?: number | null;
+  currentPrice?: number | null;
+  changeValue?: number | null;
+  changePercent?: number | null;
+  tradingValue?: number | null;
+  volume?: number | null;
+  fairValue?: number | null;
+  marginOfSafety?: number | null;
+  qScore?: number | null;
+  lScore?: number | null;
+  mScore?: number | null;
+  pScore?: number | null;
+  winningScore?: number | null;
+  riskScore?: number | null;
+  newsMentions?: number | null;
+}
+
 @Component({
   selector: 'app-symbol-detail-modal',
   templateUrl: './symbol-detail-modal.component.html',
@@ -129,6 +150,7 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
   @Input() formulaEmptyCopy = '';
   @Input() historyItems: SymbolDetailHistoryItem[] = [];
   @Input() intelligenceView: SymbolDetailIntelligenceView | null = null;
+  @Input() fallbackSnapshot: SymbolDetailFallbackSnapshot | null = null;
   @Input() historyLoading = false;
   @Input() historyError = '';
   @Output() closed = new EventEmitter<void>();
@@ -223,27 +245,42 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
   }
 
   get selectedPriceText(): string {
-    return this.formatPrice(this.selectedQuote?.price);
+    return this.formatPrice(this.selectedQuote?.price ?? this.fallbackSnapshot?.currentPrice ?? this.fallbackSnapshot?.price ?? null);
   }
 
   get selectedChangeText(): string {
-    return this.formatSignedPrice(this.selectedQuote?.changeValue);
+    return this.formatSignedPrice(this.selectedQuote?.changeValue ?? this.fallbackChangeValue);
   }
 
   get selectedPercentText(): string {
-    return this.formatPercent(this.selectedQuote?.changePercent);
+    return this.formatPercent(this.selectedQuote?.changePercent ?? this.fallbackSnapshot?.changePercent ?? null);
   }
 
   get selectedVolumeText(): string {
-    return this.formatNumber(this.selectedQuote?.volume);
+    return this.formatNumber(this.selectedQuote?.volume ?? this.fallbackSnapshot?.volume ?? null);
   }
 
   get selectedTradingValueText(): string {
-    return this.formatMoney(this.selectedQuote?.tradingValue);
+    return this.formatMoney(this.selectedQuote?.tradingValue ?? this.fallbackSnapshot?.tradingValue ?? null);
   }
 
   get selectedQuoteUp(): boolean {
-    return Number(this.selectedQuote?.changeValue || 0) >= 0;
+    return Number(this.selectedQuote?.changeValue ?? this.fallbackChangeValue ?? 0) >= 0;
+  }
+
+  get isUsingFallbackSnapshot(): boolean {
+    return !this.selectedQuote && !!this.fallbackSnapshot;
+  }
+
+  get fallbackNoticeText(): string {
+    const reasons: string[] = ['Live quote chÆ°a sáºµn sÃ ng'];
+    if (!this.selectedIntraday.length && !this.selectedCandles.length && !this.selectedHourly.length) {
+      reasons.push('chart live chÆ°a cÃ³');
+    }
+    if (!this.financialOverview?.updatedAt) {
+      reasons.push('financial chÆ°a backfill');
+    }
+    return `${reasons.join(' Â· ')}. Äang hiá»ƒn thá»‹ snapshot tá»« báº£ng chiáº¿n lÆ°á»£c/nháº­t kÃ½ Ä‘á»ƒ báº¡n váº«n cÃ³ ngá»¯ cáº£nh cÆ¡ báº£n.`;
   }
 
   get chartSourceText(): string {
@@ -597,6 +634,22 @@ export class SymbolDetailModalComponent implements AfterViewInit, OnChanges, OnD
 
   private resolveSymbolMaster(symbol: string, items: MarketSymbolListItem[]): MarketSymbolListItem | null {
     return items.find((item) => item.symbol?.toUpperCase() === symbol) || items[0] || null;
+  }
+
+  private get fallbackChangeValue(): number | null {
+    if (this.fallbackSnapshot?.changeValue != null) {
+      return this.fallbackSnapshot.changeValue;
+    }
+    const price = this.fallbackSnapshot?.currentPrice ?? this.fallbackSnapshot?.price ?? null;
+    const pct = this.fallbackSnapshot?.changePercent ?? null;
+    if (price == null || pct == null) {
+      return null;
+    }
+    const previous = price / (1 + pct / 100);
+    if (!Number.isFinite(previous)) {
+      return null;
+    }
+    return price - previous;
   }
 
   private resolveExchangeRule(exchange: string | null | undefined, rules: MarketExchangeRule[]): MarketExchangeRule | null {
